@@ -1,7 +1,12 @@
 [tool.black]
 line-length = 120
 target-version = ['py37', 'py38', 'py39', 'py310', 'py311']
-extend-exclude = []
+extend-exclude = '''
+# A regex preceded with ^/ will apply only to files and directories
+# in the root of the project.
+(
+)
+'''
 
 [tool.isort]
 profile = "black"
