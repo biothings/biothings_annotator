@@ -26,10 +26,9 @@
         "handlers": [
             {
                 "regex": "/annotator(?:/([^/]+))?/?",
-                "handler_name": "AnnotatorHandler"
+                "handler": "AnnotatorView",
+                "package": "biothings_annotator"
             }
         ]
     }
 }
-
-
