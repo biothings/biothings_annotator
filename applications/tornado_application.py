@@ -19,27 +19,12 @@ an interface for launching the web server
 """
 
 from pathlib import Path
-from pprint import pformat
-from pydoc import locate
-from types import SimpleNamespace
 from typing import Union, Optional
 import importlib
-import inspect
 import json
 import logging
-import os
-import sys
 
-from tornado.options import options
-import tornado.httpserver
-import tornado.ioloop
-import tornado.log
-import tornado.web
-
-from biothings import __version__
-from biothings.web.handlers import BaseAPIHandler, BaseQueryHandler
-from biothings.web.services.namespace import BiothingsNamespace
-from biothings.web.settings import configs
+import tornado
 
 
 logger = logging.getLogger(__name__)
