@@ -49,6 +49,7 @@ extend_skip = []
 
 # pytest configuration
 [tool.pytest.ini_options]
+pythonpath = ["."]
 minversion = "6.2.5"
 
 # Options
