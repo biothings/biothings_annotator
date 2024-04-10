@@ -42,7 +42,7 @@ def load_configuration(configuration_file: Optional[Union[str, Path]] = None) ->
     Expected File Structure:
     ├── configuration
     │   └── tornado.json
-    └── tornado.py
+    └── tornado_application.py
 
     Example Configuration Structure:
     {
@@ -58,9 +58,17 @@ def load_configuration(configuration_file: Optional[Union[str, Path]] = None) ->
                 "debug": true,
                 "serve_traceback": true,
                 "static_hash_cache": false
-            }
+            },
+            "handlers": [
+                {
+                    "regex": "/annotator(?:/([^/]+))?/?",
+                    "handler": "AnnotatorHandler",
+                    "package": "biothings_annotator"
+                }
+            ]
         }
     }
+
     > network: Contains any information related to actually hosting the web
     server on the specified network
     > application: the "settings" dictionary mapping passed to the
@@ -129,7 +137,16 @@ def get_application(configuration: dict) -> tornado.web.Application:
 
 def main():
     """
-    Start a Biothings API Server
+    Interface for starting the tornado server instance leveraging the
+    biothings_annotator handlers
+
+    Control Flow:
+    > Load the configuration
+    > Generate a tornado application from the configuration parameters
+    > Build an HTTP server using the network parameters from the configuration
+    and the tornado application
+    > Start the IO loop
+
     """
     tornado_configuration = load_configuration()
     logger.info("global tornado configuration:\n %s", json.dumps(tornado_configuration, indent=4))
