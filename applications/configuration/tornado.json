@@ -11,6 +11,12 @@
             "debug": true,
             "serve_traceback": true,
             "static_hash_cache": false
-        }
+        },
+        "handlers": [
+            {
+                "regex": "/annotator(?:/([^/]+))?/?",
+                "handler_name": "AnnotatorHandler"
+            }
+        ]
     }
 }

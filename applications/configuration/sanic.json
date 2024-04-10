@@ -1,0 +1,35 @@
+{
+    "network": {
+        "host": "0.0.0.0",
+        "port": 7382 
+    },
+    "application": {
+        "settings": {
+            "REQUEST_MAX_SIZE": 100000000,
+            "REQUEST_BUFFER_QUEUE_SIZE": 100,
+            "REQUEST_TIMEOUT": 60,
+            "RESPONSE_TIMEOUT": 60,
+            "KEEP_ALIVE": true,
+            "KEEP_ALIVE_TIMEOUT": 5,
+            "WEBSOCKET_MAX_SIZE": 1048576,
+            "WEBSOCKET_MAX_QUEUE": 32,
+            "WEBSOCKET_READ_LIMIT":	65536,
+            "WEBSOCKET_WRITE_LIMIT": 65536,
+            "WEBSOCKET_PING_INTERVAL": 20,
+            "WEBSOCKET_PING_TIMEOUT": 20,
+            "GRACEFUL_SHUTDOWN_TIMEOUT": 15.0,
+            "ACCESS_LOG": true,
+            "FORWARDED_SECRET": null,
+            "PROXIES_COUNT": null,
+            "REAL_IP_HEADER": null
+        },
+        "handlers": [
+            {
+                "regex": "/annotator(?:/([^/]+))?/?",
+                "handler_name": "AnnotatorHandler"
+            }
+        ]
+    }
+}
+
+
