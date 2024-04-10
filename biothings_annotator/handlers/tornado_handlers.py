@@ -3,11 +3,11 @@ Handler for the tornado specific web server
 """
 from biothings.web.handlers import BaseAPIHandler
 
-from tornado.web import HTTPError
+from tornado.web import HTTPError, RequestHandler
 
 from biothings_annotator import Annotator
 
-class AnnotatorHandler(BaseAPIHandler):
+class AnnotatorHandler(RequestHandler):
     name = "annotator"
     kwargs = {
         "*": {
@@ -27,7 +27,8 @@ class AnnotatorHandler(BaseAPIHandler):
         curie = args[0] if args else None
         if curie:
             try:
-                annotated_node = annotator.annotate_curie(curie, raw=self.args.raw, fields=self.args.fields)
+                # annotated_node = annotator.annotate_curie(curie, raw=self.args.raw, fields=self.args.fields)
+                annotated_node = annotator.annotate_curie(curie)
             except ValueError as e:
                 raise HTTPError(400, reason=repr(e)) from e
             self.finish(annotated_node)
