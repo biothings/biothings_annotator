@@ -15,7 +15,8 @@
         "handlers": [
             {
                 "regex": "/annotator(?:/([^/]+))?/?",
-                "handler_name": "AnnotatorHandler"
+                "handler": "AnnotatorHandler",
+                "package": "biothings_annotator"
             }
         ]
     }
