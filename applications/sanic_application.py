@@ -20,7 +20,8 @@ from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
 
-logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger = logging.getLogger("sanic-application")
 logger.setLevel(logging.DEBUG)
 
 
@@ -64,7 +65,7 @@ def load_configuration(configuration_file: Optional[Union[str, Path]] = None) ->
             },
             "handlers": [
                 {
-                    "regex": "/annotator(?:/([^/]+))?/?",
+                    "path": "/annotator/<query: str>",
                     "handler": "AnnotatorView",
                     "package": "biothings_annotator"
                 }
@@ -124,14 +125,17 @@ def get_application(configuration: dict = None) -> Sanic:
     """
     application_settings = configuration["application"]["settings"]
     application_handlers = configuration["application"]["handlers"]
-    application = Sanic(name="TEST-SANIC")
+    application = Sanic(
+        name="TEST-SANIC",
+        **application_settings
+    )
 
     for handler_mapping in application_handlers:
         try:
             handler_package = importlib.import_module(handler_mapping["package"])
             handler_instance = getattr(handler_package, handler_mapping["handler"])
-            handler_regex = handler_mapping["regex"]
-            application.add_route(handler_instance.as_view(), handler_regex)
+            handler_path = handler_mapping["path"]
+            application.add_route(handler_instance.as_view(), handler_path)
         except Exception as gen_exc:
             logger.exception(gen_exc)
     return application
@@ -159,8 +163,12 @@ def main():
     sanic_application = sanic_loader.load()
     logger.info("generated sanic application from loader: %s", sanic_application)
 
+    sanic_application.config.TOUCHUP = False
+
     try:
-        sanic_application.prepare(port=9999, dev=True)
+        sanic_application.prepare(
+            port=9999, single_process=True, debug=True,
+        )
         Sanic.serve(primary=sanic_application, app_loader=sanic_loader)
     except Exception as gen_exc:
         logger.exception(gen_exc)
