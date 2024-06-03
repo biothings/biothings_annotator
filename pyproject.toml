@@ -1,0 +1,84 @@
+[tool.black]
+line-length = 120
+target-version = ['py37', 'py38', 'py39', 'py310', 'py311']
+extend-exclude = '''
+# A regex preceded with ^/ will apply only to files and directories
+# in the root of the project.
+(
+)
+'''
+
+[tool.isort]
+profile = "black"
+combine_as_imports = true
+line_length = 120
+src_paths = ["."]
+extend_skip = []
+
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["biothings_annotator"]  # list of folders that contain the packages (["."] by default)
+include = ["biothings_annotator*"]  # package names should match these glob patterns (["*"] by default)
+exclude = ["test*"]  # exclude packages matching these glob patterns (empty by default)
+namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
+
+[project]
+name = "biothings_annotator"
+version = "0.0.1"
+authors = [
+  { name="Chunlei Wu", email="cwu@scripps.edu" },
+]
+description = "Package for handling biothings SDK / BTE annotation"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.urls]
+"Homepage" = "https://github.com/biothings/biothings_annotator"
+
+# pytest configuration
+[tool.pytest.ini_options]
+minversion = "6.2.5"
+
+# Options
+addopts = [
+    "-rA",
+    "-vv",
+    "--doctest-modules",
+    "--setup-show",
+    "--capture=no",
+    "--tb=line",
+    "--durations=0",
+    "--showlocals",
+    "--strict-markers",
+    "--color=yes",
+    "--code-highlight=yes"
+]
+
+# Path
+norecursedirs = [
+    ".svn",
+    ".git",
+    "_build",
+    "tmp*",
+    "lib", 
+    "lib64",
+]
+testpaths = ["test"]
+
+markers = []
+
+# Logging
+log_cli = true
+log_cli_level = "DEBUG"
+log_cli_format = "%(asctime)s [%(levelname)] %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
