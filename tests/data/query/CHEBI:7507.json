@@ -1,0 +1,21 @@
+[
+    {
+        "query": "CHEBI:7506",
+        "_id": "WOSYVGNDRYBQCQ-BARGLTKPSA-N",
+        "_score": 10.7101965,
+        "chebi": {
+            "_license": "http://bit.ly/2KAUCAm",
+            "definition": "A cyanogenic glycoside that has formula C17H29NO11.",
+            "id": "CHEBI:7506",
+            "name": "Neolinustatin"
+        },
+        "pubchem": {
+            "_license": "http://bit.ly/2AqoLOc",
+            "cid": 119533,
+            "inchi": "InChI=1S/C17H29NO11/c1-3-17(2,6-18)29-16-14(25)12(23)10(21)8(28-16)5-26-15-13(24)11(22)9(20)7(4-19)27-15/h7-16,19-25H,3-5H2,1-2H3/t7-,8-,9-,10-,11+,12+,13-,14-,15-,16+,17-/m1/s1",
+            "inchikey": "WOSYVGNDRYBQCQ-BARGLTKPSA-N",
+            "molecular_formula": "C17H29NO11",
+            "molecular_weight": 423.4
+        }
+    }
+]

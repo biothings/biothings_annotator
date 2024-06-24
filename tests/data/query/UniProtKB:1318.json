@@ -1,0 +1,23 @@
+[
+    {
+        "query": "1318",
+        "HGNC": "11017",
+        "MIM": "603088",
+        "_id": "1318",
+        "_score": 26.932104,
+        "alias": [
+            "COPT2",
+            "CTR2",
+            "hCTR2"
+        ],
+        "interpro": {
+            "desc": "Ctr copper transporter",
+            "id": "IPR007274",
+            "short_desc": "Cop_transporter"
+        },
+        "name": "solute carrier family 31 member 2",
+        "summary": "Predicted to enable copper ion transmembrane transporter activity. Predicted to be involved in cellular copper ion homeostasis. Predicted to act upstream of or within regulation of copper ion transmembrane transport. Predicted to be located in membrane. Predicted to be active in plasma membrane. [provided by Alliance of Genome Resources, Apr 2022]",
+        "symbol": "SLC31A2",
+        "type_of_gene": "protein-coding"
+    }
+]

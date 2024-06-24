@@ -1,0 +1,35 @@
+[
+    {
+        "query": "1081",
+        "HGNC": "1885",
+        "MIM": "118850",
+        "_id": "1081",
+        "_score": 26.931967,
+        "alias": [
+            "CG-ALPHA",
+            "FSHA",
+            "GPA1",
+            "GPHA1",
+            "GPHa",
+            "HCG",
+            "LHA",
+            "TSHA"
+        ],
+        "interpro": [
+            {
+                "desc": "Glycoprotein hormone alpha chain",
+                "id": "IPR000476",
+                "short_desc": "Glyco_hormone"
+            },
+            {
+                "desc": "Cystine-knot cytokine",
+                "id": "IPR029034",
+                "short_desc": "Cystine-knot_cytokine"
+            }
+        ],
+        "name": "glycoprotein hormones, alpha polypeptide",
+        "summary": "The four human glycoprotein hormones chorionic gonadotropin (CG), luteinizing hormone (LH), follicle stimulating hormone (FSH), and thyroid stimulating hormone (TSH) are dimers consisting of alpha and beta subunits that are associated noncovalently. The alpha subunits of these hormones are identical, however, their beta chains are unique and confer biological specificity. The protein encoded by this gene is the alpha subunit and belongs to the glycoprotein hormones alpha chain family. Two transcript variants encoding different isoforms have been found for this gene. [provided by RefSeq, Nov 2011].",
+        "symbol": "CGA",
+        "type_of_gene": "protein-coding"
+    }
+]

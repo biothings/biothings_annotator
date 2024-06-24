@@ -1,0 +1,3158 @@
+{
+  "description": "Query processed successfully, retrieved 21 results.",
+  "schema_version": "1.4.0",
+  "biolink_version": "3.5.3",
+  "workflow": [
+    {
+      "id": "lookup"
+    }
+  ],
+  "message": {
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "ids": [
+            "NCBIGene:3778"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:Gene"
+          ]
+        }
+      },
+      "edges": {
+        "e01": {
+          "subject": "n0",
+          "object": "n1",
+          "predicates": [
+            "biolink:regulates"
+          ]
+        }
+      }
+    },
+    "knowledge_graph": {
+      "nodes": {
+        "NCBIGene:3778": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "KCNMA1",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:3778",
+                "ENSEMBL:ENSG00000156113",
+                "HGNC:6284",
+                "OMIM:600150",
+                "UMLS:C1416602",
+                "UniProtKB:A0A087WZL8",
+                "ENSEMBL:ENSP00000482747",
+                "ENSEMBL:ENSP00000482747.1",
+                "UniProtKB:A0A1W2PP94",
+                "ENSEMBL:ENSP00000491418",
+                "ENSEMBL:ENSP00000491418.1",
+                "UniProtKB:A0A1W2PPY5",
+                "ENSEMBL:ENSP00000491673",
+                "ENSEMBL:ENSP00000491673.1",
+                "UniProtKB:A0A1W2PQK5",
+                "ENSEMBL:ENSP00000492005",
+                "ENSEMBL:ENSP00000492005.1",
+                "UniProtKB:A0A1W2PQU4",
+                "ENSEMBL:ENSP00000491920",
+                "ENSEMBL:ENSP00000491920.1",
+                "UniProtKB:A0A1W2PR56",
+                "ENSEMBL:ENSP00000492492",
+                "ENSEMBL:ENSP00000492492.1",
+                "UniProtKB:A0A1W2PR62",
+                "ENSEMBL:ENSP00000492075",
+                "ENSEMBL:ENSP00000492075.1",
+                "UniProtKB:A0A1W2PRN5",
+                "ENSEMBL:ENSP00000492414",
+                "ENSEMBL:ENSP00000492414.1",
+                "UniProtKB:B7ZMF5",
+                "ENSEMBL:ENSP00000491732",
+                "ENSEMBL:ENSP00000491732.1",
+                "UniProtKB:D5MRH1",
+                "ENSEMBL:ENSP00000491555",
+                "ENSEMBL:ENSP00000491555.1",
+                "UniProtKB:Q12791",
+                "PR:Q12791",
+                "UMLS:C3537389",
+                "UniProtKB:Q59FH2",
+                "UniProtKB:Q5SVJ7",
+                "ENSEMBL:ENSP00000361520",
+                "ENSEMBL:ENSP00000361520.2",
+                "UniProtKB:S4R453",
+                "ENSEMBL:ENSP00000475086",
+                "ENSEMBL:ENSP00000475086.1"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "KCNMA1",
+                "KCNMA1 gene",
+                "A0A087WZL8_HUMAN Potassium calcium-activated channel subfamily M alpha 1 (trembl)",
+                "A0A1W2PP94_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "A0A1W2PPY5_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "A0A1W2PQK5_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "A0A1W2PQU4_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "A0A1W2PR56_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "A0A1W2PR62_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "A0A1W2PRN5_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "B7ZMF5_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "D5MRH1_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "KCMA1_HUMAN Calcium-activated potassium channel subunit alpha-1 (sprot)",
+                "calcium-activated potassium channel subunit alpha-1 (human)",
+                "Calcium-Activated Potassium Channel Subunit Alpha-1",
+                "Q59FH2_HUMAN Calcium-activated potassium channel subunit alpha-1 (Fragment) (trembl)",
+                "Q5SVJ7_HUMAN Calcium-activated potassium channel subunit alpha-1 (trembl)",
+                "S4R453_HUMAN Potassium calcium-activated channel subfamily M alpha 1 (trembl)"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:10730": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "YME1L1",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:10730",
+                "ENSEMBL:ENSG00000136758",
+                "HGNC:12843",
+                "OMIM:607472",
+                "UMLS:C1421554"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "YME1L1",
+                "YME1L1 gene"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:12": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "SERPINA3",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:12",
+                "ENSEMBL:ENSG00000196136",
+                "HGNC:16",
+                "OMIM:107280",
+                "UMLS:C1412050",
+                "UniProtKB:A0A024R6P0",
+                "UniProtKB:P01011",
+                "PR:P01011",
+                "UMLS:C1869853"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "SERPINA3",
+                "SERPINA3 gene",
+                "A0A024R6P0_HUMAN Serpin peptidase inhibitor, clade A (Alpha-1 antiproteinase, antitrypsin), member 3, isoform CRA_c (trembl)",
+                "AACT_HUMAN Alpha-1-antichymotrypsin (sprot)",
+                "alpha-1-antichymotrypsin (human)",
+                "SERPINA3 protein, human"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:51097": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "SCCPDH",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:51097",
+                "ENSEMBL:ENSG00000143653",
+                "HGNC:24275",
+                "UMLS:C1822651",
+                "UniProtKB:A0A384NPM7",
+                "UniProtKB:Q8NBX0",
+                "PR:Q8NBX0",
+                "ENSEMBL:ENSP00000355467",
+                "ENSEMBL:ENSP00000355467.3"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "SCCPDH",
+                "SCCPDH gene",
+                "A0A384NPM7_HUMAN Epididymis secretory sperm binding protein (trembl)",
+                "SCPDL_HUMAN Saccharopine dehydrogenase-like oxidoreductase (sprot)",
+                "saccharopine dehydrogenase-like oxidoreductase (human)"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:3066": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "HDAC2",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:3066",
+                "ENSEMBL:ENSG00000196591",
+                "HGNC:4853",
+                "OMIM:605164",
+                "UMLS:C1333892",
+                "UniProtKB:Q92769",
+                "PR:Q92769",
+                "UMLS:C2713652"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "HDAC2",
+                "HDAC2 gene",
+                "HDAC2_HUMAN Histone deacetylase 2 (sprot)",
+                "histone deacetylase 2 (human)",
+                "HDAC2 protein, human"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:26227": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "PHGDH",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:26227",
+                "ENSEMBL:ENSG00000092621",
+                "HGNC:8923",
+                "OMIM:606879",
+                "UMLS:C1418531",
+                "UniProtKB:O43175",
+                "PR:O43175",
+                "ENSEMBL:ENSP00000493175",
+                "ENSEMBL:ENSP00000493175.1",
+                "ENSEMBL:ENSP00000493382",
+                "ENSEMBL:ENSP00000493382.1",
+                "UMLS:C4048261"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "PHGDH",
+                "PHGDH gene",
+                "SERA_HUMAN D-3-phosphoglycerate dehydrogenase (sprot)",
+                "D-3-phosphoglycerate dehydrogenase (human)",
+                "D-3-Phosphoglycerate Dehydrogenase, human"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:1917": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "EEF1A2",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:1917",
+                "ENSEMBL:ENSG00000101210",
+                "HGNC:3192",
+                "OMIM:602959",
+                "UMLS:C1414273",
+                "UniProtKB:Q05639",
+                "PR:Q05639",
+                "ENSEMBL:ENSP00000217182",
+                "ENSEMBL:ENSP00000217182.3",
+                "UMLS:C1531428"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "EEF1A2",
+                "EEF1A2 gene",
+                "EF1A2_HUMAN Elongation factor 1-alpha 2 (sprot)",
+                "elongation factor 1-alpha 2 (human)",
+                "EEF1A2 protein, human"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:10493": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "VAT1",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:10493",
+                "ENSEMBL:ENSG00000108828",
+                "HGNC:16919",
+                "OMIM:604631",
+                "UMLS:C1424634",
+                "UniProtKB:A0A024R1Z6",
+                "UniProtKB:Q99536",
+                "PR:Q99536"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "VAT1",
+                "VAT1 gene",
+                "A0A024R1Z6_HUMAN Vesicle amine transport protein 1 homolog (T californica), isoform CRA_a (trembl)",
+                "VAT1_HUMAN Synaptic vesicle membrane protein VAT-1 homolog (sprot)",
+                "synaptic vesicle membrane protein VAT-1 homolog (human)"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:7905": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "REEP5",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:7905",
+                "ENSEMBL:ENSG00000129625",
+                "HGNC:30077",
+                "OMIM:125265",
+                "UMLS:C1327771",
+                "UniProtKB:Q00765",
+                "PR:Q00765"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "REEP5",
+                "REEP5 gene",
+                "REEP5_HUMAN Receptor expression-enhancing protein 5 (sprot)",
+                "receptor expression-enhancing protein 5 (human)"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:7165": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "TPD52L2",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:7165",
+                "ENSEMBL:ENSG00000101150",
+                "HGNC:12007",
+                "OMIM:603747",
+                "UMLS:C1420869",
+                "UniProtKB:A0A087WYR3",
+                "ENSEMBL:ENSP00000482024",
+                "ENSEMBL:ENSP00000482024.1",
+                "UniProtKB:A0A087WZ51",
+                "ENSEMBL:ENSP00000482370",
+                "ENSEMBL:ENSP00000482370.1",
+                "UniProtKB:O43399",
+                "PR:O43399",
+                "UniProtKB:Q68E05",
+                "UniProtKB:Q6FGS1"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "TPD52L2",
+                "TPD52L2 gene",
+                "A0A087WYR3_HUMAN TPD52 like 2 (trembl)",
+                "A0A087WZ51_HUMAN TPD52 like 2 (trembl)",
+                "TPD54_HUMAN Tumor protein D54 (sprot)",
+                "tumor protein D54 (human)",
+                "Q68E05_HUMAN Tumor protein D52-like 2, isoform CRA_f (trembl)",
+                "Q6FGS1_HUMAN TPD52L2 protein (trembl)"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:891": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "CCNB1",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:891",
+                "ENSEMBL:ENSG00000134057",
+                "HGNC:1579",
+                "OMIM:123836",
+                "UMLS:C1332695",
+                "UniProtKB:P14635",
+                "PR:P14635",
+                "UMLS:C1610382"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "CCNB1",
+                "CCNB1 gene",
+                "CCNB1_HUMAN G2/mitotic-specific cyclin-B1 (sprot)",
+                "G2/mitotic-specific cyclin-B1 (human)",
+                "CCNB1 protein, human"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:58478": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "ENOPH1",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:58478",
+                "ENSEMBL:ENSG00000145293",
+                "HGNC:24599",
+                "UMLS:C2239387",
+                "UniProtKB:D6RA00",
+                "ENSEMBL:ENSP00000422005",
+                "ENSEMBL:ENSP00000422005.1",
+                "UniProtKB:Q9UHY7",
+                "PR:Q9UHY7"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "ENOPH1",
+                "ENOPH1 gene",
+                "D6RA00_HUMAN Enolase-phosphatase 1 (trembl)",
+                "ENOPH_HUMAN Enolase-phosphatase E1 (sprot)",
+                "enolase-phosphatase E1 (human)"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:4154": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "MBNL1",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:4154",
+                "ENSEMBL:ENSG00000152601",
+                "HGNC:6923",
+                "OMIM:606516",
+                "UMLS:C1417055",
+                "UniProtKB:Q86VM6",
+                "ENSEMBL:ENSP00000419347",
+                "ENSEMBL:ENSP00000419347.1",
+                "UniProtKB:Q9NR56",
+                "PR:Q9NR56"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "MBNL1",
+                "MBNL1 gene",
+                "Q86VM6_HUMAN MBNL1 protein (trembl)",
+                "MBNL1_HUMAN Muscleblind-like protein 1 (sprot)",
+                "muscleblind-like protein 1 (human)"
+              ]
+            }
+          ]
+        },
+        "UniProtKB:P04179": {
+          "categories": [
+            "biolink:Protein"
+          ],
+          "name": "SODM_HUMAN Superoxide dismutase [Mn], mitochondrial (sprot)",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "UniProtKB:P04179",
+                "PR:P04179",
+                "UMLS:C1743497"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "SODM_HUMAN Superoxide dismutase [Mn], mitochondrial (sprot)",
+                "superoxide dismutase [Mn], mitochondrial (human)",
+                "SOD2 protein, human"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:43": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "ACHE",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:43",
+                "ENSEMBL:ENSG00000087085",
+                "HGNC:108",
+                "OMIM:100740",
+                "UMLS:C1412122",
+                "UniProtKB:P22303",
+                "PR:P22303"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "ACHE",
+                "ACHE Gene",
+                "ACES_HUMAN Acetylcholinesterase (sprot)",
+                "acetylcholinesterase (human)"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:8140": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "SLC7A5",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:8140",
+                "ENSEMBL:ENSG00000103257",
+                "HGNC:11063",
+                "OMIM:600182",
+                "UMLS:C1442753",
+                "UniProtKB:Q01650",
+                "PR:Q01650",
+                "ENSEMBL:ENSP00000261622",
+                "ENSEMBL:ENSP00000261622.4",
+                "UMLS:C5226805"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "SLC7A5",
+                "SLC7A5 gene",
+                "LAT1_HUMAN Large neutral amino acids transporter small subunit 1 (sprot)",
+                "large neutral amino acids transporter small subunit 1 (human)",
+                "SLC7A5 protein, human"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:3065": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "HDAC1",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:3065",
+                "ENSEMBL:ENSG00000116478",
+                "HGNC:4852",
+                "OMIM:601241",
+                "UMLS:C1333891",
+                "UniProtKB:Q13547",
+                "PR:Q13547",
+                "ENSEMBL:ENSP00000362649",
+                "ENSEMBL:ENSP00000362649.3",
+                "UMLS:C1334032",
+                "UniProtKB:Q6IT96"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "HDAC1",
+                "HDAC1 gene",
+                "HDAC1_HUMAN Histone deacetylase 1 (sprot)",
+                "histone deacetylase 1 (human)",
+                "HDAC1 protein, human",
+                "Q6IT96_HUMAN Histone deacetylase (trembl)"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:5747": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "PTK2",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:5747",
+                "ENSEMBL:ENSG00000169398",
+                "HGNC:9611",
+                "OMIM:600758",
+                "UMLS:C1366894",
+                "UniProtKB:Q05397",
+                "PR:Q05397",
+                "UMLS:C1565427",
+                "UniProtKB:Q59GM6",
+                "UniProtKB:Q59GN8",
+                "UniProtKB:Q658W2"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "PTK2",
+                "PTK2 gene",
+                "FAK1_HUMAN Focal adhesion kinase 1 (sprot)",
+                "focal adhesion kinase 1 (human)",
+                "PTK2 protein, human",
+                "Q59GM6_HUMAN non-specific protein-tyrosine kinase (Fragment) (trembl)",
+                "Q59GN8_HUMAN non-specific protein-tyrosine kinase (Fragment) (trembl)",
+                "Q658W2_HUMAN non-specific protein-tyrosine kinase (trembl)"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:1019": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "CDK4",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:1019",
+                "ENSEMBL:ENSG00000135446",
+                "HGNC:1773",
+                "OMIM:123829",
+                "UMLS:C0694873",
+                "UniProtKB:A0A024RBB6",
+                "UniProtKB:P11802",
+                "PR:P11802",
+                "UMLS:C1527860"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "CDK4",
+                "CDK4 gene",
+                "A0A024RBB6_HUMAN Cyclin-dependent kinase 4, isoform CRA_a (trembl)",
+                "CDK4_HUMAN Cyclin-dependent kinase 4 (sprot)",
+                "cyclin-dependent kinase 4 (human)",
+                "CDK4 protein, human"
+              ]
+            }
+          ]
+        },
+        "UniProtKB:O75030": {
+          "categories": [
+            "biolink:Protein"
+          ],
+          "name": "MITF_HUMAN Microphthalmia-associated transcription factor (sprot)",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "UniProtKB:O75030",
+                "PR:O75030",
+                "UMLS:C1144191"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "MITF_HUMAN Microphthalmia-associated transcription factor (sprot)",
+                "microphthalmia-associated transcription factor (human)",
+                "MITF protein, human"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:1080": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "CFTR",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:1080",
+                "ENSEMBL:ENSG00000001626",
+                "HGNC:1884",
+                "OMIM:602421",
+                "UMLS:C1413365",
+                "UniProtKB:A0A024R730",
+                "UniProtKB:P13569",
+                "PR:P13569",
+                "UMLS:C1612819"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "CFTR",
+                "CFTR gene",
+                "A0A024R730_HUMAN Cystic fibrosis transmembrane conductance regulator (trembl)",
+                "CFTR_HUMAN Cystic fibrosis transmembrane conductance regulator (sprot)",
+                "cystic fibrosis transmembrane conductance regulator (human)",
+                "CFTR protein, human"
+              ]
+            }
+          ]
+        },
+        "NCBIGene:157855": {
+          "categories": [
+            "biolink:Gene"
+          ],
+          "name": "KCNU1",
+          "attributes": [
+            {
+              "attribute_type_id": "biolink:xref",
+              "value": [
+                "NCBIGene:157855",
+                "ENSEMBL:ENSG00000215262",
+                "HGNC:18867",
+                "OMIM:615215",
+                "UMLS:C1425838",
+                "UniProtKB:A8MYU2",
+                "PR:A8MYU2",
+                "ENSEMBL:ENSP00000382770",
+                "ENSEMBL:ENSP00000382770.3"
+              ]
+            },
+            {
+              "attribute_type_id": "biolink:synonym",
+              "value": [
+                "KCNU1",
+                "KCNU1 gene",
+                "KCNU1_HUMAN Potassium channel subfamily U member 1 (sprot)",
+                "potassium channel subfamily U member 1 (human)"
+              ]
+            }
+          ]
+        }
+      },
+      "edges": {
+        "52307468be9f848afd40d5cd5424521d": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:10730",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "cf045abe3297b0df80b3cf6c305ca22f": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:12",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "8728f9586d9ab4503a9bcb27a973cf80": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:51097",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "78272bf7be59a257b97c3ae02b5f5403": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:3066",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "a6384a0d508dfff5cee059b5258dbe08": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:26227",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "67678b2d4880799db6957a05cc2f7e5a": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:1917",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "356196eb62e5b61e050f50eae47b700c": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:10493",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "79f2c7a823b927090bd6feb31e517f77": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:7905",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "4af539ea2509387eb4b7027dfe6e4f7d": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:7165",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "c3e9f55b6007183e3b2a1f1e90fae430": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:891",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "8826dabd705d54ab995422d8322c9495": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:58478",
+          "attributes": [],
+          "sources": [
+            {
+              "resource_id": "infores:hetionet",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:lincs"
+              ]
+            },
+            {
+              "resource_id": "infores:lincs",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:automat-hetio",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:hetionet"
+              ]
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:automat-hetio"
+              ]
+            }
+          ]
+        },
+        "ba96e5bdc8e1736eb9578c6eaff1ed12": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:4154",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "upregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 1,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 1.0467349699374802,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMC:6123634"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "In addition, the overexpression of KCNMA1 alleviated the effect caused by MBNL1-AS1 overexpression (Table 3).",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:6123634",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC6123634/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "RESULTS",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 1.0467349699374802,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "35|41",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "74|79",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2018,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:13c211a332b2f889f2c16e1923d240c64d5fc8c80c04de278ee5825aa67ab0b7",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/13c211a332b2f889f2c16e1923d240c64d5fc8c80c04de278ee5825aa67ab0b7"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "360bfed5da0dd6d26f3df162e228476a": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "UniProtKB:P04179",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "upregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 1,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 0.9313669958205528,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMC:6770356"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "As shown in Figure 6C, both wt, and slo1 mutants showed a modest but significant increase in lifespan on overexpression of SOD2 at 25 °C (we observed similar results at 29 °C as well).",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:6770356",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC6770356/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "RESULTS",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 0.9313669958205528,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "36|40",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "123|127",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2019,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:1fd4b6d970557e9b400d7e1e2a7f4cad4c1486a0b74857e928d86ab4075ee1b8",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/1fd4b6d970557e9b400d7e1e2a7f4cad4c1486a0b74857e928d86ab4075ee1b8"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "26e44d907e23c96c0bcc08cee45e75a5": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:43",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "upregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 1,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 0.8324924160937638,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMC:3628382"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "To further investigate the role of cardiac neurons in protection afforded by SLO1 activators, we assessed neuronal status by histochemical staining for acetylcholinesterase activity (AChE).",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:3628382",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC3628382/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "RESULTS",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 0.8324924160937638,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "77|81",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "152|172",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2013,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:64354df35900c8533095466b56ef3e72b1071eec9ea45f907a701a28cd2acc2c",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/64354df35900c8533095466b56ef3e72b1071eec9ea45f907a701a28cd2acc2c"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "67baccebc3a970d1244ad288180913d2": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:8140",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "downregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 2,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 0.9696485302061879,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMC:3262936",
+                "PMC:3262936"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "They observed that slo-1 but not slo-2 null-mutants were more resistant to the inhibitory effects of emodepside than lat-1 and lat-2 (latrophilin receptor) double mutants.",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:3262936",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC3262936/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "INTRO",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 0.943194892672438,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "33|36",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "117|122",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2011,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:37e45d160c6838fc33a29cb3db88aa6d1ad3381ea2df81f4cca0092446717902",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/37e45d160c6838fc33a29cb3db88aa6d1ad3381ea2df81f4cca0092446717902"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "They observed that slo-1 but not slo-2 null-mutants were more resistant to the inhibitory effects of emodepside than lat-1 and lat-2 (latrophilin receptor) double mutants.",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:3262936",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC3262936/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "INTRO",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 0.996102167739938,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "19|24",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "117|122",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2011,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:d5d30c7a16603f40cdb229d581cfd0dd99c959ab65b38a4ef2547179ae4eaab7",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/d5d30c7a16603f40cdb229d581cfd0dd99c959ab65b38a4ef2547179ae4eaab7"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "2e1d73dd0bdd8fde78704f4600f02ff3": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:3065",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "downregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 1,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 0.9368731924880602,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMC:5187883"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "The inhibitory effects of KCa1.1 transcription were demonstrated through the pharmacological blockade of HDAC1 and HDAC2 by 300 nM AATB (n = 4, p < 0.01), whereas no significant changes were found by the respective inhibition of HDAC1, HDAC3, and HDAC6 by treatments with 30 nM AATB, 1 μM T247 [N-(2-aminophenyl)-4-[1-(2-thiophen-3-ylethyl)-1H-(1),(2),(3)triazol-4-yl]benzamide], and 1 μM NCT-14b [(S)-S-7-(adamant-1-ylamino)-6-(tert-butoxycarbonyl)-7-oxoheptyl-2-methylpropanethioate] for 48 h (n = 4 for each, p > 0.05).",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:5187883",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC5187883/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "RESULTS",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 0.9368731924880602,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "26|32",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "105|110",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2016,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:a7e63c3f363df3e70fad08ae5874f11d76656c4c596e01448bdba3e127a6fa28",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/a7e63c3f363df3e70fad08ae5874f11d76656c4c596e01448bdba3e127a6fa28"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "d9e72cd1bd782d3e166696779ec1c3e9": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:5747",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "downregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 1,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 1.0313753453490133,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMC:6406553"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "Accordingly, KCNMA1 overexpression was not sufficient to inhibit the migration and invasion of gastric cancer cells after PTK2 knockdown.",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:6406553",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC6406553/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "DISCUSS",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 1.0313753453490133,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "13|19",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "122|126",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2019,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:edf1bdf22efb39b5994f61e439be6d58c6a9eb3855e339fa4ea216c0070d991d",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/edf1bdf22efb39b5994f61e439be6d58c6a9eb3855e339fa4ea216c0070d991d"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "4b10630e1b90b99588f40c6bbc3ab278": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:1019",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "downregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 1,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 0.9088829068375138,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMC:5187883"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "The pharmacological blockade and siRNA-mediated silencing of KCa1.1 induced cell-cycle arrest in the G0/G1 phase through the down-regulation of cyclin-D1 and cyclin-dependent kinase 4 (CDK4) and attenuated breast cancer invasion and metastasis.",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:5187883",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC5187883/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "INTRO",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 0.9088829068375138,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "61|67",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "185|189",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2016,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:e56b28b29c2b053821861f260d76b815fe381530bd0382e4572171b35dd26ce5",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/e56b28b29c2b053821861f260d76b815fe381530bd0382e4572171b35dd26ce5"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "f1d3805096c8e2bf1a2f15af7173723f": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:4154",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "downregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 2,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 1.0484843153908774,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMC:6123634",
+                "PMC:6123634"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "These results indicated that the KCNMA1 and cGMP-PKG pathways might be negatively regulated by MBNL1-AS1, while the overexpression of KCNMA1 could increase the expression of cGMP-PKG pathway-related proteins suppressed by the overexpression of MBNL1-AS1.",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:6123634",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC6123634/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "RESULTS",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 1.0439212624172614,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "134|140",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "244|249",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2018,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:40deb9ebae9770a1db42763677f084850bef974e1332f47473654c8cdf76a5be",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/40deb9ebae9770a1db42763677f084850bef974e1332f47473654c8cdf76a5be"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "In addition, the overexpression of KCNMA1 alleviated the inhibitory effect of MBNL1-AS1 on the proliferation of skeletal muscle cells.",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:6123634",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC6123634/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "RESULTS",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 1.0530473683644934,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "35|41",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "78|83",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2018,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:6bc0039423fd32687f4672be87bca60e365fa45704f801ff828d99de47a7f09f",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/6bc0039423fd32687f4672be87bca60e365fa45704f801ff828d99de47a7f09f"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "2581010924f335834ca353773b42b319": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "UniProtKB:O75030",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "downregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 1,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 1.0044681740618269,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMC:3983263"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "Melanoma cell lines with ectopic miR-211 exhibit significant growth inhibition and reduced invasiveness, and the negative post transcriptional effects of miR-211 on KCNMA1 transcript is responsible for the tumor-suppressor activities of MITF and/or TRPM1.",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMC:3983263",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/PMC3983263/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "DISCUSS",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 1.0044681740618269,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "165|171",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "237|241",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2014,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:48bf19c224253441806d20a9db3fa7858f3cf6578a47d1fa7a1622da8c2d8934",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/48bf19c224253441806d20a9db3fa7858f3cf6578a47d1fa7a1622da8c2d8934"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "c01bbe915808ac13552113a29900ca60": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:1080",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "downregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 1,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 0.8699056290461622,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMID:22648950"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "FSK-induced K(+) secretion was 1) not inhibited by either mucosal or serosal 1-[(2-chlorophenyl) diphenylmethyl]-1H-pyrazole (TRAM-34; a Kcnn4 channel blocker), 2) inhibited (92%) by mucosal iberiotoxin (Kcnma1 channel blocker), and 3) not affected by mucosal cystic fibrosis transmembrane conductance regulator inhibitor (CFTR(inh)-172).",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMID:22648950",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/22648950/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "abstract",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 0.8699056290461622,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "204|210",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "323|327",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2012,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:b45a5555f681702763174725ac2781ea510a020f0016348e723a014e7bde6c65",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/b45a5555f681702763174725ac2781ea510a020f0016348e723a014e7bde6c65"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        },
+        "b332d4ee3ca30dfab73395d93b68cd97": {
+          "predicate": "biolink:regulates",
+          "subject": "NCBIGene:3778",
+          "object": "NCBIGene:157855",
+          "qualifiers": [
+            {
+              "qualifier_type_id": "biolink:object_direction_qualifier",
+              "qualifier_value": "downregulated"
+            }
+          ],
+          "attributes": [
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:primary_knowledge_source",
+              "value": "infores:text-mining-provider-targeted",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:supporting_data_source",
+              "value": "infores:pubmed",
+              "value_type_id": "biolink:InformationResource"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:evidence_count",
+              "value": 1,
+              "value_type_id": "biolink:EvidenceCount"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:extraction_confidence_score",
+              "value": 1.140699803797929,
+              "value_type_id": "biolink:ConfidenceLevel"
+            },
+            {
+              "attribute_source": "infores:pubmed",
+              "attribute_type_id": "biolink:publications",
+              "value": [
+                "PMID:20421373"
+              ],
+              "value_type_id": "biolink:Uriorcurie"
+            },
+            {
+              "attribute_source": "infores:text-mining-provider-targeted",
+              "attribute_type_id": "biolink:has_supporting_study_result",
+              "attributes": [
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:supporting_text",
+                  "value": "Replacing the Slo1 S6 segment with the Slo3 sequence abolishes paxilline sensitivity.",
+                  "value_type_id": "EDAM:data_3671"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:publications",
+                  "value": "PMID:20421373",
+                  "value_type_id": "biolink:Uriorcurie",
+                  "value_url": "https://pubmed.ncbi.nlm.nih.gov/20421373/"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_text_located_in",
+                  "value": "abstract",
+                  "value_type_id": "IAO_0000314"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:extraction_confidence_score",
+                  "value": 1.140699803797929,
+                  "value_type_id": "EDAM:data_1772"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted",
+                  "attribute_type_id": "biolink:subject_location_in_text",
+                  "value": "14|18",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:text-mining-provider-targeted ",
+                  "attribute_type_id": "biolink:object_location_in_text",
+                  "value": "39|43",
+                  "value_type_id": "SIO:001056"
+                },
+                {
+                  "attribute_source": "infores:pubmed",
+                  "attribute_type_id": "biolink:supporting_document_year",
+                  "value": 2010,
+                  "value_type_id": "UO:0000036"
+                }
+              ],
+              "value": "tmkp:a1ac9484bf2c9232723aefacc712b6ab69cffc5d6270be4c272f971612d578e4",
+              "value_type_id": "biolink:TextMiningResult",
+              "value_url": "https://tmui.text-mining-kp.org/evidence/a1ac9484bf2c9232723aefacc712b6ab69cffc5d6270be4c272f971612d578e4"
+            }
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:text-mining-provider-targeted",
+              "resource_role": "primary_knowledge_source"
+            },
+            {
+              "resource_id": "infores:biothings-explorer",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": [
+                "infores:text-mining-provider-targeted"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "auxiliary_graphs": {},
+    "results": [
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:10730"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "52307468be9f848afd40d5cd5424521d"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:12"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "cf045abe3297b0df80b3cf6c305ca22f"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:51097"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "8728f9586d9ab4503a9bcb27a973cf80"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:3066"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "78272bf7be59a257b97c3ae02b5f5403"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:26227"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "a6384a0d508dfff5cee059b5258dbe08"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:1917"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "67678b2d4880799db6957a05cc2f7e5a"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:10493"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "356196eb62e5b61e050f50eae47b700c"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:7905"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "79f2c7a823b927090bd6feb31e517f77"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:7165"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "4af539ea2509387eb4b7027dfe6e4f7d"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:891"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "c3e9f55b6007183e3b2a1f1e90fae430"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:58478"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "8826dabd705d54ab995422d8322c9495"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:4154"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "ba96e5bdc8e1736eb9578c6eaff1ed12"
+                },
+                {
+                  "id": "f1d3805096c8e2bf1a2f15af7173723f"
+                }
+              ]
+            },
+            "score": 0.2449186624037092
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "UniProtKB:P04179"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "360bfed5da0dd6d26f3df162e228476a"
+                }
+              ]
+            },
+            "score": 0.12435300177159614
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:43"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "26e44d907e23c96c0bcc08cee45e75a5"
+                }
+              ]
+            },
+            "score": 0.12435300177159614
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:8140"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "67baccebc3a970d1244ad288180913d2"
+                }
+              ]
+            },
+            "score": 0.12435300177159614
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:3065"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "2e1d73dd0bdd8fde78704f4600f02ff3"
+                }
+              ]
+            },
+            "score": 0.12435300177159614
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:5747"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "d9e72cd1bd782d3e166696779ec1c3e9"
+                }
+              ]
+            },
+            "score": 0.12435300177159614
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:1019"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "4b10630e1b90b99588f40c6bbc3ab278"
+                }
+              ]
+            },
+            "score": 0.12435300177159614
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "UniProtKB:O75030"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "2581010924f335834ca353773b42b319"
+                }
+              ]
+            },
+            "score": 0.12435300177159614
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:1080"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "c01bbe915808ac13552113a29900ca60"
+                }
+              ]
+            },
+            "score": 0.12435300177159614
+          }
+        ]
+      },
+      {
+        "node_bindings": {
+          "n0": [
+            {
+              "id": "NCBIGene:3778"
+            }
+          ],
+          "n1": [
+            {
+              "id": "NCBIGene:157855"
+            }
+          ]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:biothings-explorer",
+            "edge_bindings": {
+              "e01": [
+                {
+                  "id": "b332d4ee3ca30dfab73395d93b68cd97"
+                }
+              ]
+            },
+            "score": 0.12435300177159614
+          }
+        ]
+      }
+    ]
+  },
+  "logs": [
+    {
+      "timestamp": "2024-04-04T19:23:51.722Z",
+      "level": "INFO",
+      "message": "job results available at: https://bte.transltr.io/v1/asyncquery_response/lfhBkHSnG3",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:49.479Z",
+      "level": "INFO",
+      "message": "Expanded ids for node n0: (1 ids -> 1 ids)",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.315Z",
+      "level": "WARNING",
+      "message": "The following APIs were unavailable at the time of execution: Gene-List Network Enrichment Analysis, Service Provider TRAPI",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.386Z",
+      "level": "DEBUG",
+      "message": "BTE identified 2 qNodes from your query graph",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.387Z",
+      "level": "DEBUG",
+      "message": "BTE identified 1 qEdges from your query graph",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.548Z",
+      "level": "DEBUG",
+      "message": "Edge manager is managing 1 qEdges.",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.548Z",
+      "level": "DEBUG",
+      "message": "Edge manager is sending next qEdge 'e01' for execution.",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.548Z",
+      "level": "INFO",
+      "message": "Executing e01: n0 --> n1",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.609Z",
+      "level": "DEBUG",
+      "message": "REDIS cache is  enabled.",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.616Z",
+      "level": "DEBUG",
+      "message": "BTE finds cached records for e01",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.616Z",
+      "level": "INFO",
+      "message": "e01 execution: 0 queries (0 success/0 fail) and (1) cached qEdges return (22) records",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.619Z",
+      "level": "DEBUG",
+      "message": "'e01' kept (22) / dropped (0) records.",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.624Z",
+      "level": "INFO",
+      "message": "'e01' keeps (22) records!",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:50.624Z",
+      "level": "DEBUG",
+      "message": "Edge manager collected (22) records!",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:51.719Z",
+      "level": "DEBUG",
+      "message": "0 results had pfocr figures truncated to max of 20 (0 unique figures removed, 0 not appearing elsewhere in results).",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:51.719Z",
+      "level": "INFO",
+      "message": "0 results successfully enriched with 0 unique PFOCR figures.",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:51.719Z",
+      "level": "DEBUG",
+      "message": "Scored 0 results with NGD score, scored 21 results without NGD.",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:51.721Z",
+      "level": "INFO",
+      "message": "Execution Summary: (22) nodes / (22) edges / (21) results; (0/0) queries (1 cached qEdges) returned results from(2) unique API",
+      "code": null
+    },
+    {
+      "timestamp": "2024-04-04T19:23:51.721Z",
+      "level": "INFO",
+      "message": "APIs: Automat-hetio(Trapi v1.4.0), Text Mining Targeted Association API ",
+      "code": null
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+[
+    {
+        "query": "9662",
+        "_id": "CJENPNUXCMYXPT-UHFFFAOYSA-N",
+        "_score": 17.083544,
+        "pubchem": {
+            "_license": "http://bit.ly/2AqoLOc",
+            "cid": 9662,
+            "inchi": "InChI=1S/C2HClF2/c3-2(5)1-4/h1H",
+            "inchikey": "CJENPNUXCMYXPT-UHFFFAOYSA-N",
+            "molecular_formula": "C2HClF2",
+            "molecular_weight": 98.48
+        }
+    }
+]
