@@ -1,0 +1,16 @@
+{
+    "network": {
+        "host": "0.0.0.0",
+        "port": 9999 
+    },
+    "application": {
+        "settings": {},
+        "handlers": [
+            {
+                "path": "/annotator",
+                "handler": "AnnotatorView",
+                "package": "biothings_annotator.application.handlers.sanic.annotator"
+            }
+        ]
+    }
+}

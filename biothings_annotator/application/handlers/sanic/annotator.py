@@ -21,14 +21,10 @@ class AnnotatorView(HTTPMethodView):
 
         annotator = Annotator()
         try:
-            annotated_node = annotator.annotate_curie(
-                curie, fields=fields, raw=raw
-            )
+            annotated_node = annotator.annotate_curie(curie, fields=fields, raw=raw)
             return sanic.json(annotated_node)
         except ValueError as value_err:
-            raise SanicException(
-                status_code=400, message=repr(value_err)
-            ) from value_err
+            raise SanicException(status_code=400, message=repr(value_err)) from value_err
 
     async def post(self, request: Request):
         fields = request.args.get("fields", None)
@@ -47,6 +43,4 @@ class AnnotatorView(HTTPMethodView):
             )
             return sanic.json(annotated_node_d)
         except ValueError as value_err:
-            raise SanicException(
-                status_code=400, message=repr(value_err)
-            ) from value_err
+            raise SanicException(status_code=400, message=repr(value_err)) from value_err
