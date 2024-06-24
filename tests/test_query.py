@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-@pytest.mark.parametrize("node_type, client_type", ["gene", "chem", "disease", "phenotype", "NULL"])
+@pytest.mark.parametrize("node_type", ["gene", "chem", "disease", "phenotype", "NULL"])
 def test_annotation_client(node_type: str):
     """
     Tests accessing different flavors of the biothings client from within the scope of the annotator
@@ -26,7 +26,7 @@ def test_annotation_client(node_type: str):
     If a valid keyword for the node is provided, then we'll yield an instance of the
     biothings_client for accessing nodes of that type
 
-    Otherwise we raise a ValueError attempting to access a node type that doesn't exist for the
+    Otherwise we raise a KeyError attempting to access a node type that doesn't exist for the
     biothings client
     """
     annotation_instance = Annotator()
@@ -34,7 +34,7 @@ def test_annotation_client(node_type: str):
         client = annotation_instance.get_client(node_type)
         assert isinstance(client, biothings_client.BiothingClient)
     else:
-        with pytest.raises(ValueError):
+        with pytest.raises(KeyError):
             annotation_instance.get_client(node_type)
 
 
@@ -48,38 +48,19 @@ def test_biothings_query(curie_prefix: str):
     node_type, node_id = annotation_instance.parse_curie(curie=curie_query, return_type=True, return_id=True)
 
     domain_fields = annotation_instance.annotator_clients[node_type]["fields"]
-    # for field_combination in itertools.chain.from_iterable(
-    #     itertools.combinations(domain_fields, sub_fields) for sub_fields in range(len(domain_fields) + 1)
-    # ):
-    # query_response = annotation_instance.query_biothings(
-    #     node_type=node_type, query_list=[node_id], fields=domain_fields
-    # )
-
     client = annotation_instance.get_client(node_type)
     if not client:
         logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)
         return {}
+
     fields = annotation_instance.annotator_clients[node_type]["fields"]
     scopes = annotation_instance.annotator_clients[node_type]["scopes"]
-    # logger.info("Querying annotations for %s %ss...", len(query_list), node_type)
-    res = client.querymany([node_id], scopes=scopes, fields=fields)
-    import json
-    import copy
+    querymany_result = client.querymany([node_id], scopes=scopes, fields=fields)
+    logger.info("Done. %s annotation objects returned.", len(querymany_result))
+    query_response = annotation_instance._map_group_query_subfields(collection=querymany_result, search_key="query")
 
-    with open(f"{node_type}_{curie_query}.json", "w", encoding="utf-8") as handle:
-        local_scope = copy.copy(locals())
-        local_scope.pop("annotation_instance")
-        local_scope.pop("json")
-        local_scope.pop("copy")
-        local_scope.pop("handle")
-        local_scope.pop("client")
-        handle.write(json.dumps(local_scope, indent=4))
-    logger.info("Done. %s annotation objects returned.", len(res))
-    structured_response = annotation_instance._map_group_query_subfields(collection=res, search_key="query")
-    # return structured_response
-
-    # assert isinstance(query_response, dict)
-    # logger.info((f"Query Response: {query_response}" f"Query Fields: {domain_fields}"))
+    assert isinstance(query_response, dict)
+    logger.info((f"Query Response: {query_response}" f"Query Fields: {domain_fields}"))
 
 
 @pytest.mark.parametrize(
