@@ -7,181 +7,12 @@ import logging
 
 import biothings_client
 from biothings.utils.common import get_dotfield_value
-from biothings.web.handlers import BaseAPIHandler
-from tornado.web import HTTPError
+
+from biothings_annotator.biolink import BIOLINK_PREFIX_to_BioThings
+from biothings_annotator.exceptions import TRAPIInputError, InvalidCurieError
+from biothings_annotator.transformer import ResponseTransformer
 
 logger = logging.getLogger(__name__)
-
-BIOLINK_PREFIX_to_BioThings = {
-    "NCBIGene": {"type": "gene", "field": "entrezgene"},
-    # "HGNC": {"type": "gene", "field": "HGNC"},
-    "ENSEMBL": {"type": "gene", "field": "ensembl.gene"},
-    "UniProtKB": {"type": "gene", "field": "uniprot.Swiss-Prot"},
-    "INCHIKEY": {"type": "chem"},
-    "CHEMBL.COMPOUND": {
-        "type": "chem",
-        "field": "chembl.molecule_chembl_id",
-        # "converter": lambda x: x.replace("CHEMBL.COMPOUND:", "CHEMBL"),
-    },
-    "PUBCHEM.COMPOUND": {"type": "chem", "field": "pubchem.cid"},
-    "CHEBI": {"type": "chem", "field": "chebi.id", "keep_prefix": True},
-    "UNII": {"type": "chem", "field": "unii.unii"},
-    "DRUGBANK": {"type": "chem", "field": "drugbank.id"},
-    "MONDO": {"type": "disease", "field": "mondo.mondo", "keep_prefix": True},
-    "DOID": {"type": "disease", "field": "disease_ontology.doid", "keep_prefix": True},
-    "HP": {"type": "phenotype", "field": "hp", "keep_prefix": True},
-}
-
-# ANNOTAION_FIELD_TRANSFORMATION = {
-#     "chembl.drug_indications.mesh_id": lambda x: append_prefix(x, "MESH"),
-# }
-
-
-class ResponseTransformer:
-    def __init__(self, res_by_id, node_type):
-        self.res_by_id = res_by_id
-        self.node_type = node_type
-
-        self.data_cache = {}  # used to cached required mapping data used for individual transformation
-        # typically those data coming from other biothings APIs, we will do a batch
-        # query to get them all, and cache them here for later use, to avoid slow
-        # one by one queries.
-
-    def _transform_chembl_drug_indications(self, doc):
-        if self.node_type != "chem":
-            return doc
-
-        def _append_mesh_prefix(chembl):
-            xli = chembl.get("drug_indications", [])
-            for _doc in xli:
-                if "mesh_id" in _doc:
-                    # Add MESH prefix to chembl.drug_indications.mesh_id field
-                    _doc["mesh_id"] = append_prefix(_doc["mesh_id"], "MESH")
-
-        chembl = doc.get("chembl", {})
-        if chembl:
-            if isinstance(chembl, list):
-                # in case returned chembl is a list, rare but still possible
-                for c in chembl:
-                    _append_mesh_prefix(c)
-            else:
-                _append_mesh_prefix(chembl)
-
-        return doc
-
-    def caching_ncit_descriptions(self):
-        """cache ncit descriptions for all unii.ncit IDs from self.res_by_id
-        deprecated along with _transform_add_ncit_description method.
-        """
-        ncit_id_list = []
-        for res in self.res_by_id.values():
-            if isinstance(res, list):
-                # in case returned res is a list, rare but still possible
-                for r in res:
-                    unii = r.get("unii", {})
-                    if isinstance(unii, list):
-                        for u in unii:
-                            ncit = u.get("ncit")
-                            if ncit:
-                                ncit_id_list.append(ncit)
-                    else:
-                        ncit = unii.get("ncit")
-                        if ncit:
-                            ncit_id_list.append(ncit)
-            else:
-                ncit = res.get("unii", {}).get("ncit")
-                if ncit:
-                    ncit_id_list.append(ncit)
-        if ncit_id_list:
-            ncit_api = biothings_client.get_client(url="https://biothings.ncats.io/ncit")
-            ncit_id_list = [f"NCIT:{ncit}" for ncit in ncit_id_list]
-            ncit_res = ncit_api.getnodes(ncit_id_list, fields="def")
-            ncit_def_d = {}
-            for hit in ncit_res:
-                if hit.get("def"):
-                    ncit_def = hit["def"]
-                    # remove the trailing " []" if present
-                    # delete after data is fixed
-                    if ncit_def.startswith('"') and ncit_def.endswith('" []'):
-                        ncit_def = ncit_def[1:-4]
-                    ncit_def_d[hit["_id"]] = ncit_def
-            if ncit_def_d:
-                self.data_cache["ncit"] = ncit_def_d
-
-    def deprecated_transform_add_ncit_description(self, doc):
-        """add ncit_description field to unii object based on unii.ncit field
-        deprecated now, as ncit_description is now returned directly from mychem.info
-        """
-        if self.node_type != "chem":
-            return doc
-
-        if "ncit" not in self.data_cache:
-            self.caching_ncit_descriptions()
-
-        ncit_def_d = self.data_cache.get("ncit", {})
-
-        def _add_ncit_description(unii):
-            ncit = unii.get("ncit")
-            ncit = f"NCIT:{ncit}"
-            if ncit:
-                ncit_def = ncit_def_d.get(ncit)
-                if ncit_def:
-                    unii["ncit_description"] = ncit_def
-
-        unii = doc.get("unii", {})
-        if unii:
-            if isinstance(unii, list):
-                # in case returned chembl is a list, rare but still possible
-                for u in unii:
-                    _add_ncit_description(u)
-            else:
-                _add_ncit_description(unii)
-        return doc
-
-    def transform_one_doc(self, doc):
-        """transform the response from biothings client"""
-        for fn_name, fn in inspect.getmembers(self, predicate=inspect.ismethod):
-            if fn_name.startswith("_transform_"):
-                if isinstance(doc, list):
-                    doc = [fn(r) for r in doc]
-                else:
-                    doc = fn(doc)
-        return doc
-
-    def transform(self):
-        for node_id in self.res_by_id:
-            res = self.res_by_id[node_id]
-            if isinstance(res, list):
-                # TODO: handle multiple results here
-                res = [self.transform_one_doc(r) for r in res]
-            else:
-                res = self.transform_one_doc(res)
-
-
-class TRAPIInputError(ValueError):
-    pass
-
-
-class InvalidCurieError(ValueError):
-    pass
-
-
-def list2dict(li, key):
-    out = {}
-    for d in li:
-        k = d[key]
-        if k not in out:
-            out[k] = [d]
-        else:
-            out[k].append(d)
-    return out
-
-
-def append_prefix(id, prefix):
-    """append prefix to id if not already present to make it a valid Curie ID
-    Note that prefix parameter should not include the trailing colon
-    """
-    return f"{prefix}:{id}" if not id.startswith(prefix) else id
 
 
 class Annotator:
@@ -274,7 +105,9 @@ class Annotator:
     }
 
     def get_client(self, node_type: str) -> tuple[biothings_client.BiothingClient, None]:
-        """lazy load the biothings client for the given node_type, return the client or None if failed."""
+        """
+        lazy load the biothings client for the given node_type, return the client or None if failed.
+        """
         client_or_kwargs = self.annotator_clients[node_type]["client"]
         if isinstance(client_or_kwargs, biothings_client.BiothingClient):
             client = client_or_kwargs
@@ -291,8 +124,10 @@ class Annotator:
             raise ValueError("Invalid input client_or_kwargs")
         return client
 
-    def parse_curie(self, curie, return_type=True, return_id=True):
-        """return a both type and if (as a tuple) or either based on the input curie"""
+    def parse_curie(self, curie: str, return_type: bool = True, return_id: bool = True):
+        """
+        return a both type and if (as a tuple) or either based on the input curie
+        """
         if ":" not in curie:
             raise InvalidCurieError(f"Invalid input curie id: {curie}")
         _prefix, _id = curie.split(":", 1)
@@ -311,7 +146,9 @@ class Annotator:
             return _id
 
     def query_biothings(self, node_type: str, query_list, fields=None) -> dict:
-        """Query biothings client based on node_type for a list of ids"""
+        """
+        Query biothings client based on node_type for a list of ids
+        """
         client = self.get_client(node_type)
         if not client:
             logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)
@@ -321,11 +158,56 @@ class Annotator:
         logger.info("Querying annotations for %s %ss...", len(query_list), node_type)
         res = client.querymany(query_list, scopes=scopes, fields=fields)
         logger.info("Done. %s annotation objects returned.", len(res))
-        res = list2dict(res, "query")
-        return res
+        structured_response = self._map_group_query_subfields(collection=res, search_key="query")
+        return structured_response
 
-    def annotate_curie(self, curie, raw=False, fields=None):
-        """Annotate a single curie id"""
+    def _map_group_query_subfields(self, collection: list[dict], search_key: str) -> dict:
+        """
+        Takes a collection of dictionary entries with a specify subfield key "search_key" and
+        extracts the subfield from each entry in the iterable into a dictionary.
+
+        It then bins entries into the dictionary so that identical keys have all results in one
+        aggregated list across the entire collection of dictionary entries
+
+        Example:
+
+        - 1 Entry
+        search_key = "query"
+        collection = [
+            {
+                'query': '8199',
+                '_id': '84557',
+                '_score': 1.55,
+                'name': 'microtubule associated protein 1 light chain 3 alpha'
+            }
+        ]
+
+        ... (Processing)
+
+        sub_field_collection = {
+            '8199': [
+                {
+                    'query': '8199',
+                    '_id': '84557',
+                    '_score': 1.55,
+                    'name': 'microtubule associated protein 1 light chain 3 alpha'
+                }
+            ]
+        }
+
+        """
+        sub_field_collection = {}
+        for sub_mapping in collection:
+            sub_field = sub_mapping.get(search_key, None)
+            if sub_field is not None:
+                sub_field_aggregation = sub_field_collection.setdefault(sub_field, [])
+                sub_field_aggregation.append(sub_mapping)
+        return sub_field_collection
+
+    def annotate_curie(self, curie: str, raw: bool = False, fields=None):
+        """
+        Annotate a single curie id
+        """
         node_type, _id = self.parse_curie(curie)
         if not node_type:
             raise InvalidCurieError(f"Unsupported Curie prefix: {curie}")
@@ -336,7 +218,8 @@ class Annotator:
         return {curie: res.get(_id, {})}
 
     def transform(self, res_by_id, node_type):
-        """perform any transformation on the annotation object, but in-place also returned object
+        """
+        perform any transformation on the annotation object, but in-place also returned object
         res_by_id is the output of query_biothings, node_type is the same passed to query_biothings
         """
         logger.info("Transforming output annotations for %s %ss...", len(res_by_id), node_type)
@@ -354,8 +237,12 @@ class Annotator:
         ####
         return res_by_id
 
-    def annotate_trapi(self, trapi_input, append=False, raw=False, fields=None, limit=None):
-        """Annotate a TRAPI input message with node annotator annotations"""
+    def annotate_trapi(
+        self, trapi_input: dict, append: bool = False, raw: bool = False, fields: list = None, limit: int = None
+    ):
+        """
+        Annotate a TRAPI input message with node annotator annotations
+        """
         try:
             node_d = get_dotfield_value("message.knowledge_graph.nodes", trapi_input)
             assert isinstance(node_d, dict)
@@ -377,19 +264,22 @@ class Annotator:
         node_list_by_type = {}
         for node_id in node_d:
             node_type = self.parse_curie(node_id, return_type=True, return_id=False)
-            if not node_type:
-                logger.warning(" Unsupported Curie prefix: %s. Skipped!", node_id)
             if node_type:
                 if node_type not in node_list_by_type:
                     node_list_by_type[node_type] = [node_id]
                 else:
                     node_list_by_type[node_type].append(node_id)
-        for node_type in node_list_by_type:
+            else:
+                logger.warning("Unsupported Curie prefix: %s. Skipped!", node_id)
+
+        for node_type, node_list in node_list_by_type.items():
             if node_type not in self.annotator_clients or not node_list_by_type[node_type]:
                 # skip for now
                 continue
+
             # this is the list of original node ids like NCBIGene:1017, should be a unique list
             node_list = node_list_by_type[node_type]
+
             # this is the list of query ids like 1017
             query_list = [
                 self.parse_curie(_id, return_type=False, return_id=True) for _id in node_list_by_type[node_type]
@@ -420,45 +310,3 @@ class Annotator:
                     node_d[orig_node_id]["attributes"] = [res]
 
         return node_d
-
-
-class AnnotatorHandler(BaseAPIHandler):
-    name = "annotator"
-    kwargs = {
-        "*": {
-            "raw": {"type": bool, "default": False},
-            "fields": {"type": str, "default": None},
-        },
-        "POST": {
-            # If True, append annotations to existing "attributes" field
-            "append": {"type": bool, "default": False},
-            # If set, limit the number of nodes to annotate
-            "limit": {"type": int, "default": None},
-        },
-    }
-
-    async def get(self, *args, **kwargs):
-        annotator = Annotator()
-        curie = args[0] if args else None
-        if curie:
-            try:
-                annotated_node = annotator.annotate_curie(curie, raw=self.args.raw, fields=self.args.fields)
-            except ValueError as e:
-                raise HTTPError(400, reason=repr(e))
-            self.finish(annotated_node)
-        else:
-            raise HTTPError(404, reason="missing required input curie id")
-
-    async def post(self, *args, **kwargs):
-        annotator = Annotator()
-        try:
-            annotated_node_d = annotator.annotate_trapi(
-                self.args_json,
-                append=self.args.append,
-                raw=self.args.raw,
-                fields=self.args.fields,
-                limit=self.args.limit,
-            )
-        except ValueError as e:
-            raise HTTPError(400, reason=repr(e))
-        self.finish(annotated_node_d)
