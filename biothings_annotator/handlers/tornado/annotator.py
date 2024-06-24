@@ -1,15 +1,19 @@
 """
-Handler for the tornado specific web server
+Translator Node Annotator Service Handler
 """
 
-from biothings.web.handlers import BaseAPIHandler
+import logging
+import json
 
-from tornado.web import HTTPError, RequestHandler
+import tornado
+from tornado.web import HTTPError
 
-from biothings_annotator import Annotator
+from biothings_annotator.annotator import Annotator
+
+logger = logging.getLogger(__name__)
 
 
-class AnnotatorHandler(RequestHandler):
+class AnnotatorHandler(tornado.web.RequestHandler):
     name = "annotator"
     kwargs = {
         "*": {
@@ -29,23 +33,24 @@ class AnnotatorHandler(RequestHandler):
         curie = args[0] if args else None
         if curie:
             try:
-                # annotated_node = annotator.annotate_curie(curie, raw=self.args.raw, fields=self.args.fields)
-                annotated_node = annotator.annotate_curie(curie)
+                annotated_node = annotator.annotate_curie(
+                    curie, raw=self.args.raw, fields=self.args.fields
+                )
             except ValueError as e:
-                raise HTTPError(400, reason=repr(e)) from e
+                raise HTTPError(400, reason=repr(e))
             self.finish(annotated_node)
         else:
-            raise HTTPError(400, reason="missing required input curie id")
+            raise HTTPError(404, reason="missing required input curie id")
 
     async def post(self, *args, **kwargs):
         annotator = Annotator()
         try:
             annotated_node_d = annotator.annotate_trapi(
-                self.args_json,
-                append=self.args.append,
-                raw=self.args.raw,
-                fields=self.args.fields,
-                limit=self.args.limit,
+                json.loads(self.request.body.decode()),
+                append=False,
+                raw=False,
+                fields=self.request.query.split("=")[1],
+                limit=None
             )
         except ValueError as e:
             raise HTTPError(400, reason=repr(e))
