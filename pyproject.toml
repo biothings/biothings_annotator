@@ -24,10 +24,11 @@ build-backend = "setuptools.build_meta"
 
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["biothings_annotator*"]
-exclude = []
-namespaces = false
+where = ["biothings_annotator"]  # list of folders that contain the packages (["."] by default)
+include = ["biothings_annotator*"]  # package names should match these glob patterns (["*"] by default)
+exclude = ["test*"]  # exclude packages matching these glob patterns (empty by default)
+namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
+
 
 [tool.black]
 line-length = 120
@@ -49,8 +50,9 @@ extend_skip = []
 
 # pytest configuration
 [tool.pytest.ini_options]
-pythonpath = ["."]
 minversion = "6.2.5"
+pythonpath = ["."]
+
 
 # Options
 addopts = [

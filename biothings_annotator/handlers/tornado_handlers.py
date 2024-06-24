@@ -1,11 +1,13 @@
 """
 Handler for the tornado specific web server
 """
+
 from biothings.web.handlers import BaseAPIHandler
 
 from tornado.web import HTTPError, RequestHandler
 
 from biothings_annotator import Annotator
+
 
 class AnnotatorHandler(RequestHandler):
     name = "annotator"

@@ -60,5 +60,3 @@ class AnnotatorView(HTTPMethodView):
     #     except ValueError as e:
     #         raise HTTPError(400, reason=repr(e))
     #     self.finish(annotated_node_d)
-
-

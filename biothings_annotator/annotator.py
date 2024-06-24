@@ -278,6 +278,8 @@ class Annotator:
                 continue
 
             # this is the list of original node ids like NCBIGene:1017, should be a unique list
+            node_list = node_list_by_type[node_type]
+
             # this is the list of query ids like 1017
             query_list = [
                 self.parse_curie(_id, return_type=False, return_id=True) for _id in node_list_by_type[node_type]
@@ -287,7 +289,6 @@ class Annotator:
             res_by_id = self.query_biothings(node_type, query_list, fields=fields)
             if not raw:
                 res_by_id = self.transform(res_by_id, node_type)
-
             for node_id in res_by_id:
                 orig_node_id = node_id_d[node_id]
                 res = res_by_id[node_id]
