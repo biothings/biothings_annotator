@@ -1,22 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "biothings_annotator"
 version = "0.0.1"
 authors = [
   { name="Chunlei Wu", email="cwu@scripps.edu" },
 ]
-description = "Package for handling biothings SDK / BTE annotation"
+description = "Translator Annotation Service"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = []
+dependencies = [
+    "biothings >= 0.12.4",
+    "biothings_client >= 0.3.1",
+    "sanic >= 23.12.1",
+]
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+[project.optional-dependencies]
+tests = [
+    "pytest >= 8.1.1"
+]
 
 
 [project.urls]
@@ -32,7 +41,7 @@ namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
 
 [tool.black]
 line-length = 120
-target-version = ['py37', 'py38', 'py39', 'py310', 'py311']
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
 extend-exclude = '''
 # A regex preceded with ^/ will apply only to files and directories
 # in the root of the project.
