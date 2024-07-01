@@ -2,11 +2,11 @@
 Main entrypoint to launching the biothings_annotator web service
 """
 
-from application import sanic
+from application import launcher
 
 
 def main():
-    sanic.launch()
+    launcher.launch()
 
 
 if __name__ == "__main__":

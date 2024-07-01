@@ -4,13 +4,6 @@
         "port": 9999 
     },
     "application": {
-        "settings": {},
-        "handlers": [
-            {
-                "path": "/annotator",
-                "handler": "AnnotatorView",
-                "package": "biothings_annotator.application.handlers.sanic.annotator"
-            }
-        ]
+        "settings": {}
     }
 }

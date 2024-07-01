@@ -1,4 +1,5 @@
 from .annotator import AnnotatorView
+from .default import DefaultView
 
 
 def build_routes() -> list[dict]:
@@ -12,6 +13,7 @@ def build_routes() -> list[dict]:
     For the moment however, we're only targetting adding the handler
     and uri argument for simplicity
     """
-    annotator_route = {"handler": AnnotatorView.as_view(), "uri": r"/annotator/([^/]+)"}
-    route_collection = [annotator_route]
+    annotator_route = {"handler": AnnotatorView.as_view(), "uri": r"/annotator/<curie:str>"}
+    default_route = {"handler": DefaultView.as_view(), "uri": "/"}
+    route_collection = [annotator_route, default_route]
     return route_collection
