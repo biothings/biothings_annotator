@@ -2,14 +2,24 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+
+[tool.setuptools.packages.find]
+where = ["."] # list of folders that the contains the packages. We need it to be at root due to flat-layout
+include = ["biothings_annotator*"]  # package names should match these glob patterns
+exclude = ["tests*"]  # exclude packages matching these glob patterns
+namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
+
+
 [project]
 name = "biothings_annotator"
 version = "0.0.1"
 authors = [
   { name="Chunlei Wu", email="cwu@scripps.edu" },
+  { name="Johnathan Schaff", email="jschaff@scripps.edu" },
 ]
 description = "Translator Annotation Service"
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -30,13 +40,6 @@ tests = [
 
 [project.urls]
 "Homepage" = "https://github.com/biothings/biothings_annotator"
-
-
-[tool.setuptools.packages.find]
-where = ["biothings_annotator"]  # list of folders that contain the packages (["."] by default)
-include = ["biothings_annotator*"]  # package names should match these glob patterns (["*"] by default)
-exclude = ["test*"]  # exclude packages matching these glob patterns (empty by default)
-namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
 
 
 [tool.black]
