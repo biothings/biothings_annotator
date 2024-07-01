@@ -12,12 +12,13 @@ Parallel implementation to our defacto implementation of tornado
 from pathlib import Path
 from typing import Union, Optional
 import functools
-import importlib
 import json
 import logging
 
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
+
+from biothings_annotator.application.views import build_routes
 
 
 logging.basicConfig()
@@ -127,15 +128,15 @@ def get_application(configuration: dict = None) -> Sanic:
     application_handlers = configuration["application"]["handlers"]
     application = Sanic(name="TEST-SANIC", **application_settings)
 
-    for handler_mapping in application_handlers:
+    application_routes = build_routes()
+
+    for route in application_routes:
         try:
-            handler_package = importlib.import_module(handler_mapping["package"])
-            handler_instance = getattr(handler_package, handler_mapping["handler"])
-            handler_path = handler_mapping["path"]
-            application.add_route(handler_instance.as_view(), handler_path)
+            application.add_route(*routes)
         except Exception as gen_exc:
             logger.exception(gen_exc)
-    return application
+            logger.error("Unable to add route %s", route)
+            raise gen_exc
 
 
 def launch():
