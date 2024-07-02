@@ -2,7 +2,7 @@
 Main entrypoint to launching the biothings_annotator web service
 """
 
-from application import launcher
+from biothings_annotator.application import launcher
 
 
 def main():

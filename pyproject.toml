@@ -41,6 +41,8 @@ tests = [
 [project.urls]
 "Homepage" = "https://github.com/biothings/biothings_annotator"
 
+[tool.setuptools.package-data]
+sanic_config = ["application/configuration/sanic.json"]
 
 [tool.black]
 line-length = 120
@@ -87,7 +89,7 @@ norecursedirs = [
     ".git",
     "_build",
     "tmp*",
-    "lib", 
+    "lib",
     "lib64",
 ]
 testpaths = ["test"]
