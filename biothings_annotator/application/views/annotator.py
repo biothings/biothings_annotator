@@ -14,7 +14,7 @@ from biothings_annotator.annotator import Annotator
 logger = logging.getLogger(__name__)
 
 
-class AnnotatorView(HTTPMethodView):
+class CurieView(HTTPMethodView):
     async def get(self, request: Request, curie: str):
         fields = request.args.get("fields", None)
         raw = request.args.get("raw", False)
@@ -26,6 +26,8 @@ class AnnotatorView(HTTPMethodView):
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
 
+
+class TrapiView(HTTPMethodView):
     async def post(self, request: Request):
         fields = request.args.get("fields", None)
         raw = request.args.get("raw", False)
