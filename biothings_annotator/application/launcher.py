@@ -12,12 +12,13 @@ Parallel implementation to our defacto implementation of tornado
 from pathlib import Path
 from typing import Union, Optional
 import functools
-import importlib
 import json
 import logging
 
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
+
+from biothings_annotator.application.views import build_routes
 
 
 logging.basicConfig()
@@ -62,14 +63,7 @@ def load_configuration(configuration_file: Optional[Union[str, Path]] = None) ->
                 "FORWARDED_SECRET": null,
                 "PROXIES_COUNT": null,
                 "REAL_IP_HEADER": null
-            },
-            "handlers": [
-                {
-                    "path": "/annotator/<query: str>",
-                    "handler": "AnnotatorView",
-                    "package": "biothings_annotator"
-                }
-            ]
+            }
         }
     }
     > network: Contains any information related to actually hosting the web
@@ -124,17 +118,16 @@ def get_application(configuration: dict = None) -> Sanic:
         )
     """
     application_settings = configuration["application"]["settings"]
-    application_handlers = configuration["application"]["handlers"]
     application = Sanic(name="TEST-SANIC", **application_settings)
+    application_routes = build_routes()
 
-    for handler_mapping in application_handlers:
+    for route in application_routes:
         try:
-            handler_package = importlib.import_module(handler_mapping["package"])
-            handler_instance = getattr(handler_package, handler_mapping["handler"])
-            handler_path = handler_mapping["path"]
-            application.add_route(handler_instance.as_view(), handler_path)
+            application.add_route(**route)
         except Exception as gen_exc:
             logger.exception(gen_exc)
+            logger.error("Unable to add route %s", route)
+            raise gen_exc
     return application
 
 
@@ -160,11 +153,9 @@ def launch():
     sanic_application = sanic_loader.load()
     logger.info("generated sanic application from loader: %s", sanic_application)
 
-    sanic_application.config.TOUCHUP = False
-    sanic_port = sanic_configuration["network"]["port"]
-
     try:
-        sanic_application.prepare(port=sanic_port, single_process=False, debug=True, auto_reload=False)
+        sanic_port = sanic_configuration["network"]["port"]
+        sanic_application.prepare(port=sanic_port, single_process=False, debug=True, auto_reload=True)
         Sanic.serve(primary=sanic_application, app_loader=sanic_loader)
     except Exception as gen_exc:
         logger.exception(gen_exc)
