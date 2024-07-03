@@ -7,11 +7,17 @@ we've broken it out into it's own service
 
 ### Installation
 
+
+##### environment setup 
 ```shell
 git clone https://github.com/biothings/biothings_annotator
 python3 -m venv biothings_annotator
 cd biothings_annotator
 pip install .
+```
+##### one-line command installation
+```shell
+pip install -e git+https://github.com/biothings/biothings_annotator#egg=biothings_annotator
 ```
 
 ### Structure
@@ -20,9 +26,9 @@ pip install .
 │   ├── annotator.py
 │   ├── application
 │   │   ├── configuration
-│   │   ├── handlers
+│   │   ├── views
 │   │   ├── __init__.py
-│   │   └── sanic.py
+│   │   └── launcher.py
 │   ├── biolink.py
 │   ├── exceptions.py
 │   ├── __init__.py
