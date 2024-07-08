@@ -131,7 +131,7 @@ def get_application(configuration: dict = None) -> Sanic:
     return application
 
 
-def launch():
+def launch(server_configuration: Union[str, Path] = None):
     """
     Interface for starting the sanic server instance leveraging the
     biothings_annotator handlers
@@ -146,7 +146,7 @@ def launch():
     and the sanic application
 
     """
-    sanic_configuration = load_configuration()
+    sanic_configuration = load_configuration(server_configuration)
     logger.info("global sanic configuration:\n %s", json.dumps(sanic_configuration, indent=4))
 
     sanic_loader = AppLoader(factory=functools.partial(get_application, sanic_configuration))
