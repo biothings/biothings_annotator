@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: {{ include "pendingapi-annotator.fullname" . }}
   labels:
-    {{- include "pendingapi.labels" . | nindent 4 }}
+    {{- include "pendingapi-annotator.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
