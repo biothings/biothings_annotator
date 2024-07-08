@@ -36,7 +36,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-    "biothings >= 0.12.4",
     "biothings_client >= 0.3.1",
     "sanic >= 23.12.1",
 ]
