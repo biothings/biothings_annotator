@@ -30,7 +30,10 @@ spec:
               name: {{ include "pendingapi-annotator.fullname" . }}
               port:
                 number: 80
-        - path: /annotator
+    - host: {{ .Values.ingress.annotatorHost | quote }}
+      http:
+        paths:
+        - path: /*
           pathType: ImplementationSpecific
           backend:
             service:
