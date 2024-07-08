@@ -1,6 +1,6 @@
 #!/bin/bash
 
-projectName="pendingapi"
+projectName="pendingapi-annotator"
 namespace="bte"
 
 #set +x

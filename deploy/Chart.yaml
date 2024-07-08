@@ -1,6 +1,6 @@
 apiVersion: v2
-name: pendingapi
-description: A Helm chart for Biothings/pending.api
+name: pendingapi-annotator
+description: A Helm chart for Biothings/pending.api-annotator
 
 # A chart can be either an 'application' or a 'library' chart.
 #
