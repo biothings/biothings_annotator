@@ -14,6 +14,7 @@ from typing import Union, Optional
 import functools
 import json
 import logging
+import argparse
 
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
@@ -160,3 +161,25 @@ def launch(server_configuration: Union[str, Path] = None):
     except Exception as gen_exc:
         logger.exception(gen_exc)
         raise gen_exc
+
+
+def parse_command_line_arguments() -> argparse.Namespace:
+    parser_obj = argparse.ArgumentParser()
+    parser_obj.add_argument(
+        "-c",
+        "--conf",
+        dest="configuration",
+        type=str,
+        required=False,
+        help="Input file path for web server configuration ",
+    )
+    args = parser_obj.parse_args()
+    return args
+
+
+def main():
+    """
+    The entry point for launching the sanic server instance from CLI
+    """
+    arguments = parse_command_line_arguments()
+    launch(arguments.configuration)
