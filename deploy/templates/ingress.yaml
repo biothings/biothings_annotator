@@ -27,7 +27,14 @@ spec:
           pathType: ImplementationSpecific
           backend:
             service:
-              name: pendingapi
+              name: {{ include "pendingapi-annotator.fullname" . }}
+              port:
+                number: 80
+        - path: /annotator
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: {{ include "pendingapi-annotator.fullname" . }}
               port:
                 number: 80
 {{- end }}
