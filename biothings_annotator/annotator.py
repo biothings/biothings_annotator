@@ -6,11 +6,11 @@ import inspect
 import logging
 
 import biothings_client
-from biothings.utils.common import get_dotfield_value
 
 from biothings_annotator.biolink import BIOLINK_PREFIX_to_BioThings
 from biothings_annotator.exceptions import TRAPIInputError, InvalidCurieError
 from biothings_annotator.transformer import ResponseTransformer
+from biothings_annotator.utility import get_dotfield_value
 
 logger = logging.getLogger(__name__)
 

@@ -14,6 +14,7 @@ from typing import Union, Optional
 import functools
 import json
 import logging
+import argparse
 
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
@@ -131,7 +132,7 @@ def get_application(configuration: dict = None) -> Sanic:
     return application
 
 
-def launch():
+def launch(server_configuration: Union[str, Path] = None):
     """
     Interface for starting the sanic server instance leveraging the
     biothings_annotator handlers
@@ -146,7 +147,7 @@ def launch():
     and the sanic application
 
     """
-    sanic_configuration = load_configuration()
+    sanic_configuration = load_configuration(server_configuration)
     logger.info("global sanic configuration:\n %s", json.dumps(sanic_configuration, indent=4))
 
     sanic_loader = AppLoader(factory=functools.partial(get_application, sanic_configuration))
@@ -160,3 +161,25 @@ def launch():
     except Exception as gen_exc:
         logger.exception(gen_exc)
         raise gen_exc
+
+
+def parse_command_line_arguments() -> argparse.Namespace:
+    parser_obj = argparse.ArgumentParser()
+    parser_obj.add_argument(
+        "-c",
+        "--conf",
+        dest="configuration",
+        type=str,
+        required=False,
+        help="Input file path for web server configuration ",
+    )
+    args = parser_obj.parse_args()
+    return args
+
+
+def main():
+    """
+    The entry point for launching the sanic server instance from CLI
+    """
+    arguments = parse_command_line_arguments()
+    launch(arguments.configuration)

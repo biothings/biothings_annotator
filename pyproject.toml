@@ -9,6 +9,9 @@ include = ["biothings_annotator*"]  # package names should match these glob patt
 exclude = ["tests*"]  # exclude packages matching these glob patterns
 namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
 
+[tool.setuptools.package-data]
+sanic_config = ["application/configuration/sanic.json"]
+
 
 [project]
 name = "biothings_annotator"
@@ -36,7 +39,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-    "biothings >= 0.12.4",
     "biothings_client >= 0.3.1",
     "sanic >= 23.12.1",
 ]
@@ -50,8 +52,6 @@ tests = [
 [project.urls]
 "Homepage" = "https://github.com/biothings/biothings_annotator"
 
-[tool.setuptools.package-data]
-sanic_config = ["application/configuration/sanic.json"]
 
 [tool.black]
 line-length = 120
