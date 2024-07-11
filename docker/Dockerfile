@@ -21,4 +21,4 @@ RUN /home/annotator/venv/bin/pip install /home/annotator/wheels/*.whl && rm -rf 
 STOPSIGNAL SIGINT
 EXPOSE 9999
 
-ENTRYPOINT ["/home/annotator/venv/bin/python", "-m", "biothings_annotator"]
+ENTRYPOINT ["/home/annotator/venv/bin/python", "-m", "biothings_annotator", "--conf=/build/annotator/application/configuration/sanic.json"]

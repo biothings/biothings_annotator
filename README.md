@@ -65,11 +65,12 @@ and installs the wheels generated from the previous builder stage
 The entrypoint is set as:
 
 ```docker
-ENTRYPOINT ["/home/annotator/venv/bin/python", "-m", "biothings_annotator"]
+ENTRYPOINT ["/home/annotator/venv/bin/python", "-m", "biothings_annotator", "--conf=/build/annotator/application/configuration/sanic.json"]
 ```
 
 Which will call the `__main__.py` entrypoint of the package itself. This should start the sanic web
-service for hosting the annotation service
+service for hosting the annotation service. For configuration of the service itself, modify the
+configuration found under `biothings_annotator/application/configuration/sanic.json`
 
 
 ###### Commands
