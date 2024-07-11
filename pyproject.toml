@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = [
+    "setuptools>=61.0",
+    "setuptools-scm>=8.0"
+]
 build-backend = "setuptools.build_meta"
 
 
@@ -8,9 +11,6 @@ where = ["."] # list of folders that the contains the packages. We need it to be
 include = ["biothings_annotator*"]  # package names should match these glob patterns
 exclude = ["tests*"]  # exclude packages matching these glob patterns
 namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
-
-[tool.setuptools.package-data]
-sanic_config = ["application/configuration/sanic.json"]
 
 
 [project]
