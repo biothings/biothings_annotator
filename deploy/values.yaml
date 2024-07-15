@@ -79,10 +79,3 @@ affinity:
           values:
           - bte
       topologyKey: "kubernetes.io/hostname"
-resources:
-  requests:
-    memory: 42Gi
-    cpu: 8000m
-  limits:
-    memory: 58Gi
-    cpu: 14000m 
