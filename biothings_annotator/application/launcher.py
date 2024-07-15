@@ -155,8 +155,9 @@ def launch(server_configuration: Union[str, Path] = None):
     logger.info("generated sanic application from loader: %s", sanic_application)
 
     try:
+        sanic_host = sanic_configuration["network"]["host"]
         sanic_port = sanic_configuration["network"]["port"]
-        sanic_application.prepare(port=sanic_port, single_process=False, debug=True, auto_reload=True)
+        sanic_application.prepare(host=sanic_host, port=sanic_port, single_process=False, debug=True, auto_reload=True)
         Sanic.serve(primary=sanic_application, app_loader=sanic_loader)
     except Exception as gen_exc:
         logger.exception(gen_exc)
