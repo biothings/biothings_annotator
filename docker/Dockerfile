@@ -18,10 +18,10 @@ COPY --from=builder --chown=annotator:annotator /build/wheels /home/annotator/wh
 RUN /home/annotator/venv/bin/pip install /home/annotator/wheels/*.whl && rm -rf /home/annotator/wheels
 
 WORKDIR /home/annotator/configuration
-COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/application/configuration/ci.json /home/annotator/configuration
+COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/application/configuration/sanic.json /home/annotator/configuration
 
 
 STOPSIGNAL SIGINT
 EXPOSE 9999
 
-ENTRYPOINT ["/home/annotator/venv/bin/python", "-m", "biothings_annotator", "--conf=/home/annotator/configuration/ci.json"]
+ENTRYPOINT ["/home/annotator/venv/bin/python", "-m", "biothings_annotator", "--conf=/home/annotator/configuration/sanic.json"]
