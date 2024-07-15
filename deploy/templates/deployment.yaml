@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pendingapi-annotator.fullname" . }}
+  labels:
+    {{- include "pendingapi-annotator.labels" . | nindent 4 }}
+spec:
+  strategy:
+        type: {{ .Values.deployment.strategyType }}
+  replicas: {{ .Values.deployment.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "pendingapi-annotator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pendingapi-annotator.selectorLabels" . | nindent 8 }}
+        {{- toYaml .Values.ncats.labels | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ .Values.containers.name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ES_HOST
+              value: {{ .Values.containers.es_host }}
+            - name: OPENTELEMETRY_ENABLED
+              value: "{{ .Values.containers.OPENTELEMETRY_ENABLED_VALUE }}"  
+            - name: OPENTELEMETRY_JAEGER_HOST
+              value: "{{ .Values.containers.OPENTELEMETRY_JAEGER_HOST_VALUE }}"
+            - name: OPENTELEMETRY_JAEGER_PORT
+              value: "{{ .Values.containers.OPENTELEMETRY_JAEGER_PORT_VALUE }}"      
+          ports:
+            - name: http
+              containerPort: {{ .Values.containers.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
