@@ -132,7 +132,7 @@ def get_application(configuration: dict = None) -> Sanic:
     return application
 
 
-def launch(server_configuration: Union[str, Path] = None):
+def launch(configuration_arguments: dict):
     """
     Interface for starting the sanic server instance leveraging the
     biothings_annotator handlers
@@ -147,12 +147,21 @@ def launch(server_configuration: Union[str, Path] = None):
     and the sanic application
 
     """
+
+    server_configuration = configuration_arguments.get("configuration", None)
     sanic_configuration = load_configuration(server_configuration)
     logger.info("global sanic configuration:\n %s", json.dumps(sanic_configuration, indent=4))
 
     sanic_loader = AppLoader(factory=functools.partial(get_application, sanic_configuration))
     sanic_application = sanic_loader.load()
     logger.info("generated sanic application from loader: %s", sanic_application)
+
+    override_ipv4_address = configuration_arguments.get("address", None)
+    override_ipv4_port = configuration_arguments.get("port", None)
+
+    if override_ipv4_address is not None and override_ipv4_port is not None:
+        sanic_configuration["network"]["host"] = override_ipv4_address
+        sanic_configuration["network"]["port"] = override_ipv4_port
 
     try:
         sanic_host = sanic_configuration["network"]["host"]
@@ -164,18 +173,32 @@ def launch(server_configuration: Union[str, Path] = None):
         raise gen_exc
 
 
-def parse_command_line_arguments() -> argparse.Namespace:
+def parse_command_line_arguments() -> dict:
     parser_obj = argparse.ArgumentParser()
-    parser_obj.add_argument(
+
+    root_group = parser_obj.add_mutually_exclusive_group(required=False)
+    root_group.add_argument(
         "-c",
         "--conf",
         dest="configuration",
         type=str,
-        required=False,
         help="Input file path for web server configuration ",
     )
-    args = parser_obj.parse_args()
-    return args
+    root_group.add_argument(
+        "-a", "--address", dest="address", type=str, help="ipv4 host address with port. Format <address>:<port"
+    )
+
+    args = root_group.parse_args()
+
+    address_argument = args.get("address", None)
+    if address_argument is not None:
+        address, delimiter, port = address_argument.partition(":")
+    else:
+        address = None
+        port = None
+
+    argument_mapping = {"configuration": args.get("configuration", None), "address": address, "port": port}
+    return argument_mapping
 
 
 def main():
@@ -183,4 +206,4 @@ def main():
     The entry point for launching the sanic server instance from CLI
     """
     arguments = parse_command_line_arguments()
-    launch(arguments.configuration)
+    launch(arguments)
