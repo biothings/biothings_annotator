@@ -13,6 +13,8 @@ def build_routes() -> list[dict]:
     and uri argument for simplicity
     """
     curie_route = {"handler": CurieView.as_view(), "uri": r"/<curie:str>"}
+    curie_route_mirror = {"handler": CurieView.as_view(), "uri": r"/annotator/<curie:str>"}
     trapi_route = {"handler": TrapiView.as_view(), "uri": "/"}
-    route_collection = [curie_route, trapi_route]
+    trapi_route_mirror = {"handler": TrapiView.as_view(), "uri": "/annotator/"}
+    route_collection = [curie_route, curie_route_mirror, trapi_route, trapi_route_mirror]
     return route_collection
