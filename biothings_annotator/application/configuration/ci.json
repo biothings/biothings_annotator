@@ -1,9 +1,0 @@
-{
-    "network": {
-        "host": "10.11.110.193",
-        "port": 9000 
-    },
-    "application": {
-        "settings": {}
-    }
-}
