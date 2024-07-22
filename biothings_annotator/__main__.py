@@ -28,5 +28,3 @@ if __name__ == "__main__":
     from biothings_annotator.application.launcher import main
 
     sys.exit(main())
-
-

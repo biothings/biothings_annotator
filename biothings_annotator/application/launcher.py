@@ -47,23 +47,6 @@ def load_configuration(configuration_file: Optional[Union[str, Path]] = None) ->
         },
         "application": {
             "settings": {
-                "REQUEST_MAX_SIZE": 100000000,
-                "REQUEST_BUFFER_QUEUE_SIZE": 100,
-                "REQUEST_TIMEOUT": 60,
-                "RESPONSE_TIMEOUT": 60,
-                "KEEP_ALIVE": true,
-                "KEEP_ALIVE_TIMEOUT": 5,
-                "WEBSOCKET_MAX_SIZE": 1048576,
-                "WEBSOCKET_MAX_QUEUE": 32,
-                "WEBSOCKET_READ_LIMIT":	65536,
-                "WEBSOCKET_WRITE_LIMIT": 65536,
-                "WEBSOCKET_PING_INTERVAL": 20,
-                "WEBSOCKET_PING_TIMEOUT": 20,
-                "GRACEFUL_SHUTDOWN_TIMEOUT": 15.0,
-                "ACCESS_LOG": true,
-                "FORWARDED_SECRET": null,
-                "PROXIES_COUNT": null,
-                "REAL_IP_HEADER": null
             }
         }
     }
@@ -79,7 +62,7 @@ def load_configuration(configuration_file: Optional[Union[str, Path]] = None) ->
         application_directory = Path(application_file).parent
         configuration_directory = Path(application_directory).joinpath("configuration")
 
-        configuration_filename = "sanic.json"
+        configuration_filename = "default.json"
         configuration_file = configuration_directory.joinpath(configuration_filename)
 
     try:
@@ -118,8 +101,12 @@ def get_application(configuration: dict = None) -> Sanic:
             certloader_class: Optional[Type[CertLoader]] = None
         )
     """
-    application_settings = configuration["application"]["settings"]
-    application = Sanic(name="TEST-SANIC", **application_settings)
+    application_configuration = configuration["application"]["configuration"]
+    extension_configuration = configuration["application"]["extension"]
+    configuration_settings = {**application_configuration, **extension_configuration}
+
+    application = Sanic(name="biothings-annotator")
+    application.update_config(configuration_settings)
     application_routes = build_routes()
 
     for route in application_routes:
@@ -155,9 +142,8 @@ def launch(server_configuration: Union[str, Path] = None):
     logger.info("generated sanic application from loader: %s", sanic_application)
 
     try:
-        sanic_host = sanic_configuration["network"]["host"]
-        sanic_port = sanic_configuration["network"]["port"]
-        sanic_application.prepare(host=sanic_host, port=sanic_port, single_process=False, debug=True, auto_reload=True)
+        runtime_parameters = sanic_configuration["application"]["runtime"]
+        sanic_application.prepare(**runtime_parameters)
         Sanic.serve(primary=sanic_application, app_loader=sanic_loader)
     except Exception as gen_exc:
         logger.exception(gen_exc)

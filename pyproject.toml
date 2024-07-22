@@ -40,7 +40,7 @@ classifiers = [
 ]
 dependencies = [
     "biothings_client >= 0.3.1",
-    "sanic >= 23.12.1",
+    "sanic[ext] >= 23.12.1",
 ]
 
 [project.optional-dependencies]
