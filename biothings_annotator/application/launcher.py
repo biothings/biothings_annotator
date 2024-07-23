@@ -103,7 +103,10 @@ def get_application(configuration: dict = None) -> Sanic:
     """
     application_configuration = configuration["application"]["configuration"]
     extension_configuration = configuration["application"]["extension"]
-    configuration_settings = {**application_configuration, **extension_configuration}
+    configuration_settings = {}
+    configuration_settings.update(application_configuration)
+    configuration_settings.update(extension_configuration["openapi"])
+    configuration_settings.update(extension_configuration["cors"])
 
     application = Sanic(name="biothings-annotator")
     application.update_config(configuration_settings)

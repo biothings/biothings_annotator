@@ -6,12 +6,21 @@
             "REQUEST_MAX_SIZE": 100000000
         },
         "extension": {
-            "OAS": true,
-            "OAS_AUTODOC": true,
-            "OAS_UI_DEFAULT": "swagger",
-            "OAS_UI_REDOC": false,
-            "OAS_UI_SWAGGER": true,
-            "OAS_URL_PREFIX": "/"
+            "openapi": {
+                "OAS": true,
+                "OAS_AUTODOC": true,
+                "OAS_UI_DEFAULT": "swagger",
+                "OAS_UI_REDOC": false,
+                "OAS_UI_SWAGGER": true,
+                "OAS_URL_PREFIX": "/"
+            },
+            "cors": {
+                "CORS_ALLOW_HEADERS": "*",
+                "CORS_METHODS": "*",
+                "CORS_ORIGINS": "*",
+                "CORS_SUPPORS_CREDENTIALS": false,
+                "CORS_MAX_AGE": 60
+            }
         },
         "runtime": {
             "host": "0.0.0.0",
