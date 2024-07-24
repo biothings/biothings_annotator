@@ -59,13 +59,6 @@ class TestTrapiAnnotation:
 
     annotation_instance = Annotator()
 
-    @pytest.fixture(scope="session")
-    def trapi_request(self, temporary_data_storage) -> dict:
-        test_trapi_request_file = temporary_data_storage.joinpath("trapi_request.json")
-        with open(str(test_trapi_request_file), "r", encoding="utf-8") as file_handle:
-            trapi_request = json.load(file_handle)
-            return trapi_request
-
     def test_default(self, trapi_request: dict):
         """
         Tests the TRAPI annotation method with default arguments
