@@ -2,6 +2,7 @@
 Fixtures for testing the biothings_annotator package
 """
 
+import json
 from pathlib import Path
 import logging
 import shutil
@@ -10,6 +11,11 @@ import pytest
 
 
 logger = logging.getLogger(__name__)
+
+
+pytest_plugins = [
+    "fixtures.application",
+]
 
 
 @pytest.fixture(scope="session")
@@ -54,3 +60,11 @@ def temporary_data_storage(tmp_path_factory, request) -> Path:
 
     yield temp_directory
     shutil.rmtree(str(temp_directory))
+
+
+@pytest.fixture(scope="session")
+def trapi_request(temporary_data_storage) -> dict:
+    test_trapi_request_file = temporary_data_storage.joinpath("trapi_request.json")
+    with open(str(test_trapi_request_file), "r", encoding="utf-8") as file_handle:
+        trapi_request = json.load(file_handle)
+        return trapi_request

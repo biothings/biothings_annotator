@@ -35,25 +35,22 @@ def load_configuration(configuration_file: Optional[Union[str, Path]] = None) ->
 
     Expected File Structure:
     ├── configuration
-    │   └── sanic.json
-    └── sanic_application.py
+    │   └── default.json
+    └── launcher.py
 
 
     Example Configuration Structure:
-    {
-        "network": {
-            "host": "0.0.0.0",
-            "port": 7382
+    "application": {
+        "configuration": {
+            ...
         },
-        "application": {
-            "settings": {
-            }
+        "extension": {
+            ...
+        },
+        "runtime": {
+            ...
         }
     }
-    > network: Contains any information related to actually hosting the web
-    server on the specified network
-    > application: the "settings" dictionary mapping passed to the
-    sanic.app.Sanic instance for configuration at runtime
     """
     if configuration_file:
         configuration_file = Path(configuration_file).resolve().absolute()
@@ -77,29 +74,29 @@ def load_configuration(configuration_file: Optional[Union[str, Path]] = None) ->
 
 def get_application(configuration: dict = None) -> Sanic:
     """
-        Generates and returns an instance of the sanic.app.Sanic application
-        for the web server
+    Generates and returns an instance of the sanic.app.Sanic application
+    for the web server
 
-        The sanic.web.Sanic application has the following constructor:
-        https://sanic.dev/api/sanic.app.html#getting-started
-        class Sanic(
-            name: str,
-            config: Optional[config_type] = None,
-            ctx: Optional[ctx_type] = None,
-            router: Optional[Router] = None,
-            signal_router: Optional[SignalRouter] = None,
-    delta        error_handler: Optional[ErrorHandler] = None,
-            env_prefix: Optional[str] = SANIC_,
-            request_class: Optional[Type[Request]] = None,
-            strict_slashes: bool = False,
-            log_config: Optional[Dict[str, Any]] = None,
-            configure_logging: bool = True,
-            dumps: Optional[Callable[..., AnyStr]] = None,
-            loads: Optional[Callable[..., Any]] = None,
-            inspector: bool = False,
-            inspector_class: Optional[Type[Inspector]] = None,
-            certloader_class: Optional[Type[CertLoader]] = None
-        )
+    The sanic.web.Sanic application has the following constructor:
+    https://sanic.dev/api/sanic.app.html#getting-started
+    class Sanic(
+        name: str,
+        config: Optional[config_type] = None,
+        ctx: Optional[ctx_type] = None,
+        router: Optional[Router] = None,
+        signal_router: Optional[SignalRouter] = None,
+        error_handler: Optional[ErrorHandler] = None,
+        env_prefix: Optional[str] = SANIC_,
+        request_class: Optional[Type[Request]] = None,
+        strict_slashes: bool = False,
+        log_config: Optional[Dict[str, Any]] = None,
+        configure_logging: bool = True,
+        dumps: Optional[Callable[..., AnyStr]] = None,
+        loads: Optional[Callable[..., Any]] = None,
+        inspector: bool = False,
+        inspector_class: Optional[Type[Inspector]] = None,
+        certloader_class: Optional[Type[CertLoader]] = None
+    )
     """
     application_configuration = configuration["application"]["configuration"]
     extension_configuration = configuration["application"]["extension"]
@@ -137,7 +134,6 @@ def launch(configuration_arguments: dict):
     and the sanic application
 
     """
-
     server_configuration = configuration_arguments.get("configuration", None)
     sanic_configuration = load_configuration(server_configuration)
     logger.info("global sanic configuration:\n %s", json.dumps(sanic_configuration, indent=4))
@@ -150,8 +146,8 @@ def launch(configuration_arguments: dict):
     override_ipv4_port = configuration_arguments.get("port", None)
 
     if override_ipv4_address is not None and override_ipv4_port is not None:
-        sanic_configuration["network"]["host"] = override_ipv4_address
-        sanic_configuration["network"]["port"] = override_ipv4_port
+        sanic_configuration["application"]["runtime"]["host"] = override_ipv4_address
+        sanic_configuration["application"]["runtime"]["port"] = int(override_ipv4_port)
 
     try:
         runtime_parameters = sanic_configuration["application"]["runtime"]
@@ -177,16 +173,17 @@ def parse_command_line_arguments() -> dict:
         "-a", "--address", dest="address", type=str, help="ipv4 host address with port. Format <address>:<port"
     )
 
-    args = root_group.parse_args()
+    args = parser_obj.parse_args()
 
-    address_argument = args.get("address", None)
+    address_argument = getattr(args, "address", None)
+    configuration_argument = getattr(args, "configuration", None)
     if address_argument is not None:
         address, delimiter, port = address_argument.partition(":")
     else:
         address = None
         port = None
 
-    argument_mapping = {"configuration": args.get("configuration", None), "address": address, "port": port}
+    argument_mapping = {"configuration": configuration_argument, "address": address, "port": port}
     return argument_mapping
 
 
