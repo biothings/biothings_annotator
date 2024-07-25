@@ -10,8 +10,7 @@ from biothings_annotator import Annotator
 @pytest.mark.parametrize("endpoint", ["/", "/annotator/"])
 def test_get_endpoints(test_annotator: sanic.Sanic, endpoint: str):
     """
-    Tests the brotli compression when hitting our GET endpoint
-    annotating a CURIE ID request
+    Tests the GET endpoints for annotation service
     """
     curie_id = "NCBIGene:1017"
     url = f"{endpoint}{curie_id}"
@@ -75,8 +74,7 @@ def test_get_endpoints(test_annotator: sanic.Sanic, endpoint: str):
 @pytest.mark.parametrize("endpoint", ["/", "/annotator/"])
 def test_post_endpoints(test_annotator: sanic.Sanic, trapi_request: dict, endpoint: str):
     """
-    Tests the brotli compression when hitting our POST endpoint
-    annotating a TRAPI request
+    Tests the POST endpoints for our annotation service
     """
     annotator_instance = Annotator()
     url = f"{endpoint}"
