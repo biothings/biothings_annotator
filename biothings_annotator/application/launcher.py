@@ -20,6 +20,7 @@ from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
 from biothings_annotator.application.views import build_routes
+from biothings_annotator.application.middleware import build_middleware
 
 
 logging.basicConfig()
@@ -107,8 +108,8 @@ def get_application(configuration: dict = None) -> Sanic:
 
     application = Sanic(name="biothings-annotator")
     application.update_config(configuration_settings)
-    application_routes = build_routes()
 
+    application_routes = build_routes()
     for route in application_routes:
         try:
             application.add_route(**route)
@@ -116,6 +117,16 @@ def get_application(configuration: dict = None) -> Sanic:
             logger.exception(gen_exc)
             logger.error("Unable to add route %s", route)
             raise gen_exc
+
+    application_middleware = build_middleware()
+    for middleware in application_middleware:
+        try:
+            application.register_middleware(**middleware)
+        except Exception as gen_exc:
+            logger.exception(gen_exc)
+            logger.error("Unable to add middleware %s", middleware)
+            raise gen_exc
+
     return application
 
 
