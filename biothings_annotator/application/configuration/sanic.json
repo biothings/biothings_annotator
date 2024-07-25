@@ -1,9 +1,0 @@
-{
-    "network": {
-        "host": "localhost",
-        "port": 9999 
-    },
-    "application": {
-        "settings": {}
-    }
-}

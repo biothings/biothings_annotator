@@ -1,0 +1,33 @@
+{
+    "application": {
+        "configuration": {
+            "REQUEST_TIMEOUT": 300,
+            "RESPONSE_TIMEOUT":	300,
+            "REQUEST_MAX_SIZE": 100000000
+        },
+        "extension": {
+            "openapi": {
+                "OAS": true,
+                "OAS_AUTODOC": true,
+                "OAS_UI_DEFAULT": "swagger",
+                "OAS_UI_REDOC": false,
+                "OAS_UI_SWAGGER": true,
+                "OAS_URL_PREFIX": "/"
+            },
+            "cors": {
+                "CORS_ALLOW_HEADERS": "*",
+                "CORS_METHODS": "*",
+                "CORS_ORIGINS": "*",
+                "CORS_SUPPORS_CREDENTIALS": false,
+                "CORS_MAX_AGE": 60
+            }
+        },
+        "runtime": {
+            "host": "0.0.0.0",
+            "port": 9000,
+            "debug": false,
+            "single_process": false,
+            "auto_reload": true
+        }
+    }
+}

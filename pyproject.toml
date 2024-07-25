@@ -40,12 +40,13 @@ classifiers = [
 ]
 dependencies = [
     "biothings_client >= 0.3.1",
-    "sanic >= 23.12.1",
+    "sanic[ext] >= 23.12.1",
 ]
 
 [project.optional-dependencies]
 tests = [
-    "pytest >= 8.1.1"
+    "pytest >= 8.1.1",
+    "sanic-testing >= 24.6.0"
 ]
 
 
