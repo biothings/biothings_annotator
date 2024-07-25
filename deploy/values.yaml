@@ -1,4 +1,4 @@
-# Default values for pendingapi.
+# Default values for biothings-annotator.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
@@ -13,7 +13,7 @@ image:
   tag: DOCKER_VERSION_VALUE
 
 containers:
-  name: pendingapiannotator
+  name: biothingsannotator
   es_host: ES_HOST_VALUE
   port: 9000
 
@@ -42,7 +42,7 @@ ingress:
 ncats:
   labels:
     gov.nih.ncats.appenv: appenv
-    gov.nih.ncats.appname: bte-pendingapi-annotator
+    gov.nih.ncats.appname: bte-biothings-annotator
     gov.nih.ncats.appentry: BTEPA_HOSTNAME_VALUE
     gov.nih.ncats.appentrytype: https
     gov.nih.ncats.appentryport: tcp

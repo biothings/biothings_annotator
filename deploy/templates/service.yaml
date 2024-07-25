@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "pendingapi-annotator.fullname" . }}
+  name: {{ include "biothings-annotator.fullname" . }}
   labels:
-    {{- include "pendingapi-annotator.labels" . | nindent 4 }}
+    {{- include "biothings-annotator.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -12,4 +12,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "pendingapi-annotator.selectorLabels" . | nindent 4 }}
+    {{- include "biothings-annotator.selectorLabels" . | nindent 4 }}

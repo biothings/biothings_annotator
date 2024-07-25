@@ -1,6 +1,6 @@
 #!/bin/bash
 
-projectName="pendingapi-annotator"
+projectName="biothings-annotator"
 namespace="bte"
 
 #set +x

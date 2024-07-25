@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "pendingapi-annotator.fullname" . }}
+  name: {{ include "biothings-annotator.fullname" . }}
   labels:
-    {{- include "pendingapi-annotator.labels" . | nindent 4 }}
+    {{- include "biothings-annotator.labels" . | nindent 4 }}
 spec:
   strategy:
         type: {{ .Values.deployment.strategyType }}
   replicas: {{ .Values.deployment.replicaCount }}
   selector:
     matchLabels:
-      {{- include "pendingapi-annotator.selectorLabels" . | nindent 6 }}
+      {{- include "biothings-annotator.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "pendingapi-annotator.selectorLabels" . | nindent 8 }}
+        {{- include "biothings-annotator.selectorLabels" . | nindent 8 }}
         {{- toYaml .Values.ncats.labels | nindent 8 }}
     spec:
       containers:
