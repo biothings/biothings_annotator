@@ -4,14 +4,34 @@ recieve within the biothings annotator
 """
 
 import inspect
+import logging
 
 import biothings_client
+
+logger = logging.getLogger(__name__)
 
 
 def append_prefix(id, prefix):
     """append prefix to id if not already present to make it a valid Curie ID
     Note that prefix parameter should not include the trailing colon"""
     return f"{prefix}:{id}" if not id.startswith(prefix) else id
+
+
+atc_cache = {}    # The global atc_cache will be load once when Transformer is initialized for the first time
+
+
+def load_atc_cache():
+    """Load WHO atc code-to-name mapping in a dictionary, which will be used in ResponseTransformer._transform_atc_classifications method"""
+    global atc_cache
+    if not atc_cache:
+        logger.info("Loading WHO ATC code-to-name mapping...")
+        atc_client = biothings_client.get_client(url="https://biothings.ci.transltr.io/annotator_extra")
+        atc_li = atc_client.query("_exists_:code", fields="code,name", fetch_all=True)
+        atc_cache = {}
+        for atc in atc_li:
+            atc_cache[atc["code"]] = atc["name"]
+        logger.info(f"Loaded {len(atc_cache)} WHO ATC code-to-name mappings.")
+    return atc_cache
 
 
 class ResponseTransformer:
@@ -23,6 +43,7 @@ class ResponseTransformer:
         # typically those data coming from other biothings APIs, we will do a batch
         # query to get them all, and cache them here for later use, to avoid slow
         # one by one queries.
+        self.atc_cache = load_atc_cache()
 
     def _transform_chembl_drug_indications(self, doc):
         if self.node_type != "chem":
@@ -43,6 +64,62 @@ class ResponseTransformer:
                     _append_mesh_prefix(c)
             else:
                 _append_mesh_prefix(chembl)
+
+        return doc
+
+    def _transform_atc_classifications(self, doc):
+        """add atc_classifications field to chem object based on chembl.atc_classifications and pharmgkb.xrefs.atc fields"""
+        if not self.atc_cache:
+            return doc
+
+        if self.node_type != "chem":
+            return doc
+
+        def _get_atc_from_chembl(chembl):
+            atc_from_chembl = chembl.get("atc_classifications", [])
+            if isinstance(atc_from_chembl, str):
+                atc_from_chembl = [atc_from_chembl]
+            return atc_from_chembl
+
+        chembl = doc.get("chembl", {})
+        atc_from_chembl = []
+        if chembl:
+            if isinstance(chembl, list):
+                # in case returned chembl is a list, rare but still possible
+                for c in chembl:
+                    atc_from_chembl.extend(_get_atc_from_chembl(c))
+            else:
+                atc_from_chembl.extend(_get_atc_from_chembl(chembl))
+
+        def _get_atc_from_pharmgkb(pharmgkb):
+            atc_from_pharmgkb = pharmgkb.get("xrefs", {}).get("atc", [])
+            if isinstance(atc_from_pharmgkb, str):
+                atc_from_pharmgkb = [atc_from_pharmgkb]
+            return atc_from_pharmgkb
+
+        pharmgkb = doc.get("pharmgkb", {})
+        atc_from_pharmgkb = []
+        if pharmgkb:
+            if isinstance(pharmgkb, list):
+                # in case returned pharmgkb is a list, rare but still possible
+                for p in pharmgkb:
+                    atc_from_pharmgkb.extend(_get_atc_from_pharmgkb(p))
+            else:
+                atc_from_pharmgkb.extend(_get_atc_from_pharmgkb(pharmgkb))
+
+        atc = []
+        for atc_code in set(atc_from_chembl + atc_from_pharmgkb):
+            if len(atc_code) == 7:
+                # example: L04AB02
+                level_d = {}
+                for i, code in enumerate([atc_code[0], atc_code[:3], atc_code[:4], atc_code[:5], atc_code]):
+                    level_d[f"level{i+1}"] = {
+                        "code": code,
+                        "name": self.atc_cache.get(code, ""),
+                    }
+                atc.append(level_d)
+        if atc:
+            doc["atc_classifications"] = atc
 
         return doc
 
