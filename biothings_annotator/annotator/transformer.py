@@ -6,7 +6,7 @@ recieve within the biothings annotator
 import inspect
 import logging
 
-import biothings_client
+from .utils import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def load_atc_cache():
     global atc_cache
     if not atc_cache:
         logger.info("Loading WHO ATC code-to-name mapping...")
-        atc_client = biothings_client.get_client(url="https://biothings.ci.transltr.io/annotator_extra")
+        atc_client = get_client("extra")
         atc_li = atc_client.query("_exists_:code", fields="code,name", fetch_all=True)
         atc_cache = {}
         for atc in atc_li:
@@ -147,7 +147,7 @@ class ResponseTransformer:
                 if ncit:
                     ncit_id_list.append(ncit)
         if ncit_id_list:
-            ncit_api = biothings_client.get_client(url="https://biothings.ncats.io/ncit")
+            ncit_api = get_client("ncit")
             ncit_id_list = [f"NCIT:{ncit}" for ncit in ncit_id_list]
             ncit_res = ncit_api.getnodes(ncit_id_list, fields="def")
             ncit_def_d = {}

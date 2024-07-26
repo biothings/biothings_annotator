@@ -2,159 +2,28 @@
 Translator Node Annotator Service Handler
 """
 
-import inspect
 import logging
 
-import biothings_client
-
-from biothings_annotator.biolink import BIOLINK_PREFIX_to_BioThings
-from biothings_annotator.exceptions import TRAPIInputError, InvalidCurieError
-from biothings_annotator.transformer import ResponseTransformer
-from biothings_annotator.utility import get_dotfield_value
+from .exceptions import InvalidCurieError, TRAPIInputError
+from .settings import ANNOTATOR_CLIENTS
+from .transformer import ResponseTransformer
+from .utils import get_client, get_dotfield_value, parse_curie
 
 logger = logging.getLogger(__name__)
 
 
 class Annotator:
-    annotator_clients = {
-        "gene": {
-            "client": {"biothing_type": "gene"},  # the kwargs passed to biothings_client.get_client
-            "fields": ["name", "symbol", "summary", "type_of_gene", "MIM", "HGNC", "MGI", "RGD", "alias", "interpro"],
-            "scopes": ["entrezgene", "ensemblgene", "uniprot", "accession", "retired"],
-        },
-        "chem": {
-            "client": {"biothing_type": "chem"},
-            "fields": [
-                # IDs
-                "pubchem.cid",
-                "pubchem.inchikey",
-                "chembl.molecule_chembl_id",
-                "drugbank.id",
-                "chebi.id",
-                "unii.unii",
-                # "chembl.unii",
-                # Names
-                "chebi.name",
-                "chembl.pref_name",
-                # Descriptions
-                "chebi.definition",
-                "unii.ncit",
-                "unii.ncit_description",
-                # Structure
-                "chebi.iupac",
-                "chembl.smiles",
-                "pubchem.inchi",
-                "pubchem.molecular_formula",
-                "pubchem.molecular_weight",
-                # chemical types
-                "chembl.molecule_type",
-                "chembl.structure_type",
-                # chebi roles etc
-                "chebi.relationship",
-                # drug info
-                "unichem.rxnorm",  # drug name
-                "pharmgkb.trade_names",  # drug name
-                "chembl.drug_indications",
-                "aeolus.indications",
-                "chembl.drug_mechanisms",
-                "chembl.atc_classifications",
-                "chembl.max_phase",
-                "chembl.first_approval",
-                "drugcentral.approval",
-                "chembl.first_in_class",
-                "chembl.inorganic_flag",
-                "chembl.prodrug",
-                "chembl.therapeutic_flag",
-                "cheml.withdrawn_flag",
-                "drugcentral.drug_dosage",
-                "ndc.routename",
-                "ndc.producttypename",
-                "ndc.pharm_classes",
-                "ndc.proprietaryname",
-                "ndc.nonproprietaryname",
-            ],
-            "scopes": ["_id", "chebi.id", "chembl.molecule_chembl_id", "pubchem.cid", "drugbank.id", "unii.unii"],
-        },
-        "disease": {
-            "client": {"biothing_type": "disease"},
-            "fields": [
-                # IDs
-                "disease_ontology.doid",
-                "mondo.mondo",
-                "umls.umls",
-                # Names
-                "disease_ontology.name",
-                "mondo.label"
-                # Description
-                "mondo.definition",
-                "disease_ontology.def",
-                # Xrefs
-                "mondo.xrefs",
-                "disease_ontology.xrefs",
-                # Synonyms
-                "mondo.synonym",
-                "disease_ontology.synonyms",
-            ],
-            "scopes": ["mondo.mondo", "disease_ontology.doid", "umls.umls"],
-        },
-        "phenotype": {
-            "client": {"url": "https://biothings.ncats.io/hpo"},
-            "fields": ["hp", "name", "annotations", "comment", "def", "subset", "synonym", "xrefs"],
-            "scopes": ["hp"],
-        },
-    }
-
-    def get_client(self, node_type: str) -> tuple[biothings_client.BiothingClient, None]:
-        """
-        lazy load the biothings client for the given node_type, return the client or None if failed.
-        """
-        client_or_kwargs = self.annotator_clients[node_type]["client"]
-        if isinstance(client_or_kwargs, biothings_client.BiothingClient):
-            client = client_or_kwargs
-        elif isinstance(client_or_kwargs, dict):
-            try:
-                client = biothings_client.get_client(**client_or_kwargs)
-            except RuntimeError as e:
-                logger.error("%s [%s]", e, client_or_kwargs)
-                client = None
-            if isinstance(client, biothings_client.BiothingClient):
-                # cache the client
-                self.annotator_clients[node_type]["client"] = client
-        else:
-            raise ValueError("Invalid input client_or_kwargs")
-        return client
-
-    def parse_curie(self, curie: str, return_type: bool = True, return_id: bool = True):
-        """
-        return a both type and if (as a tuple) or either based on the input curie
-        """
-        if ":" not in curie:
-            raise InvalidCurieError(f"Invalid input curie id: {curie}")
-        _prefix, _id = curie.split(":", 1)
-        _type = BIOLINK_PREFIX_to_BioThings.get(_prefix, {}).get("type", None)
-        if return_id:
-            if not _type or BIOLINK_PREFIX_to_BioThings[_prefix].get("keep_prefix", False):
-                _id = curie
-            cvtr = BIOLINK_PREFIX_to_BioThings.get(_prefix, {}).get("converter", None)
-            if cvtr:
-                _id = cvtr(curie)
-        if return_type and return_id:
-            return _type, _id
-        elif return_type:
-            return _type
-        elif return_id:
-            return _id
 
     def query_biothings(self, node_type: str, query_list, fields=None) -> dict:
         """
         Query biothings client based on node_type for a list of ids
         """
-        client = self.get_client(node_type)
+        client = get_client(node_type)
         if not client:
             logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)
             return {}
-        fields = fields or self.annotator_clients[node_type]["fields"]
-        scopes = self.annotator_clients[node_type]["scopes"]
+        fields = fields or ANNOTATOR_CLIENTS[node_type]["fields"]
+        scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
         logger.info("Querying annotations for %s %ss...", len(query_list), node_type)
         res = client.querymany(query_list, scopes=scopes, fields=fields)
         logger.info("Done. %s annotation objects returned.", len(res))
@@ -208,7 +77,7 @@ class Annotator:
         """
         Annotate a single curie id
         """
-        node_type, _id = self.parse_curie(curie)
+        node_type, _id = parse_curie(curie)
         if not node_type:
             raise InvalidCurieError(f"Unsupported Curie prefix: {curie}")
         res = self.query_biothings(node_type, [_id], fields=fields)
@@ -263,7 +132,7 @@ class Annotator:
 
         node_list_by_type = {}
         for node_id in node_d:
-            node_type = self.parse_curie(node_id, return_type=True, return_id=False)
+            node_type = parse_curie(node_id, return_type=True, return_id=False)
             if node_type:
                 if node_type not in node_list_by_type:
                     node_list_by_type[node_type] = [node_id]
@@ -273,7 +142,7 @@ class Annotator:
                 logger.warning("Unsupported Curie prefix: %s. Skipped!", node_id)
 
         for node_type, node_list in node_list_by_type.items():
-            if node_type not in self.annotator_clients or not node_list_by_type[node_type]:
+            if node_type not in ANNOTATOR_CLIENTS or not node_list_by_type[node_type]:
                 # skip for now
                 continue
 
@@ -282,7 +151,7 @@ class Annotator:
 
             # this is the list of query ids like 1017
             query_list = [
-                self.parse_curie(_id, return_type=False, return_id=True) for _id in node_list_by_type[node_type]
+                parse_curie(_id, return_type=False, return_id=True) for _id in node_list_by_type[node_type]
             ]
             # query_id to original id mapping
             node_id_d = dict(zip(query_list, node_list))
