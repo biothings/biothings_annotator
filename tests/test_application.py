@@ -1,7 +1,7 @@
 import pytest
 import sanic
 
-from biothings_annotator import Annotator
+from biothings_annotator import parse_curie
 
 # from sanic.response import html, json, HTTPResponse
 # from sanic_compress_plus import Compress
@@ -76,7 +76,6 @@ def test_post_endpoints(test_annotator: sanic.Sanic, trapi_request: dict, endpoi
     """
     Tests the POST endpoints for our annotation service
     """
-    annotator_instance = Annotator()
     url = f"{endpoint}"
     request, response = test_annotator.test_client.request(url, http_method="post", json=trapi_request)
 
@@ -113,7 +112,7 @@ def test_post_endpoints(test_annotator: sanic.Sanic, trapi_request: dict, endpoi
                 for values in subattributes["value"]:
                     notfound = values.get("notfound", False)
                     if notfound:
-                        curie_prefix, query = annotator_instance.parse_curie(key)
+                        curie_prefix, query = parse_curie(key)
                         assert values == {"query": query, "notfound": True}
                     else:
                         assert isinstance(values, dict)

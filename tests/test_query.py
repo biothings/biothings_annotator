@@ -3,15 +3,12 @@ Exercises the query methods within the biothings_annotator package
 """
 
 import logging
-import itertools
 import random
 
+import biothings_client
 import pytest
 
-import biothings_client
-
-from biothings_annotator import Annotator, BIOLINK_PREFIX_to_BioThings
-
+from biothings_annotator import ANNOTATOR_CLIENTS, Annotator, BIOLINK_PREFIX_to_BioThings, get_client, parse_curie
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -29,13 +26,12 @@ def test_annotation_client(node_type: str):
     Otherwise we raise a KeyError attempting to access a node type that doesn't exist for the
     biothings client
     """
-    annotation_instance = Annotator()
-    if node_type in annotation_instance.annotator_clients.keys():
-        client = annotation_instance.get_client(node_type)
+    if node_type in ANNOTATOR_CLIENTS.keys():
+        client = get_client(node_type)
         assert isinstance(client, biothings_client.BiothingClient)
     else:
         with pytest.raises(KeyError):
-            annotation_instance.get_client(node_type)
+            get_client(node_type)
 
 
 @pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
@@ -45,16 +41,16 @@ def test_biothings_query(curie_prefix: str):
     random_index = random.randint(0, 10000)
     curie_query = f"{curie_prefix}:{str(random_index)}"
 
-    node_type, node_id = annotation_instance.parse_curie(curie=curie_query, return_type=True, return_id=True)
+    node_type, node_id = parse_curie(curie=curie_query, return_type=True, return_id=True)
 
-    domain_fields = annotation_instance.annotator_clients[node_type]["fields"]
-    client = annotation_instance.get_client(node_type)
+    domain_fields = ANNOTATOR_CLIENTS[node_type]["fields"]
+    client = get_client(node_type)
     if not client:
         logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)
         return {}
 
-    fields = annotation_instance.annotator_clients[node_type]["fields"]
-    scopes = annotation_instance.annotator_clients[node_type]["scopes"]
+    fields = ANNOTATOR_CLIENTS[node_type]["fields"]
+    scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
     querymany_result = client.querymany([node_id], scopes=scopes, fields=fields)
     logger.info("Done. %s annotation objects returned.", len(querymany_result))
     query_response = annotation_instance._map_group_query_subfields(collection=querymany_result, search_key="query")

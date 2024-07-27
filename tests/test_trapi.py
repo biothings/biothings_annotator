@@ -2,13 +2,9 @@
 Tests the TRAPI request parsing capability for the biothings annotation package
 """
 
-import json
-import pathlib
 import logging
 
-import pytest
-
-from biothings_annotator import Annotator
+from biothings_annotator import Annotator, parse_curie
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -89,7 +85,7 @@ class TestTrapiAnnotation:
                     for values in subattributes["value"]:
                         notfound = values.get("notfound", False)
                         if notfound:
-                            curie_prefix, query = self.annotation_instance.parse_curie(key)
+                            curie_prefix, query = parse_curie(key)
                             assert values == {"query": query, "notfound": True}
                         else:
                             assert isinstance(values, dict)
@@ -130,7 +126,7 @@ class TestTrapiAnnotation:
                     for values in subattributes["value"]:
                         notfound = values.get("notfound", False)
                         if notfound:
-                            curie_prefix, query = self.annotation_instance.parse_curie(key)
+                            curie_prefix, query = parse_curie(key)
                             assert values == {"query": query, "notfound": True}
                         else:
                             assert isinstance(values, dict)
@@ -171,7 +167,7 @@ class TestTrapiAnnotation:
                     for values in subattributes["value"]:
                         notfound = values.get("notfound", False)
                         if notfound:
-                            curie_prefix, query = self.annotation_instance.parse_curie(key)
+                            curie_prefix, query = parse_curie(key)
                             assert values == {"query": query, "notfound": True}
                         else:
                             assert isinstance(values, dict)
@@ -212,7 +208,7 @@ class TestTrapiAnnotation:
                     for values in subattributes["value"]:
                         notfound = values.get("notfound", False)
                         if notfound:
-                            curie_prefix, query = self.annotation_instance.parse_curie(key)
+                            curie_prefix, query = parse_curie(key)
                             assert values == {"query": query, "notfound": True}
                         else:
                             assert isinstance(values, dict)

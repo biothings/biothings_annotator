@@ -7,7 +7,7 @@ import random
 
 import pytest
 
-from biothings_annotator import Annotator, BIOLINK_PREFIX_to_BioThings
+from biothings_annotator import BIOLINK_PREFIX_to_BioThings, parse_curie
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -22,15 +22,14 @@ def test_curie_parsing(curie_prefix: str):
     In reality we mainly target the following format:
     <prefix>:<id>
     """
-    annotation_instance = Annotator()
 
     random_index = random.randint(0, 10000)
     curie_query = f"{curie_prefix}:{str(random_index)}"
 
-    parsed_result = annotation_instance.parse_curie(curie=curie_query, return_type=True, return_id=True)
-    parsed_type = annotation_instance.parse_curie(curie=curie_query, return_type=True, return_id=False)
-    parsed_id = annotation_instance.parse_curie(curie=curie_query, return_type=False, return_id=True)
-    parsed_null = annotation_instance.parse_curie(curie=curie_query, return_type=False, return_id=False)
+    parsed_result = parse_curie(curie=curie_query, return_type=True, return_id=True)
+    parsed_type = parse_curie(curie=curie_query, return_type=True, return_id=False)
+    parsed_id = parse_curie(curie=curie_query, return_type=False, return_id=True)
+    parsed_null = parse_curie(curie=curie_query, return_type=False, return_id=False)
     static_prefix = BIOLINK_PREFIX_to_BioThings[curie_prefix].get("keep_prefix", False)
     assert parsed_result[0] == BIOLINK_PREFIX_to_BioThings[curie_prefix]["type"]
 
