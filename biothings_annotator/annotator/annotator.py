@@ -29,8 +29,8 @@ class Annotator:
         logger.info("Querying annotations for %s %ss...", len(query_list), node_type)
         res = client.querymany(query_list, scopes=scopes, fields=fields)
         logger.info("Done. %s annotation objects returned.", len(res))
-        structured_response = group_by_subfield(collection=res, search_key="query")
-        return structured_response
+        grouped_response = group_by_subfield(collection=res, search_key="query")
+        return grouped_response
 
     def transform(self, res_by_id, node_type):
         """
@@ -41,15 +41,6 @@ class Annotator:
         transformer = ResponseTransformer(res_by_id, node_type)
         transformer.transform()
         logger.info("Done.")
-        ####
-        # if isinstance(res, list):
-        #     # TODO: handle multiple results here
-        #     res = [transformer.transform(r) for r in res]
-        # else:
-        #     res.pop("query", None)
-        #     res.pop("_score", None)
-        #     res = transformer.transform(res)
-        ####
         return res_by_id
 
     def annotate_curie(self, curie: str, raw: bool = False, fields: Optional[Union[str, List[str]]] = None) -> dict:

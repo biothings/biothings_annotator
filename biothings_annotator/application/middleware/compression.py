@@ -56,7 +56,7 @@ async def compress_response(request: sanic.request.types.Request, response: sani
         logger.debug("Attempting to compress the response body")
         try:
             compressed_body = brotli.compress(response.body)
-        except Exception as gen_exp:
+        except Exception:
             logger.exception(compressed_body)
             logger.error("Unable to compress the response. Returning uncompressed response. Response: %s", response)
         else:
