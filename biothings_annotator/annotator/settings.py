@@ -28,7 +28,7 @@ BIOLINK_PREFIX_to_BioThings = {
 ANNOTATOR_CLIENTS = {
     "gene": {
         "client": {"biothing_type": "gene"},  # the kwargs passed to biothings_client.get_client
-        "fields": ["name", "symbol", "summary", "type_of_gene", "MIM", "HGNC", "MGI", "RGD", "alias", "interpro"],
+        "fields": ["name", "symbol", "summary", "type_of_gene", "MIM", "HGNC", "MGI", "RGD", "alias", "interpro", "pharos", "taxid"],
         "scopes": ["entrezgene", "ensemblgene", "uniprot", "accession", "retired"],
     },
     "chem": {
