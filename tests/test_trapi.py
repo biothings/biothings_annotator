@@ -4,7 +4,7 @@ Tests the TRAPI request parsing capability for the biothings annotation package
 
 import logging
 
-from biothings_annotator import Annotator, parse_curie
+from biothings_annotator import Annotator, utils
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -85,7 +85,8 @@ class TestTrapiAnnotation:
                     for values in subattributes["value"]:
                         notfound = values.get("notfound", False)
                         if notfound:
-                            curie_prefix, query = parse_curie(key)
+                            curie_prefix, query = utils.parse_curie(key)
+                            del curie_prefix
                             assert values == {"query": query, "notfound": True}
                         else:
                             assert isinstance(values, dict)
@@ -126,7 +127,7 @@ class TestTrapiAnnotation:
                     for values in subattributes["value"]:
                         notfound = values.get("notfound", False)
                         if notfound:
-                            curie_prefix, query = parse_curie(key)
+                            curie_prefix, query = utils.parse_curie(key)
                             assert values == {"query": query, "notfound": True}
                         else:
                             assert isinstance(values, dict)
@@ -167,7 +168,7 @@ class TestTrapiAnnotation:
                     for values in subattributes["value"]:
                         notfound = values.get("notfound", False)
                         if notfound:
-                            curie_prefix, query = parse_curie(key)
+                            curie_prefix, query = utils.parse_curie(key)
                             assert values == {"query": query, "notfound": True}
                         else:
                             assert isinstance(values, dict)
@@ -208,7 +209,8 @@ class TestTrapiAnnotation:
                     for values in subattributes["value"]:
                         notfound = values.get("notfound", False)
                         if notfound:
-                            curie_prefix, query = parse_curie(key)
+                            curie_prefix, query = utils.parse_curie(key)
+                            del curie_prefix
                             assert values == {"query": query, "notfound": True}
                         else:
                             assert isinstance(values, dict)

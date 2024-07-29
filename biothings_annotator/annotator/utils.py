@@ -54,6 +54,50 @@ def parse_curie(curie: str, return_type: bool = True, return_id: bool = True):
         return _id
 
 
+def group_by_subfield(collection: list[dict], search_key: str) -> dict:
+    """
+    Takes a collection of dictionary entries with a specify subfield key "search_key" and
+    extracts the subfield from each entry in the iterable into a dictionary.
+
+    It then bins entries into the dictionary so that identical keys have all results in one
+    aggregated list across the entire collection of dictionary entries
+
+    Example:
+
+    - 1 Entry
+    search_key = "query"
+    collection = [
+        {
+            'query': '8199',
+            '_id': '84557',
+            '_score': 1.55,
+            'name': 'microtubule associated protein 1 light chain 3 alpha'
+        }
+    ]
+
+    ... (Processing)
+
+    sub_field_collection = {
+        '8199': [
+            {
+                'query': '8199',
+                '_id': '84557',
+                '_score': 1.55,
+                'name': 'microtubule associated protein 1 light chain 3 alpha'
+            }
+        ]
+    }
+
+    """
+    sub_field_collection = {}
+    for sub_mapping in collection:
+        sub_field = sub_mapping.get(search_key, None)
+        if sub_field is not None:
+            sub_field_aggregation = sub_field_collection.setdefault(sub_field, [])
+            sub_field_aggregation.append(sub_mapping)
+    return sub_field_collection
+
+
 def get_dotfield_value(dotfield: str, d: dict):
     """
     Explore dictionary d using dotfield notation and return value.

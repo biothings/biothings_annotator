@@ -5,8 +5,7 @@ from .annotator import (
     InvalidCurieError,
     ResponseTransformer,
     TRAPIInputError,
-    get_client,
-    parse_curie,
+    utils,
 )
 
 __all__ = [
@@ -16,6 +15,5 @@ __all__ = [
     TRAPIInputError,
     BIOLINK_PREFIX_to_BioThings,
     ANNOTATOR_CLIENTS,
-    parse_curie,
-    get_client,
+    utils,
 ]

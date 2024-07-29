@@ -8,7 +8,7 @@ import random
 import biothings_client
 import pytest
 
-from biothings_annotator import ANNOTATOR_CLIENTS, Annotator, BIOLINK_PREFIX_to_BioThings, get_client, parse_curie
+from biothings_annotator import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings, utils
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -27,24 +27,22 @@ def test_annotation_client(node_type: str):
     biothings client
     """
     if node_type in ANNOTATOR_CLIENTS.keys():
-        client = get_client(node_type)
+        client = utils.get_client(node_type)
         assert isinstance(client, biothings_client.BiothingClient)
     else:
         with pytest.raises(KeyError):
-            get_client(node_type)
+            utils.get_client(node_type)
 
 
 @pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
 def test_biothings_query(curie_prefix: str):
-    annotation_instance = Annotator()
-
     random_index = random.randint(0, 10000)
     curie_query = f"{curie_prefix}:{str(random_index)}"
 
-    node_type, node_id = parse_curie(curie=curie_query, return_type=True, return_id=True)
+    node_type, node_id = utils.parse_curie(curie=curie_query, return_type=True, return_id=True)
 
     domain_fields = ANNOTATOR_CLIENTS[node_type]["fields"]
-    client = get_client(node_type)
+    client = utils.get_client(node_type)
     if not client:
         logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)
         return {}
@@ -53,7 +51,7 @@ def test_biothings_query(curie_prefix: str):
     scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
     querymany_result = client.querymany([node_id], scopes=scopes, fields=fields)
     logger.info("Done. %s annotation objects returned.", len(querymany_result))
-    query_response = annotation_instance._map_group_query_subfields(collection=querymany_result, search_key="query")
+    query_response = utils.group_by_subfield(collection=querymany_result, search_key="query")
 
     assert isinstance(query_response, dict)
     logger.info((f"Query Response: {query_response}" f"Query Fields: {domain_fields}"))
@@ -112,7 +110,7 @@ def test_biothings_query(curie_prefix: str):
 )
 def test_query_post_processing(search_keyword: str, collection: list[dict], histogram: dict):
     """
-    Evaluates the _map_group_query_subfields method for creating a dictionary histrogram of the
+    Evaluates the group_by_subfield helper function for creating a dictionary histrogram of the
     based off the aggregated collection of dictionaries sharing a common key.
 
     Parameterized tests
@@ -123,8 +121,7 @@ def test_query_post_processing(search_keyword: str, collection: list[dict], hist
     5) empty collection (2)
     6) empty collection and empty search key
     """
-    annotation_instance = Annotator()
-    histogram_response = annotation_instance._map_group_query_subfields(
+    histogram_response = utils.group_by_subfield(
         collection=collection, search_key=search_keyword
     )
     assert isinstance(histogram_response, dict)

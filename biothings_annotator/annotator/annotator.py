@@ -9,7 +9,7 @@ from typing import Iterable, List, Optional, Union
 from .exceptions import InvalidCurieError, TRAPIInputError
 from .settings import ANNOTATOR_CLIENTS
 from .transformer import ResponseTransformer
-from .utils import get_client, get_dotfield_value, parse_curie
+from .utils import get_client, get_dotfield_value, group_by_subfield, parse_curie
 
 logger = logging.getLogger(__name__)
 
@@ -29,51 +29,8 @@ class Annotator:
         logger.info("Querying annotations for %s %ss...", len(query_list), node_type)
         res = client.querymany(query_list, scopes=scopes, fields=fields)
         logger.info("Done. %s annotation objects returned.", len(res))
-        structured_response = self._map_group_query_subfields(collection=res, search_key="query")
+        structured_response = group_by_subfield(collection=res, search_key="query")
         return structured_response
-
-    def _map_group_query_subfields(self, collection: list[dict], search_key: str) -> dict:
-        """
-        Takes a collection of dictionary entries with a specify subfield key "search_key" and
-        extracts the subfield from each entry in the iterable into a dictionary.
-
-        It then bins entries into the dictionary so that identical keys have all results in one
-        aggregated list across the entire collection of dictionary entries
-
-        Example:
-
-        - 1 Entry
-        search_key = "query"
-        collection = [
-            {
-                'query': '8199',
-                '_id': '84557',
-                '_score': 1.55,
-                'name': 'microtubule associated protein 1 light chain 3 alpha'
-            }
-        ]
-
-        ... (Processing)
-
-        sub_field_collection = {
-            '8199': [
-                {
-                    'query': '8199',
-                    '_id': '84557',
-                    '_score': 1.55,
-                    'name': 'microtubule associated protein 1 light chain 3 alpha'
-                }
-            ]
-        }
-
-        """
-        sub_field_collection = {}
-        for sub_mapping in collection:
-            sub_field = sub_mapping.get(search_key, None)
-            if sub_field is not None:
-                sub_field_aggregation = sub_field_collection.setdefault(sub_field, [])
-                sub_field_aggregation.append(sub_mapping)
-        return sub_field_collection
 
     def transform(self, res_by_id, node_type):
         """
@@ -108,7 +65,7 @@ class Annotator:
             # res = [self.transform(r) for r in res[_id]]
         return {curie: res.get(_id, {})}
 
-    def _annotate_node_list_by_type(self, node_list_by_type: dict, raw: bool = False, fields: Optional[Union[str, List[str]]] = None)  -> Iterable[tuple]:
+    def _annotate_node_list_by_type(self, node_list_by_type: dict, raw: bool = False, fields: Optional[Union[str, List[str]]] = None) -> Iterable[tuple]:
         """This is a helper method re-used in both annotate_curie_list and annotate_trapi methods
            It returns a generator of tuples of (original_node_id, annotation_object) for each node_id,
            passed via node_list_by_type.
