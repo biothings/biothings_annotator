@@ -75,7 +75,9 @@ class Annotator:
                         cnt += 1
         logger.info("Done. %s extra annotations appended.", cnt)
 
-    def annotate_curie(self, curie: str, raw: bool = False, fields: Optional[Union[str, List[str]]] = None, include_extra: bool = True) -> dict:
+    def annotate_curie(
+        self, curie: str, raw: bool = False, fields: Optional[Union[str, List[str]]] = None, include_extra: bool = True
+    ) -> dict:
         """
         Annotate a single curie id
         """
