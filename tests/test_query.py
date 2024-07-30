@@ -121,8 +121,6 @@ def test_query_post_processing(search_keyword: str, collection: list[dict], hist
     5) empty collection (2)
     6) empty collection and empty search key
     """
-    histogram_response = utils.group_by_subfield(
-        collection=collection, search_key=search_keyword
-    )
+    histogram_response = utils.group_by_subfield(collection=collection, search_key=search_keyword)
     assert isinstance(histogram_response, dict)
     assert histogram_response == histogram

@@ -3,14 +3,11 @@ import sanic
 
 from biothings_annotator import utils
 
-# from sanic.response import html, json, HTTPResponse
-# from sanic_compress_plus import Compress
 
-
-@pytest.mark.parametrize("endpoint", ["/", "/annotator/"])
-def test_get_endpoints(test_annotator: sanic.Sanic, endpoint: str):
+@pytest.mark.parametrize("endpoint", ["/", "/annotator/", "/curie/"])
+def test_curie_get(test_annotator: sanic.Sanic, endpoint: str):
     """
-    Tests the GET endpoints for annotation service
+    Tests the CURIE endpoint GET
     """
     curie_id = "NCBIGene:1017"
     url = f"{endpoint}{curie_id}"
@@ -76,18 +73,51 @@ def test_get_endpoints(test_annotator: sanic.Sanic, endpoint: str):
     assert response.encoding == "utf-8"
 
 
-@pytest.mark.parametrize("endpoint", ["/", "/annotator/"])
-def test_post_endpoints(test_annotator: sanic.Sanic, trapi_request: dict, endpoint: str):
+@pytest.mark.parametrize("endpoint", ["/curie/"])
+def test_curie_post(test_annotator: sanic.Sanic, endpoint: str):
     """
-    Tests the POST endpoints for our annotation service
+    Tests the CURIE endpoint GET
     """
-    url = f"{endpoint}"
-    request, response = test_annotator.test_client.request(url, http_method="post", json=trapi_request)
+    batch_curie = [
+        "NCBIGene:695",
+        "MONDO:0001222",
+        "DOID:6034",
+        "CHEMBL.COMPOUND:821",
+        "PUBCHEM.COMPOUND:3406",
+        "CHEBI:192712",
+        "CHEMBL.COMPOUND:3707246",
+    ]
+
+    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=batch_curie)
 
     assert request.method == "POST"
     assert request.query_string == ""
     assert request.scheme == "http"
-    assert request.server_path == url
+    assert request.server_path == endpoint
+
+    assert isinstance(response.json, dict)
+    assert set(response.json.keys()) == set(batch_curie)
+
+    assert response.http_version == "HTTP/1.1"
+    assert response.content_type == "application/json"
+    assert response.is_success
+    assert not response.is_error
+    assert response.is_closed
+    assert response.status_code == 200
+    assert response.encoding == "utf-8"
+
+
+@pytest.mark.parametrize("endpoint", ["/", "/annotator/", "/trapi/"])
+def test_trapi_post(test_annotator: sanic.Sanic, trapi_request: dict, endpoint: str):
+    """
+    Tests the POST endpoints for our annotation service
+    """
+    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=trapi_request)
+
+    assert request.method == "POST"
+    assert request.query_string == ""
+    assert request.scheme == "http"
+    assert request.server_path == endpoint
 
     assert response.http_version == "HTTP/1.1"
     assert response.content_type == "application/json"
