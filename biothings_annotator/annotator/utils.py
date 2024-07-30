@@ -1,7 +1,22 @@
 """
 Collection of miscellaenous utility methods for the biothings_annotator package
 """
+
 import logging
+
+try:
+    from itertools import batched  # new in Python 3.12
+except ImportError:
+    from itertools import islice
+
+    def batched(iterable, n):
+        # batched('ABCDEFG', 3) → ABC DEF G
+        if n < 1:
+            raise ValueError("n must be at least one")
+        iterator = iter(iterable)
+        while batch := tuple(islice(iterator, n)):
+            yield batch
+
 
 import biothings_client
 
@@ -115,4 +130,5 @@ def get_dotfield_value(dotfield: str, d: dict):
         return d[fields[0]]
     else:
         first = fields[0]
+        return get_dotfield_value(".".join(fields[1:]), d[first])
         return get_dotfield_value(".".join(fields[1:]), d[first])

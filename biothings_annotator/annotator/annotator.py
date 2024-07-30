@@ -9,14 +9,16 @@ from typing import Iterable, List, Optional, Union
 from .exceptions import InvalidCurieError, TRAPIInputError
 from .settings import ANNOTATOR_CLIENTS
 from .transformer import ResponseTransformer
-from .utils import get_client, get_dotfield_value, group_by_subfield, parse_curie
+from .utils import batched, get_client, get_dotfield_value, group_by_subfield, parse_curie
 
 logger = logging.getLogger(__name__)
 
 
 class Annotator:
 
-    def query_biothings(self, node_type: str, query_list, fields=None) -> dict:
+    def query_biothings(
+        self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
+    ) -> dict:
         """
         Query biothings client based on node_type for a list of ids
         """
@@ -43,7 +45,37 @@ class Annotator:
         logger.info("Done.")
         return res_by_id
 
-    def annotate_curie(self, curie: str, raw: bool = False, fields: Optional[Union[str, List[str]]] = None) -> dict:
+    def append_extra_annotations(self, node_d: dict, node_id_subset: Optional[List[str]] = None, batch_n: int = 1000):
+        """
+        Append extra annotations to the existing node_d
+        """
+        node_id_list = node_d.keys() if node_id_subset is None else node_id_subset
+        extra_api = get_client("extra")
+        cnt = 0
+        logger.info("Retrieving extra annotations...")
+        for node_id_batch in batched(node_id_list, batch_n):
+            ncit_res = extra_api.querymany(node_id_batch, scopes="_id", fields="all")
+            for hit in ncit_res:
+                if hit.get("notfound", False):
+                    continue
+                if hit and isinstance(hit, dict):
+                    node_id = hit.pop("query", None)
+                    if node_id and node_id in node_d:
+                        hit.pop("_id", None)
+                        _res = node_d[node_id]
+                        if isinstance(_res, dict):
+                            _res.update(hit)
+                        elif isinstance(_res, list):
+                            for _r in _res:
+                                if isinstance(_r, dict):
+                                    _r.update(hit)
+                        else:
+                            # should not happen
+                            logger.error("Invalid node_d entry: %s (type: %s)", _res, type(_res))
+                        cnt += 1
+        logger.info("Done. %s extra annotations appended.", cnt)
+
+    def annotate_curie(self, curie: str, raw: bool = False, fields: Optional[Union[str, List[str]]] = None, include_extra: bool = True) -> dict:
         """
         Annotate a single curie id
         """
@@ -54,12 +86,16 @@ class Annotator:
         if not raw:
             res = self.transform(res, node_type)
             # res = [self.transform(r) for r in res[_id]]
+        if res and include_extra:
+            self.append_extra_annotations(res)
         return {curie: res.get(_id, {})}
 
-    def _annotate_node_list_by_type(self, node_list_by_type: dict, raw: bool = False, fields: Optional[Union[str, List[str]]] = None) -> Iterable[tuple]:
+    def _annotate_node_list_by_type(
+        self, node_list_by_type: dict, raw: bool = False, fields: Optional[Union[str, List[str]]] = None
+    ) -> Iterable[tuple]:
         """This is a helper method re-used in both annotate_curie_list and annotate_trapi methods
-           It returns a generator of tuples of (original_node_id, annotation_object) for each node_id,
-           passed via node_list_by_type.
+        It returns a generator of tuples of (original_node_id, annotation_object) for each node_id,
+        passed via node_list_by_type.
         """
         for node_type, node_list in node_list_by_type.items():
             if node_type not in ANNOTATOR_CLIENTS or not node_list_by_type[node_type]:
@@ -70,9 +106,7 @@ class Annotator:
             node_list = node_list_by_type[node_type]
 
             # this is the list of query ids like 1017
-            query_list = [
-                parse_curie(_id, return_type=False, return_id=True) for _id in node_list_by_type[node_type]
-            ]
+            query_list = [parse_curie(_id, return_type=False, return_id=True) for _id in node_list_by_type[node_type]]
             # query_id to original id mapping
             node_id_d = dict(zip(query_list, node_list))
             res_by_id = self.query_biothings(node_type, query_list, fields=fields)
@@ -92,13 +126,13 @@ class Annotator:
         curie_list: Union[List[str], Iterable[str]],
         raw: bool = False,
         fields: Optional[Union[str, List[str]]] = None,
-        as_iterable: bool = False
+        include_extra: bool = True,
     ) -> Union[dict, Iterable[tuple]]:
         """
         Annotate a list of curie ids
         """
         node_list_by_type = {}
-        node_d = OrderedDict()    # a dictionary to hold all annotations by each curie id
+        node_d = OrderedDict()  # a dictionary to hold all annotations by each curie id
         for node_id in curie_list:
             node_d[node_id] = {}  # create a placeholder for each curie id
             node_type = parse_curie(node_id, return_type=True, return_id=False)
@@ -112,11 +146,19 @@ class Annotator:
 
         for node_id, res in self._annotate_node_list_by_type(node_list_by_type, raw=raw, fields=fields):
             node_d[node_id] = res
-
+        if include_extra:
+            # currently, we only need to append extra annotations for chem nodes
+            self.append_extra_annotations(node_d, node_id_subset=node_list_by_type.get("chem", []))
         return node_d
 
     def annotate_trapi(
-        self, trapi_input: dict, append: bool = False, raw: bool = False, fields: Optional[Union[str, List[str]]] = None, limit: Optional[int] = None
+        self,
+        trapi_input: dict,
+        append: bool = False,
+        raw: bool = False,
+        fields: Optional[Union[str, List[str]]] = None,
+        limit: Optional[int] = None,
+        include_extra: bool = True,
     ) -> dict:
         """
         Annotate a TRAPI input message with node annotator annotations
@@ -161,7 +203,9 @@ class Annotator:
             else:
                 # return annotations only
                 node_d[node_id]["attributes"] = [res]
-
+        if include_extra:
+            # currently, we only need to append extra annotations for chem nodes
+            self.append_extra_annotations(node_d, node_id_subset=node_list_by_type["chem"])
         return node_d
 
     def annotate_trapi_0(
@@ -209,9 +253,7 @@ class Annotator:
             node_list = node_list_by_type[node_type]
 
             # this is the list of query ids like 1017
-            query_list = [
-                parse_curie(_id, return_type=False, return_id=True) for _id in node_list_by_type[node_type]
-            ]
+            query_list = [parse_curie(_id, return_type=False, return_id=True) for _id in node_list_by_type[node_type]]
             # query_id to original id mapping
             node_id_d = dict(zip(query_list, node_list))
             res_by_id = self.query_biothings(node_type, query_list, fields=fields)
