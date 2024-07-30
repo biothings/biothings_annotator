@@ -17,7 +17,7 @@ def append_prefix(id, prefix):
     return f"{prefix}:{id}" if not id.startswith(prefix) else id
 
 
-atc_cache = {}    # The global atc_cache will be load once when Transformer is initialized for the first time
+atc_cache = {}  # The global atc_cache will be load once when Transformer is initialized for the first time
 
 
 def load_atc_cache():

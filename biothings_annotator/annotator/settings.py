@@ -1,6 +1,7 @@
 """
 Defines the mapping from the biolink model to the Biothings data model
 """
+
 SERVICE_PROVIDER_API_HOST = "https://biothings.ci.transltr.io"
 
 
@@ -28,7 +29,20 @@ BIOLINK_PREFIX_to_BioThings = {
 ANNOTATOR_CLIENTS = {
     "gene": {
         "client": {"biothing_type": "gene"},  # the kwargs passed to biothings_client.get_client
-        "fields": ["name", "symbol", "summary", "type_of_gene", "MIM", "HGNC", "MGI", "RGD", "alias", "interpro", "pharos", "taxid"],
+        "fields": [
+            "name",
+            "symbol",
+            "summary",
+            "type_of_gene",
+            "MIM",
+            "HGNC",
+            "MGI",
+            "RGD",
+            "alias",
+            "interpro",
+            "pharos",
+            "taxid",
+        ],
         "scopes": ["entrezgene", "ensemblgene", "uniprot", "accession", "retired"],
     },
     "chem": {
@@ -121,5 +135,5 @@ ANNOTATOR_CLIENTS = {
     "extra": {
         "client": {"url": f"{SERVICE_PROVIDER_API_HOST}/annotator_extra"},
         "scopes": ["_id"],
-    }
+    },
 }
