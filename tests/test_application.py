@@ -50,8 +50,13 @@ def test_get_endpoints(test_annotator: sanic.Sanic, endpoint: str):
                     },
                 ],
                 "name": "cyclin dependent kinase 2",
+                "pharos": {
+                    "target_id": 10687,
+                    "tdl": "Tchem",
+                },
                 "summary": "This gene encodes a member of a family of serine/threonine protein kinases that participate in cell cycle regulation. The encoded protein is the catalytic subunit of the cyclin-dependent protein kinase complex, which regulates progression through the cell cycle. Activity of this protein is especially critical during the G1 to S phase transition. This protein associates with and regulated by other subunits of the complex including cyclin A or E, CDK inhibitor p21Cip1 (CDKN1A), and p27Kip1 (CDKN1B). Alternative splicing results in multiple transcript variants. [provided by RefSeq, Mar 2014].",
                 "symbol": "CDK2",
+                "taxid": 9606,
                 "type_of_gene": "protein-coding",
             }
         ]
