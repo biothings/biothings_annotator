@@ -27,9 +27,20 @@ logger = logging.getLogger("sanic-application")
 logger.setLevel(logging.DEBUG)
 
 
-async def compress_response(request: sanic.request.types.Request, response: sanic.response.types.JSONResponse):
+async def compress_response(
+    request: sanic.request.types.Request, response: sanic.response.types.JSONResponse
+) -> sanic.response.types.JSONResponse:
     """
-    https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
+    Middlware method for compressing the response using brotli compression
+        > https://en.wikipedia.org/wiki/Brotli
+
+    All of our responses are JSON based so our expected supported type will always be
+    `applciation/json`. We leverage the `Accept-Encoding` header to ensure that the
+    request enables us to levearage brotli compression indicated via `br`
+        > https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
+
+    After that we verify that it makes sense to compress the response by checking
+    metrics like size and response status before modifying the state of the response
     """
     accept_encoding = request.headers.get("Accept-Encoding", "")
     accepted_encoding = {encoding.strip() for encoding in accept_encoding.split(",")}
