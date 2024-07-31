@@ -27,6 +27,8 @@ class CurieView(HTTPMethodView):
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
 
+
+class BatchCurieView(HTTPMethodView):
     async def post(self, request: Request):
         fields = request.args.get("fields", None)
         raw = request.args.get("raw", False)

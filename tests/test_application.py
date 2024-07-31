@@ -4,7 +4,7 @@ import sanic
 from biothings_annotator import utils
 
 
-@pytest.mark.parametrize("endpoint", ["/", "/annotator/", "/curie/"])
+@pytest.mark.parametrize("endpoint", ["/annotator/", "/curie/"])
 def test_curie_get(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the CURIE endpoint GET
@@ -107,7 +107,7 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str):
     assert response.encoding == "utf-8"
 
 
-@pytest.mark.parametrize("endpoint", ["/", "/annotator/", "/trapi/"])
+@pytest.mark.parametrize("endpoint", ["/annotator/", "/trapi/"])
 def test_trapi_post(test_annotator: sanic.Sanic, trapi_request: dict, endpoint: str):
     """
     Tests the POST endpoints for our annotation service

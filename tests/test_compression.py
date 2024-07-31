@@ -13,7 +13,7 @@ def test_get_compression(test_annotator: sanic.Sanic):
 
     """
     curie_id = "NCBIGene:1017"
-    endpoint_path = f"/{curie_id}?include_extra=0"
+    endpoint_path = f"/curie/{curie_id}?include_extra=0"
     empty_compression_headers = {"Accept-Encoding": ""}
     uncompressed_request, uncompressed_response = test_annotator.test_client.request(
         endpoint_path, http_method="get", headers=empty_compression_headers
@@ -46,7 +46,7 @@ def test_post_compression(test_annotator: sanic.Sanic, trapi_request: dict):
     compressed   response size : 135222  bytes
     uncompressed response size : 3075763 bytes
     """
-    url = "/?include_extra=0"
+    url = "/trapi/?include_extra=0"
     empty_compression_headers = {"Accept-Encoding": ""}
     uncompressed_request, uncompressed_response = test_annotator.test_client.request(
         url, http_method="post", json=trapi_request, headers=empty_compression_headers
