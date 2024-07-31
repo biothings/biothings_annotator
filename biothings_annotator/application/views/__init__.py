@@ -1,4 +1,4 @@
-from .annotator import CurieView, TrapiView
+from .annotator import BatchCurieView, CurieView, TrapiView
 
 
 def build_routes() -> list[dict]:
@@ -13,37 +13,33 @@ def build_routes() -> list[dict]:
     and uri argument for simplicity
     """
 
-    ### --- CURIE ROUTES --- ###
-    curie_route = {"handler": CurieView.as_view(), "uri": r"/<curie:str>", "name": "curie_endpoint"}
-    curie_route_mirror = {
+    # --- CURIE ROUTES ---
+    curie_route_main = {
         "handler": CurieView.as_view(),
         "uri": r"/curie/<curie:str>",
-        "name": "curie_endpoint_mirror",
+        "name": "curie_endpoint",
     }
-    curie_route_legacy = {
+    curie_route_mirror = {
         "handler": CurieView.as_view(),
         "uri": r"/annotator/<curie:str>",
-        "name": "curie_endpoint_legacy",
+        "name": "curie_endpoint_mirror",
     }
 
     batch_curie_route = {
-        "handler": CurieView.as_view(),
+        "handler": BatchCurieView.as_view(),
         "uri": r"/curie/",
         "name": "batch_curie_endpoint",
     }
 
-    ### --- TRAPI ROUTES --- ###
-    trapi_route = {"handler": TrapiView.as_view(), "uri": "/", "name": "trapi_endpoint"}
-    trapi_route_mirror = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint_mirror"}
-    trapi_route_legacy = {"handler": TrapiView.as_view(), "uri": "/annotator/", "name": "trapi_endpoint_legacy"}
+    # --- TRAPI ROUTES ---
+    trapi_route_main = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint"}
+    trapi_route_mirror = {"handler": TrapiView.as_view(), "uri": "/annotator/", "name": "trapi_endpoint_mirror"}
 
     route_collection = [
-        curie_route,
+        curie_route_main,
         curie_route_mirror,
-        curie_route_legacy,
         batch_curie_route,
-        trapi_route,
+        trapi_route_main,
         trapi_route_mirror,
-        trapi_route_legacy,
     ]
     return route_collection
