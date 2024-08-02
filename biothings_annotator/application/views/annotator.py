@@ -14,6 +14,21 @@ from biothings_annotator.annotator import Annotator
 logger = logging.getLogger(__name__)
 
 
+class StatusView(HTTPMethodView):
+    async def get(self, request: Request):
+        curie = "NCBIGene:1017"
+        fields = "_id"
+        raw = bool(int(request.args.get("raw", 0)))
+        include_extra = bool(int(request.args.get("include_extra", 1)))
+
+        annotator = Annotator()
+        try:
+            annotated_node = annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
+            return sanic.json(annotated_node)
+        except ValueError as value_err:
+            raise SanicException(status_code=400, message=repr(value_err)) from value_err
+
+
 class CurieView(HTTPMethodView):
     async def get(self, request: Request, curie: str):
         fields = request.args.get("fields", None)

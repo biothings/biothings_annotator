@@ -4,6 +4,29 @@ import sanic
 from biothings_annotator import utils
 
 
+@pytest.mark.parametrize("endpoint", ["/status/"])
+def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
+    """
+    Tests the Status endpoint GET
+    """
+    request, response = test_annotator.test_client.request(endpoint, http_method="get")
+
+    assert request.method == "GET"
+    assert request.query_string == ""
+    assert request.scheme == "http"
+    assert request.server_path == endpoint
+
+    assert isinstance(response.json, dict)
+
+    assert response.http_version == "HTTP/1.1"
+    assert response.content_type == "application/json"
+    assert response.is_success
+    assert not response.is_error
+    assert response.is_closed
+    assert response.status_code == 200
+    assert response.encoding == "utf-8"
+
+
 @pytest.mark.parametrize("endpoint", ["/annotator/", "/curie/"])
 def test_curie_get(test_annotator: sanic.Sanic, endpoint: str):
     """
