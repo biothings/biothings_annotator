@@ -14,6 +14,26 @@ from biothings_annotator.annotator import Annotator
 logger = logging.getLogger(__name__)
 
 
+class StatusView(HTTPMethodView):
+    async def get(self, _: Request):
+        curie = "NCBIGene:1017"
+        fields = "_id"
+
+        annotator = Annotator()
+        try:
+            annotated_node = annotator.annotate_curie(curie, fields=fields, raw=False, include_extra=False)
+
+            if "NCBIGene:1017" not in annotated_node:
+                result = {"success": False, "error": "Service unavailable due to a failed data check!"}
+                return sanic.json(result)
+
+            result = {"success": True}
+            return sanic.json(result)
+        except Exception as exc:
+            result = {"success": False, "error": repr(exc)}
+            return sanic.json(result)
+
+
 class CurieView(HTTPMethodView):
     async def get(self, request: Request, curie: str):
         fields = request.args.get("fields", None)
