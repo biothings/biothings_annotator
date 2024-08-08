@@ -24,8 +24,7 @@ containers:
   name: biothingsannotator
   es_host: ES_HOST_VALUE
   port: 9000
-  # To determine if a container application has started successfully.
-  startupProbe:
+  startupProbe:  # To determine if a container application has started successfully.
     httpGet:
       path: /status
       port: 9000
@@ -34,8 +33,7 @@ containers:
     timeoutSeconds: 3  # The number of seconds after which the probe times out.
     successThreshold: 1  # The number of consecutive successes required to consider the container started successfully.
     failureThreshold: 5  # The number of consecutive failures required to consider the container startup to have failed.
-  # To determine when the container is ready to start accepting traffic
-  readinessProbe:
+  readinessProbe:  # To determine when the container is ready to start accepting traffic
     httpGet:
       path: /status
       port: 9000
@@ -44,8 +42,7 @@ containers:
     timeoutSeconds: 3  # The number of seconds after which the probe times out.
     successThreshold: 1  # The number of consecutive successes required to consider the container ready after it has been failing.
     failureThreshold: 3  # The number of consecutive failures required to consider the container not ready.
-  # To determine if a container is still running
-  livenessProbe:
+  livenessProbe:  # To determine if a container is still running
     httpGet:
       path: /status
       port: 9000
