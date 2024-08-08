@@ -15,16 +15,20 @@ logger = logging.getLogger(__name__)
 
 
 class StatusView(HTTPMethodView):
-    async def get(self, request: Request):
+    async def get(self, _: Request):
         curie = "NCBIGene:1017"
         fields = "_id"
-        raw = bool(int(request.args.get("raw", 0)))
-        include_extra = bool(int(request.args.get("include_extra", 1)))
 
         annotator = Annotator()
         try:
-            annotated_node = annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
-            return sanic.json(annotated_node)
+            annotated_node = annotator.annotate_curie(curie, fields=fields, raw=False, include_extra=False)
+
+            if "NCBIGene:1017" not in annotated_node:
+                result = {"success": False}
+                raise SanicException(status_code=503, message="Service unavailable due to a failed data check!")
+
+            result = {"success": True}
+            return sanic.json(result)
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
 
