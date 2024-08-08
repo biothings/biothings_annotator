@@ -54,14 +54,15 @@ class Annotator:
         cnt = 0
         logger.info("Retrieving extra annotations...")
         for node_id_batch in batched(node_id_list, batch_n):
-            ncit_res = extra_api.querymany(node_id_batch, scopes="_id", fields="all")
-            for hit in ncit_res:
+            extra_res = extra_api.querymany(node_id_batch, scopes="_id", fields="all")
+            for hit in extra_res:
                 if hit.get("notfound", False):
                     continue
                 if hit and isinstance(hit, dict):
                     node_id = hit.pop("query", None)
                     if node_id and node_id in node_d:
                         hit.pop("_id", None)
+                        hit.pop("_score", None)
                         _res = node_d[node_id]
                         if isinstance(_res, dict):
                             _res.update(hit)
@@ -194,7 +195,16 @@ class Annotator:
             else:
                 logger.warning("Unsupported Curie prefix: %s. Skipped!", node_id)
 
+        _node_d = {}
         for node_id, res in self._annotate_node_list_by_type(node_list_by_type, raw=raw, fields=fields):
+            _node_d[node_id] = res
+
+        if include_extra:
+            # currently, we only need to append extra annotations for chem nodes
+            self.append_extra_annotations(_node_d, node_id_subset=node_list_by_type["chem"])
+
+        # place the annotation objects back to the original node_d as TRAPI attributes
+        for node_id, res in _node_d.items():
             res = {
                 "attribute_type_id": "biothings_annotations",
                 "value": res,
@@ -205,9 +215,7 @@ class Annotator:
             else:
                 # return annotations only
                 node_d[node_id]["attributes"] = [res]
-        if include_extra:
-            # currently, we only need to append extra annotations for chem nodes
-            self.append_extra_annotations(node_d, node_id_subset=node_list_by_type["chem"])
+
         return node_d
 
     def annotate_trapi_0(
