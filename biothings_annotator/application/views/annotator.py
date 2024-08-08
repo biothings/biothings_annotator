@@ -24,13 +24,14 @@ class StatusView(HTTPMethodView):
             annotated_node = annotator.annotate_curie(curie, fields=fields, raw=False, include_extra=False)
 
             if "NCBIGene:1017" not in annotated_node:
-                result = {"success": False}
-                raise SanicException(status_code=503, message="Service unavailable due to a failed data check!")
+                result = {"success": False, "error": "Service unavailable due to a failed data check!"}
+                return sanic.json(result)
 
             result = {"success": True}
             return sanic.json(result)
-        except ValueError as value_err:
-            raise SanicException(status_code=400, message=repr(value_err)) from value_err
+        except Exception as exc:
+            result = {"success": False, "error": repr(exc)}
+            return sanic.json(result)
 
 
 class CurieView(HTTPMethodView):
