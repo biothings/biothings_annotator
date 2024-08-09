@@ -1,6 +1,7 @@
 {
     "application": {
         "configuration": {
+            "FALLBACK_ERROR_FORMAT": "json",
             "REQUEST_TIMEOUT": 300,
             "RESPONSE_TIMEOUT":	300,
             "REQUEST_MAX_SIZE": 100000000
