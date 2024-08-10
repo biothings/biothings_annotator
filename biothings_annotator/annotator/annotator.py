@@ -2,12 +2,15 @@
 Translator Node Annotator Service Handler
 """
 
-import logging
 from collections import OrderedDict
 from typing import Iterable, List, Optional, Union
+import logging
+import os
+
+import biothings_client
 
 from .exceptions import InvalidCurieError, TRAPIInputError
-from .settings import ANNOTATOR_CLIENTS
+from .settings import ANNOTATOR_CLIENTS, SERVICE_PROVIDER_API_HOST
 from .transformer import ResponseTransformer
 from .utils import batched, get_client, get_dotfield_value, group_by_subfield, parse_curie
 
@@ -16,16 +19,20 @@ logger = logging.getLogger(__name__)
 
 class Annotator:
 
+    def __init__(self):
+        self.api_host = os.environ.get("SERVICE_PROVIDER_API_HOST", SERVICE_PROVIDER_API_HOST)
+
     def query_biothings(
         self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
     ) -> dict:
         """
         Query biothings client based on node_type for a list of ids
         """
-        client = get_client(node_type)
-        if not client:
-            logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)
+        client = get_client(node_type, self.api_host)
+        if not isinstance(client, biothings_client.BiothingClient):
+            logger.error("Failed to get the biothings client for %s type. This type is skipped.", node_type)
             return {}
+
         fields = fields or ANNOTATOR_CLIENTS[node_type]["fields"]
         scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
         logger.info("Querying annotations for %s %ss...", len(query_list), node_type)
@@ -50,7 +57,7 @@ class Annotator:
         Append extra annotations to the existing node_d
         """
         node_id_list = node_d.keys() if node_id_subset is None else node_id_subset
-        extra_api = get_client("extra")
+        extra_api = get_client("extra", self.api_host)
         cnt = 0
         logger.info("Retrieving extra annotations...")
         for node_id_batch in batched(node_id_list, batch_n):
