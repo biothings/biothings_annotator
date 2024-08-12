@@ -9,6 +9,7 @@ import biothings_client
 import pytest
 
 from biothings_annotator import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings, utils
+from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -27,11 +28,11 @@ def test_annotation_client(node_type: str):
     biothings client
     """
     if node_type in ANNOTATOR_CLIENTS.keys():
-        client = utils.get_client(node_type)
+        client = utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
         assert isinstance(client, biothings_client.BiothingClient)
     else:
-        with pytest.raises(KeyError):
-            utils.get_client(node_type)
+        with pytest.raises(ValueError):
+            utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
 
 
 @pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
@@ -42,7 +43,7 @@ def test_biothings_query(curie_prefix: str):
     node_type, node_id = utils.parse_curie(curie=curie_query, return_type=True, return_id=True)
 
     domain_fields = ANNOTATOR_CLIENTS[node_type]["fields"]
-    client = utils.get_client(node_type)
+    client = utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
     if not client:
         logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)
         return {}
