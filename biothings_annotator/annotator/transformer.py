@@ -5,8 +5,10 @@ recieve within the biothings annotator
 
 import inspect
 import logging
+import os
 
 from .utils import get_client
+from .settings import SERVICE_PROVIDER_API_HOST
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,7 @@ class ResponseTransformer:
         # typically those data coming from other biothings APIs, we will do a batch
         # query to get them all, and cache them here for later use, to avoid slow
         # one by one queries.
-        self.atc_cache = load_atc_cache(api_host)
+        self.atc_cache = load_atc_cache(self.api_host)
 
     def _transform_chembl_drug_indications(self, doc):
         if self.node_type != "chem":
