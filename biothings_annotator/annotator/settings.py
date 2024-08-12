@@ -28,7 +28,11 @@ BIOLINK_PREFIX_to_BioThings = {
 
 ANNOTATOR_CLIENTS = {
     "gene": {
-        "client": {"biothing_type": "gene"},  # the kwargs passed to biothings_client.get_client
+        "client": {
+            "configuration": {"biothing_type": "gene"},  # the kwargs passed to biothings_client.get_client
+            "endpoint": None,
+            "instance": None,
+        },
         "fields": [
             "name",
             "symbol",
@@ -46,7 +50,11 @@ ANNOTATOR_CLIENTS = {
         "scopes": ["entrezgene", "ensemblgene", "uniprot", "accession", "retired"],
     },
     "chem": {
-        "client": {"biothing_type": "chem"},
+        "client": {
+            "configuration": {"biothing_type": "chem"},  # the kwargs passed to biothings_client.get_client
+            "endpoint": None,
+            "instance": None,
+        },
         "fields": [
             # IDs
             "pubchem.cid",
@@ -99,7 +107,11 @@ ANNOTATOR_CLIENTS = {
         "scopes": ["_id", "chebi.id", "chembl.molecule_chembl_id", "pubchem.cid", "drugbank.id", "unii.unii"],
     },
     "disease": {
-        "client": {"biothing_type": "disease"},
+        "client": {
+            "configuration": {"biothing_type": "disease"},  # the kwargs passed to biothings_client.get_client
+            "endpoint": None,
+            "instance": None,
+        },
         "fields": [
             # IDs
             "disease_ontology.doid",
@@ -121,19 +133,19 @@ ANNOTATOR_CLIENTS = {
         "scopes": ["mondo.mondo", "disease_ontology.doid", "umls.umls"],
     },
     "phenotype": {
-        "client": {"url": f"{SERVICE_PROVIDER_API_HOST}/hpo"},
+        "client": {"configuration": None, "endpoint": "hpo", "instance": None},
         "fields": ["hp", "name", "annotations", "comment", "def", "subset", "synonym", "xrefs"],
         "scopes": ["hp"],
     },
     # This API append NCIT description to the existing data
     "ncit": {
-        "client": {"url": f"{SERVICE_PROVIDER_API_HOST}/ncit"},
+        "client": {"configuration": None, "endpoint": "ncit", "instance": None},
         "fields": ["def"],
         "scopes": ["_id"],
     },
     # This API captures the extra information that is not available in the main biothings API
     "extra": {
-        "client": {"url": f"{SERVICE_PROVIDER_API_HOST}/annotator_extra"},
+        "client": {"configuration": None, "endpoint": "annotator_extra", "instance": None},
         "scopes": ["_id"],
     },
 }
