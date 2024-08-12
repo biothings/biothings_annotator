@@ -34,7 +34,6 @@ jobs:
         run: pip install sanic_testing
       - name: Run Tests
         run: pytest tests
-        working-directory: src
       - name: Setup tmate debug session on failure
         if: ${{ failure() }}
         uses: mxschmitt/action-tmate@v3
