@@ -1,15 +1,19 @@
+import json
+
+import pytest
 import sanic
+from typing import Union
 
 from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
 from unittest.mock import patch
 
 
-@pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
+def test_status_get(test_annotator: sanic.Sanic):
     """
     Tests the Status endpoint GET when the response is HTTP 200
     """
+    endpoint = "/status/"
     request, response = test_annotator.test_client.request(endpoint, http_method="get")
 
     assert request.method == "GET"
@@ -29,12 +33,12 @@ def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     assert response.json == expected_response_body
 
 
-@pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
+def test_status_get_error(test_annotator: sanic.Sanic):
     """
     Tests the Status endpoint GET when an Exception is raised
     Mocking the annotate_curie method to raise an exception
     """
+    endpoint = "/status/"
     with patch.object(Annotator, "annotate_curie", side_effect=Exception("Simulated error")):
         request, response = test_annotator.test_client.request(endpoint, http_method="get")
 
@@ -54,12 +58,13 @@ def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         assert response.json == expected_response_body
 
 
-@pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
+def test_status_get_failed_data_check(test_annotator: sanic.Sanic):
     """
     Tests the Status endpoint GET when the data check fails
     Mocking the annotate_curie method to return a value that doesn't contain "NCBIGene:1017"
     """
+    endpoint = "/status/"
+
     # Mock the return value to simulate the data check failure
     with patch.object(Annotator, "annotate_curie", return_value={"_id": "some_other_id"}):
         request, response = test_annotator.test_client.request(endpoint, http_method="get")
@@ -149,20 +154,40 @@ def test_curie_get(test_annotator: sanic.Sanic):
     assert response.encoding == "utf-8"
 
 
-def test_curie_post(test_annotator: sanic.Sanic):
+@pytest.mark.parametrize(
+    "batch_curie",
+    (
+        [
+            "NCBIGene:695",
+            "MONDO:0001222",
+            "DOID:6034",
+            "CHEMBL.COMPOUND:821",
+            "PUBCHEM.COMPOUND:3406",
+            "CHEBI:192712",
+            "CHEMBL.COMPOUND:3707246",
+        ],
+        {
+            "ids": [
+                "NCBIGene:695",
+                "MONDO:0001222",
+                "DOID:6034",
+                "CHEMBL.COMPOUND:821",
+                "PUBCHEM.COMPOUND:3406",
+                "CHEBI:192712",
+                "CHEMBL.COMPOUND:3707246",
+            ]
+        },
+    ),
+)
+def test_curie_post(test_annotator: sanic.Sanic, batch_curie: Union[list, dict]):
     """
-    Tests the CURIE endpoint GET
+    Tests the CURIE endpoint POST
     """
-    batch_curie = [
-        "NCBIGene:695",
-        "MONDO:0001222",
-        "DOID:6034",
-        "CHEMBL.COMPOUND:821",
-        "PUBCHEM.COMPOUND:3406",
-        "CHEBI:192712",
-        "CHEMBL.COMPOUND:3707246",
-    ]
     endpoint = "/curie/"
+    if isinstance(batch_curie, list):
+        curie_ids = set(batch_curie)
+    elif isinstance(batch_curie, dict):
+        curie_ids = set(batch_curie["ids"])
 
     request, response = test_annotator.test_client.request(endpoint, http_method="post", json=batch_curie)
 
@@ -172,7 +197,7 @@ def test_curie_post(test_annotator: sanic.Sanic):
     assert request.server_path == endpoint
 
     assert isinstance(response.json, dict)
-    assert set(response.json.keys()) == set(batch_curie)
+    assert set(response.json.keys()) == curie_ids
 
     assert response.http_version == "HTTP/1.1"
     assert response.content_type == "application/json"
@@ -181,6 +206,54 @@ def test_curie_post(test_annotator: sanic.Sanic):
     assert response.is_closed
     assert response.status_code == 200
     assert response.encoding == "utf-8"
+
+
+@pytest.mark.parametrize(
+    "batch_curie",
+    (
+        {
+            "id": [
+                "NCBIGene:695",
+                "MONDO:0001222",
+                "DOID:6034",
+                "CHEMBL.COMPOUND:821",
+                "PUBCHEM.COMPOUND:3406",
+                "CHEBI:192712",
+                "CHEMBL.COMPOUND:3707246",
+            ]
+        },
+        [],
+        {"ids": []},
+    ),
+)
+def test_curie_post_malformed_body(test_annotator: sanic.Sanic, batch_curie: Union[list, dict]):
+    """
+    Tests erroneous formed or incorrect JSON bodies sent to the CURIE POST endpoint
+    """
+    endpoint = "/curie/"
+    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=batch_curie)
+
+    assert request.method == "POST"
+    assert request.query_string == ""
+    assert request.scheme == "http"
+    assert request.server_path == endpoint
+
+    assert isinstance(response.json, dict)
+    assert response.http_version == "HTTP/1.1"
+    assert response.content_type == "application/json"
+    assert response.is_closed
+    assert response.status_code == 400
+    assert response.encoding == "utf-8"
+
+    debug_message = response.json
+    assert debug_message["description"] == "Bad Request"
+
+    expected_message = (
+        "No CURIE ID's found in request body. "
+        "Expected format: {'ids': ['id0', 'id1', ... 'idN']} || ['id0', 'id1', ... 'idN']. "
+        f"Received request body: {json.dumps(batch_curie)}"
+    )
+    assert debug_message["message"] == expected_message
 
 
 def test_trapi_post(test_annotator: sanic.Sanic, trapi_request: dict):
