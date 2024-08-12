@@ -3,6 +3,7 @@ Translator Node Annotator Service Handler translated to sanic
 """
 
 import logging
+import json
 
 import sanic
 from sanic.views import HTTPMethodView
@@ -68,15 +69,43 @@ class BatchCurieView(HTTPMethodView):
         self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
 
     async def post(self, request: Request):
+        """
+        CURIE body supports two forms
+
+        {
+            "ids": []
+        }
+
+        OR
+
+        [
+            ...
+        ]
+        """
         fields = request.args.get("fields", None)
         raw = request.args.get("raw", False)
         include_extra = request.args.get("include_extra", True)
 
         annotator = Annotator()
-        batch_curie = request.json
+        batch_curie_body = request.json
+
+        if isinstance(batch_curie_body, dict):
+            curie_list = batch_curie_body.get("ids", [])
+        elif isinstance(batch_curie_body, list):
+            curie_list = batch_curie_body
+
+        if len(curie_list) == 0:
+            body_repr = json.dumps(batch_curie_body)
+            message = (
+                f"No CURIE ID's found in request body. "
+                "Expected format: {'ids': ['id0', 'id1', ... 'idN']} || ['id0', 'id1', ... 'idN']. "
+                f"Received request body: {body_repr}"
+            )
+            raise SanicException(status_code=400, message=message)
+
         try:
             annotated_node = annotator.annotate_curie_list(
-                batch_curie, fields=fields, raw=raw, include_extra=include_extra
+                curie_list=curie_list, fields=fields, raw=raw, include_extra=include_extra
             )
             return sanic.json(annotated_node, headers=self.default_headers)
         except ValueError as value_err:
