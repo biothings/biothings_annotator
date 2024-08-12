@@ -140,14 +140,12 @@ ANNOTATOR_CLIENTS = {
     # This API append NCIT description to the existing data
     "ncit": {
         "client": {"configuration": None, "endpoint": "ncit", "instance": None},
-        "endpoint": "ncit",
         "fields": ["def"],
         "scopes": ["_id"],
     },
     # This API captures the extra information that is not available in the main biothings API
     "extra": {
         "client": {"configuration": None, "endpoint": "annotator_extra", "instance": None},
-        "endpoint": "annotator_extra",
         "scopes": ["_id"],
     },
 }
