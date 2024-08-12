@@ -20,12 +20,12 @@ def append_prefix(id, prefix):
 atc_cache = {}  # The global atc_cache will be load once when Transformer is initialized for the first time
 
 
-def load_atc_cache():
+def load_atc_cache(api_host: str):
     """Load WHO atc code-to-name mapping in a dictionary, which will be used in ResponseTransformer._transform_atc_classifications method"""
     global atc_cache
     if not atc_cache:
         logger.info("Loading WHO ATC code-to-name mapping...")
-        atc_client = get_client("extra")
+        atc_client = get_client("extra", api_host)
         atc_li = atc_client.query("_exists_:code", fields="code,name", fetch_all=True)
         atc_cache = {}
         for atc in atc_li:
@@ -38,12 +38,13 @@ class ResponseTransformer:
     def __init__(self, res_by_id, node_type):
         self.res_by_id = res_by_id
         self.node_type = node_type
+        self.api_host = os.environ.get("SERVICE_PROVIDER_API_HOST", SERVICE_PROVIDER_API_HOST)
 
         self.data_cache = {}  # used to cached required mapping data used for individual transformation
         # typically those data coming from other biothings APIs, we will do a batch
         # query to get them all, and cache them here for later use, to avoid slow
         # one by one queries.
-        self.atc_cache = load_atc_cache()
+        self.atc_cache = load_atc_cache(api_host)
 
     def _transform_chembl_drug_indications(self, doc):
         if self.node_type != "chem":
@@ -147,7 +148,7 @@ class ResponseTransformer:
                 if ncit:
                     ncit_id_list.append(ncit)
         if ncit_id_list:
-            ncit_api = get_client("ncit")
+            ncit_api = get_client("ncit", self.api_host)
             ncit_id_list = [f"NCIT:{ncit}" for ncit in ncit_id_list]
             ncit_res = ncit_api.getnodes(ncit_id_list, fields="def")
             ncit_def_d = {}
