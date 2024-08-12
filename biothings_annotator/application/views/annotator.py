@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class StatusView(HTTPMethodView):
+    def __init__(self):
+        super().__init__()
+        application = sanic.Sanic.get_app()
+        cache = application.config.CACHE_MAX_AGE
+        self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
+
     async def get(self, _: Request):
         curie = "NCBIGene:1017"
         fields = "_id"
@@ -28,7 +34,7 @@ class StatusView(HTTPMethodView):
                 return sanic.json(result)
 
             result = {"success": True}
-            return sanic.json(result)
+            return sanic.json(result, headers=self.default_headers)
         except Exception as exc:
             result = {"success": False, "error": repr(exc)}
             return sanic.json(result)
@@ -49,7 +55,7 @@ class CurieView(HTTPMethodView):
         annotator = Annotator()
         try:
             annotated_node = annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
-            return sanic.json(annotated_node, header=self.default_headers)
+            return sanic.json(annotated_node, headers=self.default_headers)
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
 
@@ -72,7 +78,7 @@ class BatchCurieView(HTTPMethodView):
             annotated_node = annotator.annotate_curie_list(
                 batch_curie, fields=fields, raw=raw, include_extra=include_extra
             )
-            return sanic.json(annotated_node, header=self.default_headers)
+            return sanic.json(annotated_node, headers=self.default_headers)
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
 
@@ -94,9 +100,9 @@ class TrapiView(HTTPMethodView):
         annotator = Annotator()
         trapi_body = request.json
         try:
-            annotated_node_d = annotator.annotate_trapi(
+            annotated_node = annotator.annotate_trapi(
                 trapi_body, fields=fields, raw=raw, append=append, limit=limit, include_extra=include_extra
             )
-            return sanic.json(annotated_node, header=self.default_headers)
+            return sanic.json(annotated_node, headers=self.default_headers)
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
