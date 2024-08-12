@@ -1,5 +1,8 @@
+import json
+
 import pytest
 import sanic
+from typing import Union
 
 from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
@@ -150,20 +153,45 @@ def test_curie_get(test_annotator: sanic.Sanic, endpoint: str):
     assert response.encoding == "utf-8"
 
 
-@pytest.mark.parametrize("endpoint", ["/curie/"])
-def test_curie_post(test_annotator: sanic.Sanic, endpoint: str):
+@pytest.mark.parametrize(
+    "endpoint, batch_curie",
+    (
+        [
+            "/curie/",
+            [
+                "NCBIGene:695",
+                "MONDO:0001222",
+                "DOID:6034",
+                "CHEMBL.COMPOUND:821",
+                "PUBCHEM.COMPOUND:3406",
+                "CHEBI:192712",
+                "CHEMBL.COMPOUND:3707246",
+            ],
+        ],
+        [
+            "/curie/",
+            {
+                "ids": [
+                    "NCBIGene:695",
+                    "MONDO:0001222",
+                    "DOID:6034",
+                    "CHEMBL.COMPOUND:821",
+                    "PUBCHEM.COMPOUND:3406",
+                    "CHEBI:192712",
+                    "CHEMBL.COMPOUND:3707246",
+                ]
+            },
+        ],
+    ),
+)
+def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[list, dict]):
     """
-    Tests the CURIE endpoint GET
+    Tests the CURIE endpoint POST
     """
-    batch_curie = [
-        "NCBIGene:695",
-        "MONDO:0001222",
-        "DOID:6034",
-        "CHEMBL.COMPOUND:821",
-        "PUBCHEM.COMPOUND:3406",
-        "CHEBI:192712",
-        "CHEMBL.COMPOUND:3707246",
-    ]
+    if isinstance(batch_curie, list):
+        curie_ids = set(batch_curie)
+    elif isinstance(batch_curie, dict):
+        curie_ids = set(batch_curie["ids"])
 
     request, response = test_annotator.test_client.request(endpoint, http_method="post", json=batch_curie)
 
@@ -173,7 +201,7 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str):
     assert request.server_path == endpoint
 
     assert isinstance(response.json, dict)
-    assert set(response.json.keys()) == set(batch_curie)
+    assert set(response.json.keys()) == curie_ids
 
     assert response.http_version == "HTTP/1.1"
     assert response.content_type == "application/json"
@@ -182,6 +210,56 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str):
     assert response.is_closed
     assert response.status_code == 200
     assert response.encoding == "utf-8"
+
+
+@pytest.mark.parametrize(
+    "endpoint, batch_curie",
+    (
+        [
+            "/curie/",
+            {
+                "id": [
+                    "NCBIGene:695",
+                    "MONDO:0001222",
+                    "DOID:6034",
+                    "CHEMBL.COMPOUND:821",
+                    "PUBCHEM.COMPOUND:3406",
+                    "CHEBI:192712",
+                    "CHEMBL.COMPOUND:3707246",
+                ]
+            },
+        ],
+        ["/curie/", []],
+        ["/curie/", {"ids": []}],
+    ),
+)
+def test_curie_post_malformed_body(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[list, dict]):
+    """
+    Tests erroneous formed or incorrect JSON bodies sent to the CURIE POST endpoint
+    """
+    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=batch_curie)
+
+    assert request.method == "POST"
+    assert request.query_string == ""
+    assert request.scheme == "http"
+    assert request.server_path == endpoint
+
+    assert isinstance(response.json, dict)
+    assert response.http_version == "HTTP/1.1"
+    assert response.content_type == "application/json"
+    assert response.is_closed
+    assert response.status_code == 400
+    assert response.encoding == "utf-8"
+
+    debug_message = response.json
+    assert debug_message["description"] == "Bad Request"
+
+    expected_message = (
+        "No CURIE ID's found in request body. "
+        "Expected format: {'ids': ['id0', 'id1', ... 'idN']} || ['id0', 'id1', ... 'idN']. "
+        f"Received request body: {json.dumps(batch_curie)}"
+    )
+    assert debug_message["message"] == expected_message
 
 
 @pytest.mark.parametrize("endpoint", ["/annotator/", "/trapi/"])
