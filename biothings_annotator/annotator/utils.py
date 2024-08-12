@@ -3,6 +3,7 @@ Collection of miscellaenous utility methods for the biothings_annotator package
 """
 
 import logging
+from typing import Union
 
 try:
     from itertools import batched  # new in Python 3.12
@@ -26,24 +27,66 @@ from .settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
 logger = logging.getLogger(__name__)
 
 
-def get_client(node_type: str) -> tuple[biothings_client.BiothingClient, None]:
+def get_client(node_type: str, api_host: str) -> Union[biothings_client.BiothingClient, None]:
     """
-    lazy load the biothings client for the given node_type, return the client or None if failed.
+    Attempts to lazy load the biothings-client instance
+
+    Inputs:
+    > node_type: string representing which biothings-client to load based
+    off the settings.py client field
+    >>> "client": {"biothing_type": "gene"},
+    >>> "client": {"biothing_type": "chem"},
+    >>> "client": {"biothing_type": "disease"},
+    >>> "client": {"url": f"{SERVICE_PROVIDER_API_HOST}/hpo"},
+    >>> "client": {"url": f"{SERVICE_PROVIDER_API_HOST}/ncit"},
+    >>> "client": {"url": f"{SERVICE_PROVIDER_API_HOST}/annotator_extra"},
+
+    For mygene, mychem, and mydisease, the instances take the corresponding `biothings_type`
+    argument which should match this functions node_type
+    > url: string representing the API endpoint to pull down data from the
+    client's perspective. This is used for hpo, ncit, and annotator_extra as additional
+    data sources used with the annotator. Default value for this is stored in the
+    settings.py file
+
+    Output:
+    Returns the client instance if successful and None on failure
     """
-    client_or_kwargs = ANNOTATOR_CLIENTS[node_type]["client"]
-    if isinstance(client_or_kwargs, biothings_client.BiothingClient):
-        client = client_or_kwargs
-    elif isinstance(client_or_kwargs, dict):
+    annotator_node = ANNOTATOR_CLIENTS.get(node_type, None)
+    if annotator_node is None:
+        raise ValueError(f"Unable to get annotator client with `node_type`: {node_type}")
+
+    client_parameters = annotator_node["client"]
+    client_configuration = client_parameters.get("configuration")
+    client_endpoint = client_parameters.get("endpoint")
+    client_instance = client_parameters.get("instance")
+
+    if client_instance is not None and isinstance(client_instance, biothings_client.BiothingClient):
+        client = client_instance
+
+    elif client_configuration is not None and isinstance(client_configuration, dict):
         try:
-            client = biothings_client.get_client(**client_or_kwargs)
-        except RuntimeError as e:
-            logger.error("%s [%s]", e, client_or_kwargs)
+            client = biothings_client.get_client(**client_configuration)
+        except RuntimeError as runtime_error:
+            logger.error("%s [%s]", runtime_error, client_configuration)
             client = None
-        if isinstance(client, biothings_client.BiothingClient):
-            # cache the client
-            ANNOTATOR_CLIENTS[node_type]["client"] = client
+
+    elif client_endpoint is not None and isinstance(client_endpoint, str):
+        client_url = f"{api_host}/{client_endpoint}"
+        try:
+            client = biothings_client.get_client(biothing_type=None, instance=True, url=client_url)
+        except RuntimeError as runtime_error:
+            logger.error("%s [%s]", runtime_error, client_url)
+            client = None
+
     else:
-        raise ValueError("Invalid input client_or_kwargs")
+        raise ValueError(
+            (f"Unable to to build annotator client with parameters: {client_parameters}. " "No cached client found")
+        )
+
+    # cache the client
+    if isinstance(client, biothings_client.BiothingClient):
+        ANNOTATOR_CLIENTS[node_type]["client"]["instance"] = client
+
     return client
 
 
