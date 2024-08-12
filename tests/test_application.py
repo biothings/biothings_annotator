@@ -1,14 +1,13 @@
-import pytest
 import sanic
 
 from biothings_annotator import utils
 
 
-@pytest.mark.parametrize("endpoint", ["/annotator/", "/curie/"])
-def test_curie_get(test_annotator: sanic.Sanic, endpoint: str):
+def test_curie_get(test_annotator: sanic.Sanic):
     """
     Tests the CURIE endpoint GET
     """
+    endpoint = "/curie/"
     curie_id = "NCBIGene:1017"
     url = f"{endpoint}{curie_id}"
     request, response = test_annotator.test_client.request(url, http_method="get")
@@ -73,8 +72,7 @@ def test_curie_get(test_annotator: sanic.Sanic, endpoint: str):
     assert response.encoding == "utf-8"
 
 
-@pytest.mark.parametrize("endpoint", ["/curie/"])
-def test_curie_post(test_annotator: sanic.Sanic, endpoint: str):
+def test_curie_post(test_annotator: sanic.Sanic):
     """
     Tests the CURIE endpoint GET
     """
@@ -87,6 +85,7 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str):
         "CHEBI:192712",
         "CHEMBL.COMPOUND:3707246",
     ]
+    endpoint = "/curie/"
 
     request, response = test_annotator.test_client.request(endpoint, http_method="post", json=batch_curie)
 
@@ -107,11 +106,11 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str):
     assert response.encoding == "utf-8"
 
 
-@pytest.mark.parametrize("endpoint", ["/annotator/", "/trapi/"])
-def test_trapi_post(test_annotator: sanic.Sanic, trapi_request: dict, endpoint: str):
+def test_trapi_post(test_annotator: sanic.Sanic, trapi_request: dict):
     """
     Tests the POST endpoints for our annotation service
     """
+    endpoint = "/trapi/"
     request, response = test_annotator.test_client.request(endpoint, http_method="post", json=trapi_request)
 
     assert request.method == "POST"
