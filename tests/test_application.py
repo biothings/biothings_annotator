@@ -18,8 +18,10 @@ def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     assert request.scheme == "http"
     assert request.server_path == endpoint
 
+    expected_response_body = {
+        "success": True
+    }
     assert isinstance(response.json, dict)
-
     assert response.http_version == "HTTP/1.1"
     assert response.content_type == "application/json"
     assert response.is_success
@@ -27,7 +29,7 @@ def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     assert response.is_closed
     assert response.status_code == 200
     assert response.encoding == "utf-8"
-    assert response.json == {"success": True}
+    assert response.json == expected_response_body
 
 
 @pytest.mark.parametrize("endpoint", ["/status/"])
@@ -44,6 +46,10 @@ def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         assert request.scheme == "http"
         assert request.server_path == endpoint
 
+        expected_response_body = {
+            "success": False,
+            "error": "Exception('Simulated error')"
+        }
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
         assert response.is_success
@@ -51,7 +57,7 @@ def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         assert response.is_closed
         assert response.status_code == 200
         assert response.encoding == "utf-8"
-        assert response.json == {"success": False, "error": "Exception('Simulated error')"}
+        assert response.json == expected_response_body
 
 
 @pytest.mark.parametrize("endpoint", ["/status/"])
@@ -69,6 +75,10 @@ def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str
         assert request.scheme == "http"
         assert request.server_path == endpoint
 
+        expected_response_body = {
+            "success": False,
+            "error": "Service unavailable due to a failed data check!"
+        }
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
         assert response.is_success
@@ -76,7 +86,7 @@ def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str
         assert response.is_closed
         assert response.status_code == 200
         assert response.encoding == "utf-8"
-        assert response.json == {"success": False, "error": "Service unavailable due to a failed data check!"}
+        assert response.json == expected_response_body
 
 
 @pytest.mark.parametrize("endpoint", ["/annotator/", "/curie/"])
