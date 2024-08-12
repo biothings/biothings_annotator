@@ -3,7 +3,8 @@
         "configuration": {
             "REQUEST_TIMEOUT": 300,
             "RESPONSE_TIMEOUT":	300,
-            "REQUEST_MAX_SIZE": 100000000
+            "REQUEST_MAX_SIZE": 100000000,
+            "CACHE_MAX_AGE": 604800
         },
         "extension": {
             "openapi": {

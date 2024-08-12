@@ -2,6 +2,91 @@ import pytest
 import sanic
 
 from biothings_annotator import utils
+from biothings_annotator.annotator import Annotator
+from unittest.mock import patch
+
+
+@pytest.mark.parametrize("endpoint", ["/status/"])
+def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
+    """
+    Tests the Status endpoint GET when the response is HTTP 200
+    """
+    request, response = test_annotator.test_client.request(endpoint, http_method="get")
+
+    assert request.method == "GET"
+    assert request.query_string == ""
+    assert request.scheme == "http"
+    assert request.server_path == endpoint
+
+    expected_response_body = {
+        "success": True
+    }
+    assert isinstance(response.json, dict)
+    assert response.http_version == "HTTP/1.1"
+    assert response.content_type == "application/json"
+    assert response.is_success
+    assert not response.is_error
+    assert response.is_closed
+    assert response.status_code == 200
+    assert response.encoding == "utf-8"
+    assert response.json == expected_response_body
+
+
+@pytest.mark.parametrize("endpoint", ["/status/"])
+def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
+    """
+    Tests the Status endpoint GET when an Exception is raised
+    Mocking the annotate_curie method to raise an exception
+    """
+    with patch.object(Annotator, 'annotate_curie', side_effect=Exception("Simulated error")):
+        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+
+        assert request.method == "GET"
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        expected_response_body = {
+            "success": False,
+            "error": "Exception('Simulated error')"
+        }
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
+
+
+@pytest.mark.parametrize("endpoint", ["/status/"])
+def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
+    """
+    Tests the Status endpoint GET when the data check fails
+    Mocking the annotate_curie method to return a value that doesn't contain "NCBIGene:1017"
+    """
+    # Mock the return value to simulate the data check failure
+    with patch.object(Annotator, 'annotate_curie', return_value={"_id": "some_other_id"}):
+        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+
+        assert request.method == "GET"
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        expected_response_body = {
+            "success": False,
+            "error": "Service unavailable due to a failed data check!"
+        }
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
 
 
 @pytest.mark.parametrize("endpoint", ["/annotator/", "/curie/"])
