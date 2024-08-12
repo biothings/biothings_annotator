@@ -3,17 +3,16 @@
 # Declare variables to be passed into your templates.
 
 deployment:
-  replicaCount: 2
+  replicaCount: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      # This setting ensures that no existing pods are taken down before new ones are up and running.
-      # This configuration guarantees that there will be no downtime during the update.
+      # This setting allows one existing pod to be taken down before new ones are up and running.
+      # It means there could be a brief period where fewer pods are available during the update.
       maxUnavailable: 1
-      # This allows Kubernetes to create one additional pod above the desired number of replicas during the update.
-      # It ensures that a new pod is ready before taking an old pod down.
+      # This setting does not allow any additional pods above the desired number of replicas during the update.
+      # A new pod will only be created after an old pod is taken down.
       maxSurge: 0
-
 image:
   repository: 853771734544.dkr.ecr.us-east-1.amazonaws.com/translator-bte-pending-api-annotator
   pullPolicy: Always
