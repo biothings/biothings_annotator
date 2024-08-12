@@ -1,4 +1,4 @@
-from .annotator import BatchCurieView, CurieView, TrapiView
+from .annotator import StatusView, BatchCurieView, CurieView, TrapiView
 
 
 def build_routes() -> list[dict]:
@@ -13,12 +13,20 @@ def build_routes() -> list[dict]:
     and uri argument for simplicity
     """
 
+    # --- STATUS ROUTE ---
+    status_route_main = {
+        "handler": StatusView.as_view(),
+        "uri": r"/status",
+        "name": "status_endpoint",
+    }
+
     # --- CURIE ROUTES ---
     curie_route_main = {
         "handler": CurieView.as_view(),
         "uri": r"/curie/<curie:str>",
         "name": "curie_endpoint",
     }
+
     curie_route_mirror = {
         "handler": CurieView.as_view(),
         "uri": r"/annotator/<curie:str>",
@@ -36,6 +44,7 @@ def build_routes() -> list[dict]:
     trapi_route_mirror = {"handler": TrapiView.as_view(), "uri": "/annotator/", "name": "trapi_endpoint_mirror"}
 
     route_collection = [
+        status_route_main,
         curie_route_main,
         curie_route_mirror,
         batch_curie_route,
