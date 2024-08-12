@@ -35,6 +35,12 @@ class StatusView(HTTPMethodView):
 
 
 class CurieView(HTTPMethodView):
+    def __init__(self):
+        super().__init__()
+        application = sanic.Sanic.get_app()
+        cache = application.config.CACHE_MAX_AGE
+        self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
+
     async def get(self, request: Request, curie: str):
         fields = request.args.get("fields", None)
         raw = bool(int(request.args.get("raw", 0)))
@@ -43,12 +49,18 @@ class CurieView(HTTPMethodView):
         annotator = Annotator()
         try:
             annotated_node = annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
-            return sanic.json(annotated_node)
+            return sanic.json(annotated_node, header=self.default_headers)
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
 
 
 class BatchCurieView(HTTPMethodView):
+    def __init__(self):
+        super().__init__()
+        application = sanic.Sanic.get_app()
+        cache = application.config.CACHE_MAX_AGE
+        self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
+
     async def post(self, request: Request):
         fields = request.args.get("fields", None)
         raw = request.args.get("raw", False)
@@ -60,12 +72,18 @@ class BatchCurieView(HTTPMethodView):
             annotated_node = annotator.annotate_curie_list(
                 batch_curie, fields=fields, raw=raw, include_extra=include_extra
             )
-            return sanic.json(annotated_node)
+            return sanic.json(annotated_node, header=self.default_headers)
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
 
 
 class TrapiView(HTTPMethodView):
+    def __init__(self):
+        super().__init__()
+        application = sanic.Sanic.get_app()
+        cache = application.config.CACHE_MAX_AGE
+        self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
+
     async def post(self, request: Request):
         fields = request.args.get("fields", None)
         raw = bool(int(request.args.get("raw", 0)))
@@ -79,6 +97,6 @@ class TrapiView(HTTPMethodView):
             annotated_node_d = annotator.annotate_trapi(
                 trapi_body, fields=fields, raw=raw, append=append, limit=limit, include_extra=include_extra
             )
-            return sanic.json(annotated_node_d)
+            return sanic.json(annotated_node, header=self.default_headers)
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
