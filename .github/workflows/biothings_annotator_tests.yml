@@ -36,8 +36,10 @@ jobs:
         run: pip install brotli
       - name: Install sanic_testing
         run: pip install sanic_testing
-      - name: Run Tests
-        run: python -m pytest tests
-      - name: Setup tmate debug session on failure
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
+      - name: Run Tests - Curie
+        run: python -m pytest tests/test_curie.py
+      - name: Run Tests - Query
+        run: python -m pytest tests/test_query.py
+      # - name: Setup tmate debug session on failure
+      #   if: ${{ failure() }}
+      #   uses: mxschmitt/action-tmate@v3
