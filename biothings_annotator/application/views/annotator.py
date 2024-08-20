@@ -9,6 +9,7 @@ import sanic
 from sanic.views import HTTPMethodView
 from sanic.exceptions import SanicException
 from sanic.request import Request
+from sanic import response
 
 from biothings_annotator.annotator import Annotator
 
@@ -42,6 +43,26 @@ class StatusView(HTTPMethodView):
 
 
 class CurieView(HTTPMethodView):
+    def __init__(self):
+        super().__init__()
+        application = sanic.Sanic.get_app()
+        cache = application.config.CACHE_MAX_AGE
+        self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
+
+    async def get(self, request: Request, curie: str):
+        fields = request.args.get("fields", None)
+        raw = bool(int(request.args.get("raw", 0)))
+        include_extra = bool(int(request.args.get("include_extra", 1)))
+
+        annotator = Annotator()
+        try:
+            annotated_node = annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
+            return sanic.json(annotated_node, headers=self.default_headers)
+        except ValueError as value_err:
+            raise SanicException(status_code=400, message=repr(value_err)) from value_err
+
+
+class CurieLegacyView(HTTPMethodView):
     def __init__(self):
         super().__init__()
         application = sanic.Sanic.get_app()
@@ -135,3 +156,17 @@ class TrapiView(HTTPMethodView):
             return sanic.json(annotated_node, headers=self.default_headers)
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
+
+
+# --- Legacy Redirects ---
+# The /annotator endpoint has been deprcated so we setup these redirects:
+# GET /anotator/<CURIE_ID> -> /curie/<CURIE_ID> (Singular CURIE ID)
+# POST /anotator/ -> /trapi/
+class CurieLegacyView(HTTPMethodView):
+    async def get(self, request: Request, curie: str):
+        return response.redirect("/curie")
+
+
+class TrapiLegacyView(HTTPMethodView):
+    async def post(self, request: Request):
+        return response.redirect("/trapi")
