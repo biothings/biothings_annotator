@@ -12,6 +12,7 @@ from sanic.request import Request
 from sanic import response
 
 from biothings_annotator.annotator import Annotator
+from biothings_annotator.annotator.exceptions import InvalidCurieError, TRAPIInputError
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +56,27 @@ class CurieView(HTTPMethodView):
         include_extra = bool(int(request.args.get("include_extra", 1)))
 
         annotator = Annotator()
+
         try:
             annotated_node = annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
             return sanic.json(annotated_node, headers=self.default_headers)
-        except ValueError as value_err:
-            raise SanicException(status_code=400, message=repr(value_err)) from value_err
+        except InvalidCurieError as curie_err:
+            error_context = {
+                "input": curie,
+                "message": curie_err.message,
+                "supported_nodes": curie_err.supported_biolink_nodes,
+            }
+            curie_error_response = sanic.json(error_context, status=400)
+            return curie_error_response
+        except Exception as exc:
+            error_context = {
+                "input": curie,
+                "endpoint": "/curie/",
+                "message": "Unknown exception occured",
+                "exception": repr(exc),
+            }
+            general_error_response = sanic.json(error_context, status=400)
+            return general_error_response
 
 
 class BatchCurieView(HTTPMethodView):
@@ -102,15 +119,39 @@ class BatchCurieView(HTTPMethodView):
                 "Expected format: {'ids': ['id0', 'id1', ... 'idN']} || ['id0', 'id1', ... 'idN']. "
                 f"Received request body: {body_repr}"
             )
-            raise SanicException(status_code=400, message=message)
+            error_context = {
+                "input": batch_curie_body,
+                "endpoint": "/curie/",
+                "message": message,
+                "supported_nodes": InvalidCurieError.annotator_supported_nodes(),
+            }
+            curie_error_response = sanic.json(error_context, status=400)
+            return curie_error_response
 
         try:
             annotated_node = annotator.annotate_curie_list(
                 curie_list=curie_list, fields=fields, raw=raw, include_extra=include_extra
             )
             return sanic.json(annotated_node, headers=self.default_headers)
-        except ValueError as value_err:
-            raise SanicException(status_code=400, message=repr(value_err)) from value_err
+
+        except InvalidCurieError as curie_err:
+            error_context = {
+                "input": curie_list,
+                "endpoint": "/curie/",
+                "message": curie_err.message,
+                "supported_nodes": curie_err.supported_biolink_nodes,
+            }
+            curie_error_response = sanic.json(error_context, status=400)
+            return curie_error_response
+        except Exception as exc:
+            error_context = {
+                "input": curie_list,
+                "endpoint": "/curie/",
+                "message": "Unknown exception occured",
+                "exception": repr(exc),
+            }
+            general_error_response = sanic.json(error_context, status=400)
+            return general_error_response
 
 
 class TrapiView(HTTPMethodView):
@@ -134,8 +175,24 @@ class TrapiView(HTTPMethodView):
                 trapi_body, fields=fields, raw=raw, append=append, limit=limit, include_extra=include_extra
             )
             return sanic.json(annotated_node, headers=self.default_headers)
-        except ValueError as value_err:
-            raise SanicException(status_code=400, message=repr(value_err)) from value_err
+        except TRAPIInputError as trapi_input_error:
+            error_context = {
+                "input": trapi_input_error.input_structure,
+                "expected_structure": trapi_input_error.expected_structure,
+                "endpoint": "/trapi/",
+                "message": trapi_input_error.message,
+            }
+            trapi_input_error_response = sanic.json(error_context, status=400)
+            return trapi_input_error_response
+        except Exception as exc:
+            error_context = {
+                "input": trapi_body,
+                "endpoint": "/trapi/",
+                "message": "Unknown exception occured",
+                "exception": repr(exc),
+            }
+            general_error_response = sanic.json(error_context, status=400)
+            return general_error_response
 
 
 # --- Legacy Redirects ---
