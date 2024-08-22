@@ -22,6 +22,7 @@ from sanic.worker.loader import AppLoader
 from biothings_annotator.application.views import build_routes
 from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.exceptions import build_exception_handers
+from biothings_annotator.application.metadata import apply_openapi_metadata
 
 
 logging.basicConfig()
@@ -136,6 +137,8 @@ def get_application(configuration: dict = None) -> Sanic:
             logger.exception(gen_exc)
             logger.error("Unable to add exception handler %s", exception_handler)
             raise gen_exc
+
+    apply_openapi_metadata(application)
 
     return application
 

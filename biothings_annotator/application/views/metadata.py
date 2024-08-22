@@ -1,25 +1,14 @@
+"""
+Metadata routes
+"""
+
 import tempfile
-from textwrap import dedent
 
 from sanic import file, text
 from sanic.request import Request
 import yaml
 
 from sanic_ext.extensions.openapi.builders import SpecificationBuilder
-
-
-# app.ext.openapi.describe(
-#     "Biothings Annotator Service",
-#     version="1.2.3",
-#     description=dedent(
-#         """
-#         # Info
-#         This is a description. It is a good place to add some _extra_ documentation.
-
-#         **MARKDOWN** is supported.
-#         """
-#     ),
-# )
 
 
 async def metadata(request: Request) -> text:
