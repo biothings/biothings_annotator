@@ -66,7 +66,7 @@ class CurieView(HTTPMethodView):
                 "message": curie_err.message,
                 "supported_nodes": curie_err.supported_biolink_nodes,
             }
-            curie_error_response = sanic.json(error_context, status_code=400)
+            curie_error_response = sanic.json(error_context, status=400)
             return curie_error_response
         except Exception as exc:
             error_context = {
@@ -75,7 +75,7 @@ class CurieView(HTTPMethodView):
                 "message": "Unknown exception occured",
                 "exception": repr(exc),
             }
-            general_error_response = sanic.json(error_context, status_code=400)
+            general_error_response = sanic.json(error_context, status=400)
             return general_error_response
 
 
@@ -125,7 +125,7 @@ class BatchCurieView(HTTPMethodView):
                 "message": message,
                 "supported_nodes": curie_err.supported_biolink_nodes,
             }
-            curie_error_response = sanic.json(error_context, status_code=400)
+            curie_error_response = sanic.json(error_context, status=400)
             return curie_error_response
 
         try:
@@ -141,7 +141,7 @@ class BatchCurieView(HTTPMethodView):
                 "message": curie_err.message,
                 "supported_nodes": curie_err.supported_biolink_nodes,
             }
-            curie_error_response = sanic.json(error_context, status_code=400)
+            curie_error_response = sanic.json(error_context, status=400)
             return curie_error_response
         except Exception as exc:
             error_context = {
@@ -150,7 +150,7 @@ class BatchCurieView(HTTPMethodView):
                 "message": "Unknown exception occured",
                 "exception": repr(exc),
             }
-            general_error_response = sanic.json(error_context, status_code=400)
+            general_error_response = sanic.json(error_context, status=400)
             return general_error_response
 
 
@@ -182,7 +182,7 @@ class TrapiView(HTTPMethodView):
                 "endpoint": "/trapi/",
                 "message": trapi_input_error.message,
             }
-            trapi_input_error_response = sanic.json(error_context, status_code=400)
+            trapi_input_error_response = sanic.json(error_context, status=400)
             return trapi_input_error_response
         except Exception as exc:
             error_context = {
@@ -191,7 +191,7 @@ class TrapiView(HTTPMethodView):
                 "message": "Unknown exception occured",
                 "exception": repr(exc),
             }
-            general_error_response = sanic.json(error_context, status_code=400)
+            general_error_response = sanic.json(error_context, status=400)
             return general_error_response
 
 
