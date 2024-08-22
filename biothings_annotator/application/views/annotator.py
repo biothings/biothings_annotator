@@ -9,6 +9,7 @@ import sanic
 from sanic.views import HTTPMethodView
 from sanic.exceptions import SanicException
 from sanic.request import Request
+from sanic import response
 
 from biothings_annotator.annotator import Annotator
 
@@ -135,3 +136,20 @@ class TrapiView(HTTPMethodView):
             return sanic.json(annotated_node, headers=self.default_headers)
         except ValueError as value_err:
             raise SanicException(status_code=400, message=repr(value_err)) from value_err
+
+
+# --- Legacy Redirects ---
+# The /annotator endpoint has been deprcated so we setup these redirects:
+# GET /anotator/<CURIE_ID> -> /curie/<CURIE_ID> (Singular CURIE ID)
+# POST /anotator/ -> /trapi/
+class CurieLegacyView(HTTPMethodView):
+    async def get(self, request: Request, curie: str):
+        redirect_response = response.redirect(f"/curie/{curie}", status=302)
+        return redirect_response
+
+
+class TrapiLegacyView(HTTPMethodView):
+    async def post(self, request: Request):
+        trapi_view = TrapiView()
+        redirect_response = await trapi_view.post(request)
+        return redirect_response
