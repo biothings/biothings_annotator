@@ -144,9 +144,12 @@ class TrapiView(HTTPMethodView):
 # POST /anotator/ -> /trapi/
 class CurieLegacyView(HTTPMethodView):
     async def get(self, request: Request, curie: str):
-        return response.redirect(f"/curie/{curie}")
+        redirect_response = response.redirect(f"/curie/{curie}", status=302)
+        return redirect_response
 
 
 class TrapiLegacyView(HTTPMethodView):
     async def post(self, request: Request):
-        return response.redirect("/trapi")
+        trapi_view = TrapiView()
+        redirect_response = await trapi_view.post(request)
+        return redirect_response
