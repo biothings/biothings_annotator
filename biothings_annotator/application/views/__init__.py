@@ -1,4 +1,4 @@
-from .annotator import StatusView, BatchCurieView, CurieView, TrapiView
+from .annotator import StatusView, BatchCurieView, CurieView, TrapiView, CurieLegacyView, TrapiLegacyView
 
 
 def build_routes() -> list[dict]:

@@ -41,6 +41,12 @@ async def compress_response(
 
     After that we verify that it makes sense to compress the response by checking
     metrics like size and response status before modifying the state of the response
+
+    We change the default compression for brotli from 11 to 8 due to the large amount
+    of time required to achieve the compression at 11. This is a tradeoff to improve
+    time versus size, however it's likely going to signifcantly improve time with only
+    a slight decrease in time
+    https://github.com/google/brotli/issues/1138
     """
     accept_encoding = request.headers.get("Accept-Encoding", "")
     accepted_encoding = {encoding.strip() for encoding in accept_encoding.split(",")}
@@ -66,7 +72,7 @@ async def compress_response(
     if compression_supported and content_type_supported and successful_status and valid_minimum_size:
         logger.debug("Attempting to compress the response body")
         try:
-            compressed_body = brotli.compress(response.body)
+            compressed_body = brotli.compress(response.body, quality=8)
         except Exception:
             logger.exception(compressed_body)
             logger.error("Unable to compress the response. Returning uncompressed response. Response: %s", response)
