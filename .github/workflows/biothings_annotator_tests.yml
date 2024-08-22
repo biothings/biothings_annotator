@@ -4,7 +4,7 @@ on:
   push: {}
   pull_request:
     branches:
-      - main
+      - add-github-action-for-testing
 
 jobs:
   run_user_geneset_tests:
@@ -26,18 +26,7 @@ jobs:
         run: python -m venv .venv
       - name: Source Python Virtual Environment
         run: source .venv/bin/activate
-      - name: Install PyTest
-        run: pip install pytest
-      - name: Install Sanic
-        run: pip install sanic
-      - name: Install biothings_client
-        run: pip install biothings_client
-      - name: Install brotli
-        run: pip install brotli
-      - name: Install sanic_testing
-        run: pip install sanic_testing
-      - name: Run Tests - Curie
-        run: python -m pytest tests/test_curie.py
-      # - name: Setup tmate debug session on failure
-      #   if: ${{ failure() }}
-      #   uses: mxschmitt/action-tmate@v3
+      - name: Install dependences
+        run: pip install -e ".[tests]"
+      - name: Run Tests
+        run: python -m pytest tests/
