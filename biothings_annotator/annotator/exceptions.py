@@ -11,8 +11,16 @@ class TRAPIInputError(ValueError):
 
 class InvalidCurieError(ValueError):
     def __init__(self, curie: str):
-        self.supported_biolink_nodes = list(BIOLINK_PREFIX_to_BioThings.keys())
+        self.supported_biolink_nodes = InvalidCurieError.annotator_supported_nodes()
         self.message = f"Unsupported CURIE id: {curie}. "
         if ":" not in curie:
             self.message += "Invalid structure for the provided CURIE id. Expected form <node>:<id>"
         super().__init__()
+
+    @staticmethod
+    def annotator_supported_nodes() -> list:
+        """
+        Returns the list of supported nodes in the annotator service
+        based off the biolink prefix
+        """
+        return list(BIOLINK_PREFIX_to_BioThings.keys())

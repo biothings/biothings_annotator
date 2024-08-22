@@ -123,7 +123,7 @@ class BatchCurieView(HTTPMethodView):
                 "input": batch_curie_body,
                 "endpoint": "/curie/",
                 "message": message,
-                "supported_nodes": curie_err.supported_biolink_nodes,
+                "supported_nodes": InvalidCurieError.annotator_supported_nodes(),
             }
             curie_error_response = sanic.json(error_context, status=400)
             return curie_error_response
