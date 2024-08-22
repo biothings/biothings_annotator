@@ -91,7 +91,7 @@ class Annotator:
         """
         node_type, _id = parse_curie(curie)
         if not node_type:
-            raise InvalidCurieError(f"Unsupported Curie prefix: {curie}")
+            raise InvalidCurieError(curie)
         res = self.query_biothings(node_type, [_id], fields=fields)
         if not raw:
             res = self.transform(res, node_type)
@@ -177,7 +177,7 @@ class Annotator:
             node_d = get_dotfield_value("message.knowledge_graph.nodes", trapi_input)
             assert isinstance(node_d, dict)
         except (KeyError, ValueError, AssertionError):
-            raise TRAPIInputError("Invalid input format")
+            raise TRAPIInputError(trapi_input)
 
         # if limit is set, we truncate the node_d to that size
         if limit:
@@ -236,7 +236,7 @@ class Annotator:
             node_d = get_dotfield_value("message.knowledge_graph.nodes", trapi_input)
             assert isinstance(node_d, dict)
         except (KeyError, ValueError, AssertionError):
-            raise TRAPIInputError("Invalid input format")
+            raise TRAPIInputError(trapi_input)
 
         # if limit is set, we truncate the node_d to that size
         if limit:

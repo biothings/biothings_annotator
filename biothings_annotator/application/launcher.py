@@ -21,6 +21,7 @@ from sanic.worker.loader import AppLoader
 
 from biothings_annotator.application.views import build_routes
 from biothings_annotator.application.middleware import build_middleware
+from biothings_annotator.application.exceptions import build_exception_handers
 
 
 logging.basicConfig()
@@ -125,6 +126,15 @@ def get_application(configuration: dict = None) -> Sanic:
         except Exception as gen_exc:
             logger.exception(gen_exc)
             logger.error("Unable to add middleware %s", middleware)
+            raise gen_exc
+
+    exception_handlers = build_exception_handers()
+    for exception_handler in exception_handlers:
+        try:
+            application.error_handler.add(**exception_handler)
+        except Exception as gen_exc:
+            logger.exception(gen_exc)
+            logger.error("Unable to add exception handler %s", exception_handler)
             raise gen_exc
 
     return application
