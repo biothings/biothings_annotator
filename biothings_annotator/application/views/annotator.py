@@ -10,6 +10,7 @@ from sanic.views import HTTPMethodView
 from sanic.exceptions import SanicException
 from sanic.request import Request
 from sanic import response
+from sanic_ext import openapi
 
 from biothings_annotator.annotator import Annotator
 from biothings_annotator.annotator.exceptions import InvalidCurieError, TRAPIInputError
@@ -25,6 +26,18 @@ class StatusView(HTTPMethodView):
         self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
 
     async def get(self, _: Request):
+        """
+        openapi:
+        ---
+        summary: Checks the health status of the annotator service
+        responses:
+          '200':
+            description: A successful network status check
+            content:
+              application/json:
+          '400':
+            description: An unsuccessful network status check
+        """
         curie = "NCBIGene:1017"
         fields = "_id"
 
@@ -51,6 +64,56 @@ class CurieView(HTTPMethodView):
         self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
 
     async def get(self, request: Request, curie: str):
+        """
+        openapi:
+        ---
+        summary: Retrieve annotation objects based on a CURIE ID
+        parameters:
+        - description: Retrieve expanded annotation object based on a given curie ID.
+          example: "NCBIGene:695"
+          curie:
+            description: CURIE id value in the form <node>:<id>
+            in: path
+            name: curie
+            required: true
+            schema:
+              type: string
+          append:
+            description: 'When true, append annotations to the existing "attributes" field, otherwise, overwrite the existing "attributes" field. Defaults to false'
+            in: query
+            name: append
+            required: false
+            schema:
+              type: boolean
+          raw:
+            description: 'When true, return annotation fields in their original data structure before transformation. Useful for debugging. Defaults to false'
+            in: query
+            name: raw
+            required: false
+            schema:
+              type: boolean
+          fields:
+            description: Comma-separated fields to override the default set of annotation fields, or passing "fields=all" to return all available fields from the original annotation source. Defaults to none'
+            in: query
+            name: fields
+            required: false
+            schema:
+              type: string
+          include_extra:
+            description: 'When true, leverage external API(s) data to include additional annotation information in the response. Defaults to true'
+            in: query
+            name: append
+            required: false
+            schema:
+              type: boolean
+          responses:
+            '200':
+              description: A matching annotation object
+              content:
+                application/json:
+            '400':
+              description: A response indicating an unknown or unsupported curie ID
+        """
         fields = request.args.get("fields", None)
         raw = bool(int(request.args.get("raw", 0)))
         include_extra = bool(int(request.args.get("include_extra", 1)))
@@ -88,17 +151,61 @@ class BatchCurieView(HTTPMethodView):
 
     async def post(self, request: Request):
         """
-        CURIE body supports two forms
+        openapi:
+        ---
+        post:
+          summary: For a list of curie IDs, return the expanded annotation objects
+          parameters:
+          - description: Retrieve expanded annotation object based on a given curie ID.
+            example: "NCBIGene:695"
+          append:
+            description: 'When true, append annotations to the existing "attributes" field, otherwise, overwrite the existing "attributes" field. Defaults to false'
+            in: query
+            name: append
+            required: false
+            schema:
+              type: boolean
+          raw:
+            description: 'When true, return annotation fields in their original data structure before transformation. Useful for debugging. Defaults to false'
+            in: query
+            name: raw
+            required: false
+            schema:
+              type: boolean
+          fields:
+            description: Comma-separated fields to override the default set of annotation fields, or passing "fields=all" to return all available fields from the original annotation source. Defaults to none'
+            in: query
+            name: fields
+            required: false
+            schema:
+              type: string
+          include_extra:
+            description: 'When true, leverage external API(s) data to include additional annotation information in the response. Defaults to true'
+            in: query
+            name: append
+            required: false
+            schema:
+              type: boolean
+          requestBody:
+            content:
+              application/json:
+                schema:
+                  properties:
+                    ids:
+                      description: 'multiple association IDs separated by comma. Note that currently we only take the input ids up to 1000 maximum, the rest will be omitted. Type: string (list). Max: 1000.'
+                      type: string
+                  required:
+                  - ids
+          responses:
+            '200':
+              description: A list of matching annotation objects
+              content:
+                application/json:
+            '400':
+              description: A response indicating an improperly formatted query
+              content:
+                application/json:
 
-        {
-            "ids": []
-        }
-
-        OR
-
-        [
-            ...
-        ]
         """
         fields = request.args.get("fields", None)
         raw = request.args.get("raw", False)
@@ -162,6 +269,54 @@ class TrapiView(HTTPMethodView):
         self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
 
     async def post(self, request: Request):
+        """
+        openapi:
+        ---
+        post:
+        summary: Provides an annotated response based off the TRAPI body provided
+        parameters:
+        - description: Retrieve expanded annotation object based on TRAPI input
+          append:
+            description: 'When true, append annotations to the existing "attributes" field, otherwise, overwrite the existing "attributes" field. Defaults to false'
+            in: query
+            name: append
+            required: false
+            schema:
+              type: boolean
+          raw:
+            description: 'When true, return annotation fields in their original data structure before transformation. Useful for debugging. Defaults to false'
+            in: query
+            name: raw
+            required: false
+            schema:
+              type: boolean
+          fields:
+            description: Comma-separated fields to override the default set of annotation fields, or passing "fields=all" to return all available fields from the original annotation source. Defaults to none'
+            in: query
+            name: fields
+            required: false
+            schema:
+              type: string
+          include_extra:
+            description: 'When true, leverage external API(s) to include additional annotation information in the response. Defaults to true'
+            in: query
+            name: append
+            required: false
+            schema:
+              type: boolean
+        requestBody:
+          content:
+            application/json:
+        responses:
+          '200':
+            description: A list of matching annotation objects
+            content:
+              application/json:
+          '400':
+            description: A response indicating an improperly formatted query
+            content:
+              application/json:
+        """
         fields = request.args.get("fields", None)
         raw = bool(int(request.args.get("raw", 0)))
         append = bool(int(request.args.get("append", 0)))
@@ -199,12 +354,14 @@ class TrapiView(HTTPMethodView):
 # The /annotator endpoint has been deprcated so we setup these redirects:
 # GET /anotator/<CURIE_ID> -> /curie/<CURIE_ID> (Singular CURIE ID)
 # POST /anotator/ -> /trapi/
+@openapi.deprecated()
 class CurieLegacyView(HTTPMethodView):
     async def get(self, request: Request, curie: str):
         redirect_response = response.redirect(f"/curie/{curie}", status=302)
         return redirect_response
 
 
+@openapi.deprecated()
 class TrapiLegacyView(HTTPMethodView):
     async def post(self, request: Request):
         trapi_view = TrapiView()

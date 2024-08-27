@@ -1,5 +1,5 @@
 from .annotator import StatusView, BatchCurieView, CurieView, TrapiView, CurieLegacyView, TrapiLegacyView
-from .metadata import metadata, metadata_file
+from .metadata import metadata
 
 
 def build_routes() -> list[dict]:
@@ -44,10 +44,8 @@ def build_routes() -> list[dict]:
     trapi_route_main = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint"}
     trapi_route_mirror = {"handler": TrapiLegacyView.as_view(), "uri": "/annotator/", "name": "trapi_endpoint_mirror"}
 
-
     # --- METADATA ROUTES ---
     metadata_route = {"handler": metadata, "uri": "/metadata/", "name": "metadata"}
-    metadata_file_route = {"handler": metadata_file, "uri": "/metadata/file", "name": "metadata_file"}
 
     route_collection = [
         status_route_main,
@@ -57,6 +55,5 @@ def build_routes() -> list[dict]:
         trapi_route_main,
         trapi_route_mirror,
         metadata_route,
-        metadata_file_route
     ]
     return route_collection
