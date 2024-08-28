@@ -63,8 +63,12 @@ def temporary_data_storage(tmp_path_factory, request) -> Path:
 
 
 @pytest.fixture(scope="session")
-def trapi_request(temporary_data_storage) -> dict:
-    test_trapi_request_file = temporary_data_storage.joinpath("trapi_request.json")
-    with open(str(test_trapi_request_file), "r", encoding="utf-8") as file_handle:
-        trapi_request = json.load(file_handle)
-        return trapi_request
+def data_store(temporary_data_storage, request):
+    """
+    Used for accessing data files stored on the file system used for tests
+    """
+    data_file_name = str(request.param)
+    data_file_path = temporary_data_storage.joinpath(data_file_name)
+    with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+        data_content = json.load(file_handle)
+        return data_content

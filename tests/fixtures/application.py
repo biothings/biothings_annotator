@@ -11,7 +11,7 @@ def test_annotator() -> sanic.Sanic:
     Generate an application instance from the biothings_annotator
     """
     default_configuration = load_configuration()
-    default_configuration["application"]["runtime"]["debug"] = True
+    default_configuration["application"]["runtime"]["debug"] = False
     default_configuration["application"]["runtime"]["port"] = 7777
     test_application = get_application(default_configuration)
     return test_application
