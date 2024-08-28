@@ -15,6 +15,12 @@ def build_middleware() -> list[dict]:
         priority: Union[Default, int] = _default,
     ) -> Union[MiddlewareType, Middleware]:
     """
-    compression_middleware = {"middleware": compress_response, "attach_to": "response"}
-    middleware_collection = [compression_middleware]
+
+    # Temporarily removing the middleware compression due to 502 gateway errors
+    # Date: August 28th 2024
+
+    # compression_middleware = {"middleware": compress_response, "attach_to": "response"}
+    # middleware_collection = [compression_middleware]
+
+    middleware_collection = []
     return middleware_collection
