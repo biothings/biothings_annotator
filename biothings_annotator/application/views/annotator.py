@@ -107,6 +107,7 @@ class BatchCurieView(HTTPMethodView):
         annotator = Annotator()
         batch_curie_body = request.json
 
+        curie_list = []
         if isinstance(batch_curie_body, dict):
             curie_list = batch_curie_body.get("ids", [])
         elif isinstance(batch_curie_body, list):
