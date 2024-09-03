@@ -2,6 +2,9 @@
 Tests the TRAPI request parsing capability for the biothings annotation package
 """
 
+import json
+from pathlib import Path
+from typing import Union
 import logging
 
 import pytest
@@ -57,20 +60,24 @@ class TestTrapiAnnotation:
 
     annotation_instance = Annotator()
 
-    @pytest.mark.parametrize("data_store", [["trapi_request.json"]], indirect=True)
-    def test_default(self, data_store: dict):
+    @pytest.mark.parametrize("data_store", ["trapi_request.json"])
+    def test_default(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
         Tests the TRAPI annotation method with default arguments
         """
+        data_file_path = temporary_data_storage.joinpath(data_store)
+        with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+            trapi_data = json.load(file_handle)
+
         append = False
         raw = False
         fields = None
         limit = None
 
         annotation = self.annotation_instance.annotate_trapi(
-            trapi_input=data_store, append=append, raw=raw, fields=fields, limit=limit
+            trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
         )
-        node_set = set(data_store["message"]["knowledge_graph"]["nodes"].keys())
+        node_set = set(trapi_data["message"]["knowledge_graph"]["nodes"].keys())
         assert isinstance(annotation, dict)
         for key, attribute in annotation.items():
             assert key in node_set
@@ -100,20 +107,24 @@ class TestTrapiAnnotation:
                             score = values.get("_score", None)
                             assert score is not None
 
-    @pytest.mark.parametrize("data_store", [["trapi_request.json"]], indirect=True)
-    def test_append(self, data_store: dict):
+    @pytest.mark.parametrize("data_store", ["trapi_request.json"])
+    def test_append(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
         Tests the TRAPI annotation method with append enabled
         """
+        data_file_path = temporary_data_storage.joinpath(data_store)
+        with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+            trapi_data = json.load(file_handle)
+
         append = True
         raw = False
         fields = None
         limit = None
 
         annotation = self.annotation_instance.annotate_trapi(
-            trapi_input=data_store, append=append, raw=raw, fields=fields, limit=limit
+            trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
         )
-        node_set = set(data_store["message"]["knowledge_graph"]["nodes"].keys())
+        node_set = set(trapi_data["message"]["knowledge_graph"]["nodes"].keys())
         assert isinstance(annotation, dict)
         for key, attribute in annotation.items():
             assert key in node_set
@@ -142,20 +153,24 @@ class TestTrapiAnnotation:
                             score = values.get("_score", None)
                             assert score is not None
 
-    @pytest.mark.parametrize("data_store", [["trapi_request.json"]], indirect=True)
-    def test_raw(self, data_store: dict):
+    @pytest.mark.parametrize("data_store", ["trapi_request.json"])
+    def test_raw(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
         Tests the TRAPI annotation method with raw enabled
         """
+        data_file_path = temporary_data_storage.joinpath(data_store)
+        with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+            trapi_data = json.load(file_handle)
+
         append = False
         raw = True
         fields = None
         limit = None
 
         annotation = self.annotation_instance.annotate_trapi(
-            trapi_input=data_store, append=append, raw=raw, fields=fields, limit=limit
+            trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
         )
-        node_set = set(data_store["message"]["knowledge_graph"]["nodes"].keys())
+        node_set = set(trapi_data["message"]["knowledge_graph"]["nodes"].keys())
         assert isinstance(annotation, dict)
         for key, attribute in annotation.items():
             assert key in node_set
@@ -184,20 +199,24 @@ class TestTrapiAnnotation:
                             score = values.get("_score", None)
                             assert score is not None
 
-    @pytest.mark.parametrize("data_store", [["trapi_request.json"]], indirect=True)
-    def test_append_and_raw(self, data_store: dict):
+    @pytest.mark.parametrize("data_store", ["trapi_request.json"])
+    def test_append_and_raw(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
         Tests the TRAPI annotation method with append & raw enabled
         """
+        data_file_path = temporary_data_storage.joinpath(data_store)
+        with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+            trapi_data = json.load(file_handle)
+
         append = True
         raw = True
         fields = None
         limit = None
 
         annotation = self.annotation_instance.annotate_trapi(
-            trapi_input=data_store, append=append, raw=raw, fields=fields, limit=limit
+            trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
         )
-        node_set = set(data_store["message"]["knowledge_graph"]["nodes"].keys())
+        node_set = set(trapi_data["message"]["knowledge_graph"]["nodes"].keys())
         assert isinstance(annotation, dict)
         for key, attribute in annotation.items():
             assert key in node_set

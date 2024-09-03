@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 import sanic
@@ -212,13 +213,17 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Uni
     assert response.encoding == "utf-8"
 
 
-@pytest.mark.parametrize("data_store", [["trapi_request.json"]], indirect=True)
-def test_trapi_post(test_annotator: sanic.Sanic, data_store: dict):
+@pytest.mark.parametrize("data_store", ["trapi_request.json"])
+def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict):
     """
     Tests the POST endpoints for our annotation service
     """
+    data_file_path = temporary_data_storage.joinpath(data_store)
+    with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+        trapi_body = json.load(file_handle)
+
     endpoint = "/trapi/"
-    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=data_store)
+    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=trapi_body)
 
     assert request.method == "POST"
     assert request.query_string == ""
@@ -233,7 +238,7 @@ def test_trapi_post(test_annotator: sanic.Sanic, data_store: dict):
     assert response.status_code == 200
     assert response.encoding == "utf-8"
 
-    node_set = set(data_store["message"]["knowledge_graph"]["nodes"].keys())
+    node_set = set(trapi_body["message"]["knowledge_graph"]["nodes"].keys())
 
     annotation = response.json
     assert isinstance(annotation, dict)
@@ -337,14 +342,20 @@ def test_annotator_get_redirect(test_annotator: sanic.Sanic):
     assert response.encoding == "utf-8"
 
 
-@pytest.mark.parametrize("data_store", [["trapi_request.json"]], indirect=True)
-def test_annotator_post_redirect(test_annotator: sanic.Sanic, data_store: dict):
+@pytest.mark.parametrize("data_store", ["trapi_request.json"])
+def test_annotator_post_redirect(
+    temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict
+):
     """
     Tests the annotator redirect for the /trapi/ POST endpoint
     """
+    data_file_path = temporary_data_storage.joinpath(data_store)
+    with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+        trapi_body = json.load(file_handle)
+
     endpoint = "/annotator/"
     request, response = test_annotator.test_client.request(
-        endpoint, http_method="post", json=data_store, follow_redirects=True, allow_redirects=True
+        endpoint, http_method="post", json=trapi_body, follow_redirects=True, allow_redirects=True
     )
 
     assert request.method == "POST"
@@ -360,7 +371,7 @@ def test_annotator_post_redirect(test_annotator: sanic.Sanic, data_store: dict):
     assert response.status_code == 200
     assert response.encoding == "utf-8"
 
-    node_set = set(data_store["message"]["knowledge_graph"]["nodes"].keys())
+    node_set = set(trapi_body["message"]["knowledge_graph"]["nodes"].keys())
 
     annotation = response.json
     assert isinstance(annotation, dict)
