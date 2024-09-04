@@ -29,7 +29,8 @@
             "port": 9000,
             "debug": false,
             "single_process": false,
-            "auto_reload": true
+            "auto_reload": true,
+            "workers": 16
         }
     }
 }
