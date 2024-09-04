@@ -12,6 +12,7 @@ versus the CI environment | https://annotator.ci.transltr.io
 from pathlib import Path
 from typing import Union
 import asyncio
+import collections
 import json
 import logging
 import multiprocessing
@@ -133,7 +134,9 @@ def test_multiple_users_querying(
         user_query["identifier"] = str(uuid.uuid4())
 
     integration_futures = {}
-    integration_url = "https://annotator.ci.transltr.io"
+    # integration_url = "https://annotator.ci.transltr.io"
+    integration_url = "https://biothings.ncats.io"
+    # integration_url = "http://0.0.0.0:9000"
     with multiprocessing.Pool(num_workers) as worker_pool:
         for index, user_query in enumerate(query_list):
             http_request = user_query["request"]
@@ -147,9 +150,9 @@ def test_multiple_users_querying(
 
             data = None
             if body != "":
-                data = json.loads(body)
+                data = body
 
-            worker_request_arguments = {"url": f"{integration_url}{endpoint}", "data": data}
+            worker_request_arguments = {"url": f"{integration_url}{endpoint}", "data": data, "timeout": 600}
 
             logger.info("Spawning process #%s -> %s", index, worker_request_arguments["url"])
             async_integration_future = worker_pool.apply_async(httpcallback, kwds=worker_request_arguments)
@@ -162,7 +165,108 @@ def test_multiple_users_querying(
         for unique_identifier in unique_identifiers:
             integration_future = integration_futures[unique_identifier]
             integration_response = integration_future.get()
-            logger.info("Recieved response %s", unique_identifier)
+            response_struct = {
+                "uuid": unique_identifier,
+                "status": integration_response.status_code,
+            }
+            logger.info("Recieved response %s", response_struct)
+
+
+@pytest.mark.parametrize(
+    "delay",
+    [1e-9, 1e-6, 1e-3],
+)
+def test_bulk_get(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: str, delay: float):
+    """
+    Bulk GET testing to attempt and overload the system to get a gateway error with
+    the server instance
+    """
+    iterations = 1000
+    endpoint = "/curie/NCBIGene:1017"
+    num_workers = 16
+
+    # integration_url = "https://annotator.ci.transltr.io"
+    integration_url = "https://biothings.ncats.io"
+    # integration_url = "http://0.0.0.0:9000"
+
+    bulk_requests = {}
+    for index in range(iterations):
+        bulk_requests[str(uuid.uuid4())] = {"url": f"{integration_url}{endpoint}", "timeout": 30}
+
+    integration_futures = {}
+    with multiprocessing.Pool(num_workers) as worker_pool:
+        for index, (request_uuid, request_args) in enumerate(bulk_requests.items()):
+            logger.info("Spawning process #%s -> %s", index, request_args["url"])
+            async_integration_future = worker_pool.apply_async(requests.get, kwds=request_args)
+
+            integration_futures[request_uuid] = async_integration_future
+            random_delay = random.random() * delay
+            time.sleep(random_delay)
+
+        collector = collections.defaultdict(list)
+        for index, request_uuid in enumerate(bulk_requests.keys()):
+            integration_future = integration_futures[request_uuid]
+            integration_response = integration_future.get()
+            collector[integration_response.status_code].append(integration_response)
+            logger.info("Recieved response iteration #%s", index)
+
+    assert len(collector[200]) == iterations
+
+
+@pytest.mark.parametrize(
+    "data_store, delay, num_workers",
+    [
+        ("bulk_post.json", 1e-9, 8),
+        ("bulk_post.json", 1e-6, 8),
+        ("bulk_post.json", 1e-9, 16),
+        ("bulk_post.json", 1e-6, 16),
+    ],
+)
+def test_bulk_post(
+    temporary_data_storage: Union[str, Path],
+    test_annotator: sanic.Sanic,
+    data_store: str,
+    delay: float,
+    num_workers: int,
+):
+    """
+    Bulk POST testing to attempt and overload the system to get a gateway error with
+    the server instance
+    """
+    data_file_path = temporary_data_storage.joinpath(data_store)
+    with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+        bulk_post_query = json.load(file_handle)
+
+    endpoint = bulk_post_query["endpoint"]
+    iterations = bulk_post_query["iterations"]
+    body = bulk_post_query["body"]
+
+    # integration_url = "https://annotator.ci.transltr.io"
+    integration_url = "https://biothings.ncats.io"
+    # integration_url = "http://0.0.0.0:9000"
+
+    bulk_requests = {}
+    for index in range(iterations):
+        bulk_requests[str(uuid.uuid4())] = {"data": body, "url": f"{integration_url}{endpoint}", "timeout": 30}
+
+    integration_futures = {}
+    with multiprocessing.Pool(num_workers) as worker_pool:
+        for index, (request_uuid, request_args) in enumerate(bulk_requests.items()):
+            logger.info("Spawning process #%s -> %s", index, request_args["url"])
+            async_integration_future = worker_pool.apply_async(requests.post, kwds=request_args)
+
+            integration_futures[request_uuid] = async_integration_future
+            random_delay = random.random() * delay
+            time.sleep(random_delay)
+
+        collector = collections.defaultdict(list)
+        for index, request_uuid in enumerate(bulk_requests.keys()):
+            integration_future = integration_futures[request_uuid]
+            integration_response = integration_future.get()
+            collector[integration_response.status_code].append(integration_response)
+            logger.info("Recieved response iteration #%s", index)
+
+    assert len(collector[200]) == iterations
 
 
 @pytest.mark.parametrize(
@@ -183,7 +287,8 @@ def test_ara_integration_trapi_requests(
     """
     data_file_path = temporary_data_storage.joinpath(data_store)
     with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
-        ara_request = json.load(file_handle)
+        ara_request_struct = json.load(file_handle)
+        ara_request = json.dumps(ara_request_struct)
 
     num_workers = random.choice([4, 8, 16])
     integration_futures = []
@@ -192,7 +297,6 @@ def test_ara_integration_trapi_requests(
 
     with multiprocessing.Pool(num_workers) as worker_pool:
         for worker in range(num_workers):
-            breakpoint()
             integration_future = worker_pool.apply_async(requests.post, kwds=worker_request_arguments)
             logger.info("Spawning process #%s -> %s", worker, worker_request_arguments["url"])
             integration_futures.append(integration_future)
@@ -203,3 +307,4 @@ def test_ara_integration_trapi_requests(
             logger.info("Waiting on future #%s", index)
             ara_response = ara_future.get()
             assert ara_response.status_code == 200
+            logger.info(ara_response.json())
