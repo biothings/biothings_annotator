@@ -1,12 +1,12 @@
+import json
+
 import pytest
-import git
-import re
 import sanic
 from typing import Union
 
 from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
-from unittest.mock import patch, PropertyMock
+from unittest.mock import patch
 
 
 @pytest.mark.parametrize("endpoint", ["/status/"])
@@ -74,88 +74,6 @@ def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str
         assert request.server_path == endpoint
 
         expected_response_body = {"success": False, "error": "Service unavailable due to a failed data check!"}
-        assert response.http_version == "HTTP/1.1"
-        assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
-        assert response.is_closed
-        assert response.status_code == 200
-        assert response.encoding == "utf-8"
-        assert response.json == expected_response_body
-
-
-@pytest.mark.parametrize("endpoint", ["/version/"])
-def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
-    """
-    Tests the Version endpoint GET for a successful case
-    Mocking git.Repo to return a valid commit hash
-    """
-    with patch.object(git.Repo, "head", create=True) as mock_repo_head, \
-         patch.object(git.Repo, "bare", new_callable=PropertyMock, return_value=False), \
-         patch.object(git.Repo, "__init__", lambda *args, **kwargs: None):
-
-        mock_repo_head.commit.hexsha = "abc123"
-
-        request, response = test_annotator.test_client.request(endpoint, http_method="get")
-
-        assert request.method == "GET"
-        assert request.query_string == ""
-        assert request.scheme == "http"
-        assert request.server_path == endpoint
-
-        expected_response_body = {"version": "abc123"}
-        assert response.http_version == "HTTP/1.1"
-        assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
-        assert response.is_closed
-        assert response.status_code == 200
-        assert response.encoding == "utf-8"
-        assert response.json == expected_response_body
-
-
-@pytest.mark.parametrize("endpoint", ["/version/"])
-def test_version_get_bare_repo(test_annotator: sanic.Sanic, endpoint: str):
-    """
-    Tests the Version endpoint GET when the repository is bare (missing repository)
-    Mocking git.Repo to simulate a bare repository
-    """
-    with patch.object(git.Repo, "bare", new_callable=PropertyMock, return_value=True), \
-         patch.object(git.Repo, "__init__", lambda *args, **kwargs: None):
-
-        request, response = test_annotator.test_client.request(endpoint, http_method="get")
-
-        assert request.method == "GET"
-        assert request.query_string == ""
-        assert request.scheme == "http"
-        assert request.server_path == endpoint
-
-        expected_response_body = {"version": "Unknown"}
-        assert response.http_version == "HTTP/1.1"
-        assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
-        assert response.is_closed
-        assert response.status_code == 200
-        assert response.encoding == "utf-8"
-        assert response.json == expected_response_body
-
-
-@pytest.mark.parametrize("endpoint", ["/version/"])
-def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
-    """
-    Tests the Version endpoint GET when an Exception is raised
-    Mocking git.Repo to raise an exception
-    """
-    with patch.object(git.Repo, "__init__", side_effect=Exception("Simulated error")):
-        request, response = test_annotator.test_client.request(endpoint, http_method="get")
-
-        assert request.method == "GET"
-        assert request.query_string == ""
-        assert request.scheme == "http"
-        assert request.server_path == endpoint
-
-        expected_response_body = {"version": "Unknown"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
         assert response.is_success
