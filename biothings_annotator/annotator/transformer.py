@@ -7,8 +7,8 @@ import inspect
 import logging
 import os
 
-from .utils import get_client
 from .settings import SERVICE_PROVIDER_API_HOST
+from .utils import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +28,10 @@ def load_atc_cache(api_host: str):
     if not atc_cache:
         logger.info("Loading WHO ATC code-to-name mapping...")
         atc_client = get_client("extra", api_host)
-        atc_li = atc_client.query("_exists_:code", fields="code,name", fetch_all=True)
+        atc_li = atc_client.query("_exists_:atc.code", fields="atc.code,atc.name", fetch_all=True)
         atc_cache = {}
         for atc in atc_li:
-            atc_cache[atc["code"]] = atc["name"]
+            atc_cache[atc["atc"]["code"]] = atc["atc"]["name"]
         logger.info(f"Loaded {len(atc_cache)} WHO ATC code-to-name mappings.")
     return atc_cache
 
