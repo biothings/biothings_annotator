@@ -85,29 +85,6 @@ def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str
 
 
 @pytest.mark.parametrize("endpoint", ["/version/"])
-def test_version_get_success_hot(test_annotator: sanic.Sanic, endpoint: str):
-    """
-    Tests the Status endpoint GET when the response is HTTP 200
-    """
-    request, response = test_annotator.test_client.request(endpoint, http_method="get")
-
-    assert request.method == "GET"
-    assert request.query_string == ""
-    assert request.scheme == "http"
-    assert request.server_path == endpoint
-
-    assert isinstance(response.json, dict)
-    assert response.http_version == "HTTP/1.1"
-    assert response.content_type == "application/json"
-    assert response.is_success
-    assert not response.is_error
-    assert response.is_closed
-    assert response.status_code == 200
-    assert response.encoding == "utf-8"
-    assert bool(re.match(r"^[0-9a-f]{40}$", response.json["version"]))
-
-
-@pytest.mark.parametrize("endpoint", ["/version/"])
 def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Version endpoint GET for a successful case
