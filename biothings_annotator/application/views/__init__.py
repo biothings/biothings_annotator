@@ -1,4 +1,4 @@
-from .annotator import StatusView, VersionView, BatchCurieView, CurieView, TrapiView, CurieLegacyView, TrapiLegacyView
+from .annotator import StatusView, BatchCurieView, CurieView, TrapiView, CurieLegacyView, TrapiLegacyView
 
 
 def build_routes() -> list[dict]:
@@ -18,13 +18,6 @@ def build_routes() -> list[dict]:
         "handler": StatusView.as_view(),
         "uri": r"/status",
         "name": "status_endpoint",
-    }
-
-    # --- VERSION ROUTE ---
-    status_route_main = {
-        "handler": VersionView.as_view(),
-        "uri": r"/version",
-        "name": "version_endpoint",
     }
 
     # --- CURIE ROUTES ---
