@@ -21,7 +21,7 @@ def build_routes() -> list[dict]:
     }
 
     # --- VERSION ROUTE ---
-    status_route_main = {
+    version_route_main = {
         "handler": VersionView.as_view(),
         "uri": r"/version",
         "name": "version_endpoint",
@@ -52,6 +52,7 @@ def build_routes() -> list[dict]:
 
     route_collection = [
         status_route_main,
+        version_route_main,
         curie_route_main,
         curie_route_mirror,
         batch_curie_route,
