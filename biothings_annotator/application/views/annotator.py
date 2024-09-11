@@ -4,8 +4,6 @@ Translator Node Annotator Service Handler translated to sanic
 
 import logging
 import json
-import pathlib
-import git
 
 import sanic
 from sanic.views import HTTPMethodView
