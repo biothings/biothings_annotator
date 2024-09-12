@@ -1,9 +1,8 @@
 from pathlib import Path
 from typing import Union
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 import json
 
-import git
 import pytest
 import sanic
 
