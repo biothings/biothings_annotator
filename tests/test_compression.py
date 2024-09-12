@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 import sanic
 
+
 @pytest.mark.unit
 def test_get_compression(test_annotator: sanic.Sanic):
     """

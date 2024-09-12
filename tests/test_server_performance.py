@@ -149,7 +149,7 @@ def test_multiple_users_querying(
     "delay",
     [1e-9, 1e-6, 1e-3],
 )
-def test_bulk_get(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: str, delay: float):
+def test_bulk_get(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, delay: float):
     """
     Bulk GET testing to attempt and overload the system to get a gateway error with
     the server instance
