@@ -92,9 +92,9 @@ def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
     Tests the Version endpoint GET for a successful case
     Mocking git.Repo to return a valid commit hash
     """
-    with patch.object(git.Repo, "head", create=True) as mock_repo_head, \
-         patch.object(git.Repo, "bare", new_callable=PropertyMock, return_value=False), \
-         patch.object(git.Repo, "__init__", lambda *args, **kwargs: None):
+    with patch.object(git.Repo, "head", create=True) as mock_repo_head, patch.object(
+        git.Repo, "bare", new_callable=PropertyMock, return_value=False
+    ), patch.object(git.Repo, "__init__", lambda *args, **kwargs: None):
 
         mock_repo_head.commit.hexsha = "abc123"
 
@@ -122,8 +122,9 @@ def test_version_get_bare_repo(test_annotator: sanic.Sanic, endpoint: str):
     Tests the Version endpoint GET when the repository is bare (missing repository)
     Mocking git.Repo to simulate a bare repository
     """
-    with patch.object(git.Repo, "bare", new_callable=PropertyMock, return_value=True), \
-         patch.object(git.Repo, "__init__", lambda *args, **kwargs: None):
+    with patch.object(git.Repo, "bare", new_callable=PropertyMock, return_value=True), patch.object(
+        git.Repo, "__init__", lambda *args, **kwargs: None
+    ):
 
         request, response = test_annotator.test_client.request(endpoint, http_method="get")
 
