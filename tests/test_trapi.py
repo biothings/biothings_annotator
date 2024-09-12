@@ -123,6 +123,14 @@ class TestTrapiAnnotation:
         fields = None
         limit = None
 
+        # With the append flag enabled, the TRAPI annotation will expect the nodes
+        # structure to already have a key labeled "attributes" with some form
+        # iterable as the value. We modify the default structure here to ensure that
+        # structure is maintained for the test
+        nodes = trapi_data["message"]["knowledge_graph"]["nodes"]
+        nodes_list = {key: {"attributes": []} for key in nodes.keys()}
+        trapi_data["message"]["knowledge_graph"]["nodes"] = nodes_list
+
         annotation = self.annotation_instance.annotate_trapi(
             trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
         )
@@ -216,6 +224,14 @@ class TestTrapiAnnotation:
         raw = True
         fields = None
         limit = None
+
+        # With the append flag enabled, the TRAPI annotation will expect the nodes
+        # structure to already have a key labeled "attributes" with some form
+        # iterable as the value. We modify the default structure here to ensure that
+        # structure is maintained for the test
+        nodes = trapi_data["message"]["knowledge_graph"]["nodes"]
+        nodes_list = {key: {"attributes": []} for key in nodes.keys()}
+        trapi_data["message"]["knowledge_graph"]["nodes"] = nodes_list
 
         annotation = self.annotation_instance.annotate_trapi(
             trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
