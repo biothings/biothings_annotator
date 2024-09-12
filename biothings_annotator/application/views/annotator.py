@@ -4,8 +4,6 @@ Translator Node Annotator Service Handler translated to sanic
 
 import logging
 import json
-import pathlib
-import git
 
 import sanic
 from sanic.views import HTTPMethodView
@@ -51,23 +49,25 @@ class VersionView(HTTPMethodView):
         cache = application.config.CACHE_MAX_AGE
         self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
 
+    def open_version_file(self):
+        with open("version.txt", "r") as version_file:
+            version = version_file.read().strip()
+            return version
+
     async def get(self, _: Request):
         try:
-            # Resolve the absolute path to the current file
-            file_path = pathlib.Path(__file__).resolve()
+            version = "Unknown"
 
-            # Use git.Repo to find the root of the repository
-            repo = git.Repo(file_path, search_parent_directories=True)
+            try:
+                version = self.open_version_file()
+            except FileNotFoundError:
+                logger.error("The version.txt file does not exist.")
+            except Exception as exc:
+                logger.error(f"Error getting GitHub commit hash from version.txt file: {exc}")
 
-            if repo.bare:
-                repo_dir = repo.working_tree_dir
-                logger.error(f"Git repository not found in directory: {repo_dir}")
-                result = {"version": "Unknown"}
-                return sanic.json(result)
-
-            commit_hash = repo.head.commit.hexsha  # Get the latest commit hash
-            result = {"version": commit_hash}
+            result = {"version": version}
             return sanic.json(result, headers=self.default_headers)
+
         except Exception as exc:
             logger.error(f"Error getting GitHub commit hash: {exc}")
             result = {"version": "Unknown"}

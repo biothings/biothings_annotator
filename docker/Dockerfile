@@ -5,6 +5,7 @@ ARG ANNOTATOR_BRANCH=main
 
 WORKDIR /build/annotator
 RUN git clone -b ${ANNOTATOR_BRANCH} --recursive ${ANNOTATOR_REPO} .
+RUN git rev-parse HEAD > /build/annotator/version.txt
 RUN pip wheel --wheel-dir=/build/wheels /build/annotator
 
 
@@ -19,7 +20,7 @@ RUN /home/annotator/venv/bin/pip install /home/annotator/wheels/*.whl && rm -rf 
 
 WORKDIR /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/application/configuration/default.json /home/annotator/configuration
-
+COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /home/annotator/configuration/version.txt
 
 STOPSIGNAL SIGINT
 EXPOSE 9999
