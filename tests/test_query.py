@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("node_type", ["gene", "chem", "disease", "phenotype", "NULL"])
 def test_annotation_client(node_type: str):
     """
@@ -35,6 +36,7 @@ def test_annotation_client(node_type: str):
             utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
 def test_biothings_query(curie_prefix: str):
     random_index = random.randint(0, 10000)
@@ -58,6 +60,7 @@ def test_biothings_query(curie_prefix: str):
     logger.info((f"Query Response: {query_response}" f"Query Fields: {domain_fields}"))
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "search_keyword, collection, histogram",
     [

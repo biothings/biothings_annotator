@@ -1,6 +1,13 @@
+from typing import Union
+from pathlib import Path
+import json
+
+import pytest
 import sanic
 
 
+@pytest.mark.unit
+@pytest.mark.xfail(reason="compression middleware disabled")
 def test_get_compression(test_annotator: sanic.Sanic):
     """
     Tests the brotli compression when hitting our GET endpoint
@@ -36,7 +43,10 @@ def test_get_compression(test_annotator: sanic.Sanic):
     assert compressed_response.num_bytes_downloaded < uncompressed_response.num_bytes_downloaded
 
 
-def test_post_compression(test_annotator: sanic.Sanic, trapi_request: dict):
+@pytest.mark.unit
+@pytest.mark.parametrize("data_store", ["trapi_request.json"])
+@pytest.mark.xfail(reason="compression middleware disabled")
+def test_post_compression(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict):
     """
     Tests the brotli compression when hitting our POST endpoint
     annotating a TRAPI request
@@ -46,19 +56,22 @@ def test_post_compression(test_annotator: sanic.Sanic, trapi_request: dict):
     compressed   response size : 135222  bytes
     uncompressed response size : 3075763 bytes
     """
+    data_file_path = temporary_data_storage.joinpath(data_store)
+    with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+        request_body = json.load(file_handle)
+
     url = "/trapi/?include_extra=0"
     empty_compression_headers = {"Accept-Encoding": ""}
     uncompressed_request, uncompressed_response = test_annotator.test_client.request(
-        url, http_method="post", json=trapi_request, headers=empty_compression_headers
+        url, http_method="post", json=request_body, headers=empty_compression_headers
     )
     assert uncompressed_request.headers["Accept-Encoding"] == empty_compression_headers["Accept-Encoding"]
 
     compressed_headers = {"Accept-Encoding": "br, gzip, deflate"}
     compressed_request, compressed_response = test_annotator.test_client.request(
-        url, http_method="post", json=trapi_request, headers=compressed_headers
+        url, http_method="post", json=request_body, headers=compressed_headers
     )
     assert compressed_request.headers["Accept-Encoding"] == compressed_headers["Accept-Encoding"]
-    # {'values_changed': {"root['NCBIGene:284217']['attributes'][0]['value'][0]['_score']": {'new_value': 26.179539, 'old_value': 26.179554}}}
 
     compressed_body = compressed_response.json
     uncompressed_body = uncompressed_response.json

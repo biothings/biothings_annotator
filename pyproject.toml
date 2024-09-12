@@ -47,6 +47,7 @@ dependencies = [
 [project.optional-dependencies]
 tests = [
     "pytest >= 8.1.1",
+    "pytest-asyncio >= 0.23.8",
     "sanic-testing >= 24.6.0"
 ]
 
@@ -105,7 +106,10 @@ norecursedirs = [
 ]
 testpaths = ["test"]
 
-markers = []
+markers = [
+    "unit",
+    "performance"
+]
 
 # Logging
 log_cli = true
