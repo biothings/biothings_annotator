@@ -1,14 +1,17 @@
+from pathlib import Path
+from typing import Union
+from unittest.mock import MagicMock, patch
 import json
 
 import pytest
 import sanic
-from typing import Union
 
 from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
-from unittest.mock import patch
+from biothings_annotator.application.views import VersionView
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/status/"])
 def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -33,6 +36,7 @@ def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     assert response.json == expected_response_body
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/status/"])
 def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -58,6 +62,7 @@ def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         assert response.json == expected_response_body
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/status/"])
 def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -84,6 +89,91 @@ def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str
         assert response.json == expected_response_body
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("endpoint", ["/version/"])
+def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
+    """
+    Test the Version endpoint GET method with a successful file read
+    """
+    with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
+        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+
+        mock_file_read.assert_called_once()
+
+        assert request.method == "GET"
+        assert response.status_code == 200
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        expected_response_body = {"version": "GITHUB_HASH_VERSION_ABC123"}
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("endpoint", ["/version/"])
+def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint: str):
+    """
+    Test the Version endpoint GET method when version.txt is not found
+    """
+    with patch.object(VersionView, "open_version_file", side_effect=FileNotFoundError) as mock_file_read:
+        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+
+        mock_file_read.assert_called_once()
+
+        assert request.method == "GET"
+        assert response.status_code == 200
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        expected_response_body = {"version": "Unknown"}
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("endpoint", ["/version/"])
+def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
+    """
+    Test the Version endpoint GET method when an exception occurs
+    """
+    with patch.object(VersionView, "open_version_file", side_effect=Exception("Simulated error")) as mock_file_read:
+        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+
+        mock_file_read.assert_called_once()
+
+        assert request.method == "GET"
+        assert response.status_code == 200
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        expected_response_body = {"version": "Unknown"}
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
+
+
+@pytest.mark.unit
 def test_curie_get(test_annotator: sanic.Sanic):
     """
     Tests the CURIE endpoint GET
@@ -212,12 +302,18 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Uni
     assert response.encoding == "utf-8"
 
 
-def test_trapi_post(test_annotator: sanic.Sanic, trapi_request: dict):
+@pytest.mark.unit
+@pytest.mark.parametrize("data_store", ["trapi_request.json"])
+def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict):
     """
     Tests the POST endpoints for our annotation service
     """
+    data_file_path = temporary_data_storage.joinpath(data_store)
+    with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+        trapi_body = json.load(file_handle)
+
     endpoint = "/trapi/"
-    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=trapi_request)
+    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=trapi_body)
 
     assert request.method == "POST"
     assert request.query_string == ""
@@ -232,7 +328,7 @@ def test_trapi_post(test_annotator: sanic.Sanic, trapi_request: dict):
     assert response.status_code == 200
     assert response.encoding == "utf-8"
 
-    node_set = set(trapi_request["message"]["knowledge_graph"]["nodes"].keys())
+    node_set = set(trapi_body["message"]["knowledge_graph"]["nodes"].keys())
 
     annotation = response.json
     assert isinstance(annotation, dict)
@@ -264,6 +360,7 @@ def test_trapi_post(test_annotator: sanic.Sanic, trapi_request: dict):
                         assert score is not None
 
 
+@pytest.mark.unit
 def test_annotator_get_redirect(test_annotator: sanic.Sanic):
     """
     Tests the legacy endpoint /annotator with a redirect to the
@@ -336,13 +433,21 @@ def test_annotator_get_redirect(test_annotator: sanic.Sanic):
     assert response.encoding == "utf-8"
 
 
-def test_annotator_post_redirect(test_annotator: sanic.Sanic, trapi_request: dict):
+@pytest.mark.unit
+@pytest.mark.parametrize("data_store", ["trapi_request.json"])
+def test_annotator_post_redirect(
+    temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict
+):
     """
     Tests the annotator redirect for the /trapi/ POST endpoint
     """
+    data_file_path = temporary_data_storage.joinpath(data_store)
+    with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+        trapi_body = json.load(file_handle)
+
     endpoint = "/annotator/"
     request, response = test_annotator.test_client.request(
-        endpoint, http_method="post", json=trapi_request, follow_redirects=True, allow_redirects=True
+        endpoint, http_method="post", json=trapi_body, follow_redirects=True, allow_redirects=True
     )
 
     assert request.method == "POST"
@@ -358,7 +463,7 @@ def test_annotator_post_redirect(test_annotator: sanic.Sanic, trapi_request: dic
     assert response.status_code == 200
     assert response.encoding == "utf-8"
 
-    node_set = set(trapi_request["message"]["knowledge_graph"]["nodes"].keys())
+    node_set = set(trapi_body["message"]["knowledge_graph"]["nodes"].keys())
 
     annotation = response.json
     assert isinstance(annotation, dict)

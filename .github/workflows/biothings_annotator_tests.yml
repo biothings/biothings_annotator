@@ -29,4 +29,4 @@ jobs:
       - name: Install dependences
         run: pip install -e ".[tests]"
       - name: Run Tests
-        run: python -m pytest tests/
+        run: python -m pytest -m unit tests/

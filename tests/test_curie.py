@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
 def test_curie_parsing(curie_prefix: str):
     """
