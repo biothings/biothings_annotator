@@ -7,6 +7,7 @@ import sanic
 from biothings_annotator.annotator.settings import BIOLINK_PREFIX_to_BioThings
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/curie/", "/trapi/"])
 def test_method_not_allowed_handling(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -30,6 +31,7 @@ def test_method_not_allowed_handling(test_annotator: sanic.Sanic, endpoint: str)
     assert response_body["exception"] == f"Method GET not allowed for URL {endpoint}"
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/curie/troglydte:4883", "/curie/predicate-subject"])
 def test_invalid_curie_handling(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -53,6 +55,7 @@ def test_invalid_curie_handling(test_annotator: sanic.Sanic, endpoint: str):
     assert response_body["supported_nodes"] == list(BIOLINK_PREFIX_to_BioThings.keys())
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "data",
     [{}, {"message": {"knowledge_graph": {"nodes": []}}}, {"message": {"knowledge_graph": {"node": {"node0": {}}}}}],
@@ -72,6 +75,7 @@ def test_invalid_trapi_input_handling(test_annotator: sanic.Sanic, data: dict):
     assert response_body["message"] == "Unsupported TRAPI input structure"
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "endpoint, batch_curie",
     (

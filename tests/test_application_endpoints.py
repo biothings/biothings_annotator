@@ -11,6 +11,7 @@ from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/status/"])
 def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -35,6 +36,7 @@ def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     assert response.json == expected_response_body
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/status/"])
 def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -60,6 +62,7 @@ def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         assert response.json == expected_response_body
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/status/"])
 def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -86,6 +89,7 @@ def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str
         assert response.json == expected_response_body
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/version/"])
 def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -116,6 +120,7 @@ def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
         assert response.json == expected_response_body
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/version/"])
 def test_version_get_bare_repo(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -144,6 +149,7 @@ def test_version_get_bare_repo(test_annotator: sanic.Sanic, endpoint: str):
         assert response.json == expected_response_body
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/version/"])
 def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -169,6 +175,7 @@ def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
         assert response.json == expected_response_body
 
 
+@pytest.mark.unit
 def test_curie_get(test_annotator: sanic.Sanic):
     """
     Tests the CURIE endpoint GET
@@ -297,6 +304,7 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Uni
     assert response.encoding == "utf-8"
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
 def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict):
     """
@@ -354,6 +362,7 @@ def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sa
                         assert score is not None
 
 
+@pytest.mark.unit
 def test_annotator_get_redirect(test_annotator: sanic.Sanic):
     """
     Tests the legacy endpoint /annotator with a redirect to the
@@ -426,6 +435,7 @@ def test_annotator_get_redirect(test_annotator: sanic.Sanic):
     assert response.encoding == "utf-8"
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
 def test_annotator_post_redirect(
     temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict

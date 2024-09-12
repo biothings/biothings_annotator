@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import sanic
 
-
+@pytest.mark.unit
 def test_get_compression(test_annotator: sanic.Sanic):
     """
     Tests the brotli compression when hitting our GET endpoint
@@ -40,6 +40,7 @@ def test_get_compression(test_annotator: sanic.Sanic):
     assert compressed_response.num_bytes_downloaded < uncompressed_response.num_bytes_downloaded
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
 def test_post_compression(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict):
     """

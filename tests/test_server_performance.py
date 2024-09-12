@@ -29,6 +29,7 @@ import sanic
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.performance
 @pytest.mark.asyncio
 @pytest.mark.parametrize("data_store", ["cleaned_annotator_logs.json"])
 async def test_integration_server_responses(
@@ -83,6 +84,7 @@ async def test_integration_server_responses(
         assert local_response.status_code == integration_response.status_code
 
 
+@pytest.mark.performance
 @pytest.mark.parametrize(
     "data_store, num_workers",
     [
@@ -142,6 +144,7 @@ def test_multiple_users_querying(
             logger.info("Recieved response %s", response_struct)
 
 
+@pytest.mark.performance
 @pytest.mark.parametrize(
     "delay",
     [1e-9, 1e-6, 1e-3],
@@ -181,6 +184,7 @@ def test_bulk_get(temporary_data_storage: Union[str, Path], test_annotator: sani
     assert len(collector[200]) == iterations
 
 
+@pytest.mark.performance
 @pytest.mark.parametrize(
     "data_store, delay, num_workers",
     [
@@ -235,6 +239,7 @@ def test_bulk_post(
     assert len(collector[200]) == iterations
 
 
+@pytest.mark.performance
 @pytest.mark.parametrize(
     "data_store",
     [

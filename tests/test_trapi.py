@@ -60,6 +60,7 @@ class TestTrapiAnnotation:
 
     annotation_instance = Annotator()
 
+    @pytest.mark.unit
     @pytest.mark.parametrize("data_store", ["trapi_request.json"])
     def test_default(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
@@ -107,6 +108,7 @@ class TestTrapiAnnotation:
                             score = values.get("_score", None)
                             assert score is not None
 
+    @pytest.mark.unit
     @pytest.mark.parametrize("data_store", ["trapi_request.json"])
     def test_append(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
@@ -153,6 +155,7 @@ class TestTrapiAnnotation:
                             score = values.get("_score", None)
                             assert score is not None
 
+    @pytest.mark.unit
     @pytest.mark.parametrize("data_store", ["trapi_request.json"])
     def test_raw(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
@@ -199,6 +202,7 @@ class TestTrapiAnnotation:
                             score = values.get("_score", None)
                             assert score is not None
 
+    @pytest.mark.unit
     @pytest.mark.parametrize("data_store", ["trapi_request.json"])
     def test_append_and_raw(self, temporary_data_storage: Union[str, Path], data_store: str):
         """

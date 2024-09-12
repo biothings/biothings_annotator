@@ -107,7 +107,10 @@ norecursedirs = [
 ]
 testpaths = ["test"]
 
-markers = []
+markers = [
+    "unit",
+    "performance"
+]
 
 # Logging
 log_cli = true
