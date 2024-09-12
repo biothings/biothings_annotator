@@ -1,31 +1,11 @@
 from pathlib import Path
 import logging
 import shutil
-import sqlite3
 
 import pytest
 
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture(scope="session")
-def performance_database(request) -> sqlite3.Connection:
-    """
-    Performance database for storing HTTP responses
-    """
-    module_root_path = Path(request.config.rootpath)
-    tests_directory = module_root_path.joinpath("tests")
-    database_directory = tests_directory.joinpath("database")
-    database_directory.mkdir(mode=511, parents=True, exist_ok=True)
-
-    database_path = database_directory.joinpath("performance_testing.db")
-    try:
-        connection = sqlite3.connect(str(database_path))
-    except Exception as exc:
-        raise exc
-    yield connection
-    connection.close()
 
 
 @pytest.fixture(scope="session")

@@ -17,8 +17,6 @@ import json
 import logging
 import multiprocessing
 import random
-import sqlite3
-import string
 import time
 import uuid
 
@@ -36,9 +34,7 @@ logger = logging.getLogger(__name__)
 async def test_integration_server_responses(
     temporary_data_storage: Union[str, Path],
     test_annotator: sanic.Sanic,
-    performance_database: sqlite3.Connection,
     data_store: str,
-    request,
 ):
     """
     Takes a cleaned up annotation log and creates a batch of queries
@@ -51,13 +47,6 @@ async def test_integration_server_responses(
     with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
         query_list = json.load(file_handle)
 
-    test_table = request.node.originalname + "_" + "".join(random.choice(string.ascii_lowercase) for i in range(16))
-    table_command = (
-        f"CREATE TABLE {test_table} "
-        "(endpoint, method, body, local_response, local_status, integration_response, integration_status)"
-    )
-    performance_database.execute(table_command)
-
     for user_query in query_list:
         user_query["identifier"] = str(uuid.uuid4())
 
@@ -66,43 +55,26 @@ async def test_integration_server_responses(
     integration_client = httpx.AsyncClient()
     integration_url = "https://annotator.ci.transltr.io"
 
-    with performance_database as connection:
-        for user_query in query_list:
-            http_request = user_query["request"]
-            method, endpoint, http_version = http_request.split(" ")
-            body = user_query["body"]
+    for user_query in query_list:
+        http_request = user_query["request"]
+        method, endpoint, http_version = http_request.split(" ")
+        body = user_query["body"]
 
-            data = None
-            if body != "":
-                data = json.loads(body)
+        data = None
+        if body != "":
+            data = json.loads(body)
 
-            local_request, local_response = await test_annotator.asgi_client.request(
-                method=method, url=endpoint, json=data
-            )
-            local_responses[user_query["identifier"]] = local_response
-            random_delay = random.random() * 1e-3
-            await asyncio.sleep(random_delay)
+        local_request, local_response = await test_annotator.asgi_client.request(method=method, url=endpoint, json=data)
+        local_responses[user_query["identifier"]] = local_response
+        random_delay = random.random() * 1e-3
+        await asyncio.sleep(random_delay)
 
-            integration_response = await integration_client.request(
-                method=method, url=f"{integration_url}{endpoint}", json=data, timeout=600.0
-            )
-            integration_responses[user_query["identifier"]] = integration_response
-            random_delay = random.random() * 1e-3
-            await asyncio.sleep(random_delay)
-
-            insertion_data = {
-                "endpoint": endpoint,
-                "method": method,
-                "body": body,
-                "local_response": local_response.content,
-                "local_status": local_response.status_code,
-                "integration_response": integration_response.content,
-                "integration_status": integration_response.status_code,
-            }
-            connection.execute(
-                f"INSERT INTO {test_table} VALUES(:endpoint, :method, :body, :local_response, :local_status, :integration_response, :integration_status)",
-                insertion_data,
-            )
+        integration_response = await integration_client.request(
+            method=method, url=f"{integration_url}{endpoint}", json=data, timeout=600.0
+        )
+        integration_responses[user_query["identifier"]] = integration_response
+        random_delay = random.random() * 1e-3
+        await asyncio.sleep(random_delay)
 
     unique_identifiers = [user_query["identifier"] for user_query in query_list]
     for unique_identifier in unique_identifiers:
@@ -134,9 +106,7 @@ def test_multiple_users_querying(
         user_query["identifier"] = str(uuid.uuid4())
 
     integration_futures = {}
-    # integration_url = "https://annotator.ci.transltr.io"
-    integration_url = "https://biothings.ncats.io"
-    # integration_url = "http://0.0.0.0:9000"
+    integration_url = "https://annotator.ci.transltr.io"
     with multiprocessing.Pool(num_workers) as worker_pool:
         for index, user_query in enumerate(query_list):
             http_request = user_query["request"]
@@ -185,9 +155,7 @@ def test_bulk_get(temporary_data_storage: Union[str, Path], test_annotator: sani
     endpoint = "/curie/NCBIGene:1017"
     num_workers = 16
 
-    # integration_url = "https://annotator.ci.transltr.io"
-    integration_url = "https://biothings.ncats.io"
-    # integration_url = "http://0.0.0.0:9000"
+    integration_url = "https://annotator.ci.transltr.io"
 
     bulk_requests = {}
     for index in range(iterations):
@@ -241,9 +209,7 @@ def test_bulk_post(
     iterations = bulk_post_query["iterations"]
     body = bulk_post_query["body"]
 
-    # integration_url = "https://annotator.ci.transltr.io"
-    integration_url = "https://biothings.ncats.io"
-    # integration_url = "http://0.0.0.0:9000"
+    integration_url = "https://annotator.ci.transltr.io"
 
     bulk_requests = {}
     for index in range(iterations):
