@@ -30,7 +30,7 @@
             "debug": false,
             "single_process": false,
             "auto_reload": true,
-            "workers": 16
+            "workers": 8
         }
     }
 }
