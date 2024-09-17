@@ -21,9 +21,7 @@ from sanic.cli.base import SanicArgumentParser, SanicHelpFormatter
 from sanic.worker.loader import AppLoader
 
 from biothings_annotator.application.cli.arguments import build_annotator_argument_groups, load_configuration
-from biothings_annotator.application.views import build_routes
-from biothings_annotator.application.middleware import build_middleware
-from biothings_annotator.application.exceptions import build_exception_handers
+from biothings_annotator.application.cli.target import build_application
 
 logging.basicConfig()
 logger = logging.getLogger("sanic-application")
@@ -148,7 +146,9 @@ class AnnotatorCLI(SanicCLI):
         # Load the server configuration
         server_configuration = getattr(self.args, "configuration", None)
         self.server_configuration = load_configuration(server_configuration)
-        logger.info("global annotator server configuration:\n %s", json.dumps(self.server_configuration, indent=4))
+        logger.info(
+            "global annotator file server default configuration:\n %s", json.dumps(self.server_configuration, indent=4)
+        )
 
     def run(self):
         """
@@ -175,13 +175,13 @@ class AnnotatorCLI(SanicCLI):
                 as_factory=self.args.factory,
                 as_simple=self.args.simple,
                 args=self.args,
-                factory=functools.partial(self.build_application, self.server_configuration),
+                factory=functools.partial(build_application, self.server_configuration),
             )
             application = application_loader.load()
             logger.debug("generated biothings-annotator application from loader: %s", application)
             runtime_parameters = self.build_runtime_parameters()
         except ValueError as exc:
-            logger.exception(f"Failed to run app: %s", exc)
+            logger.exception("Failed to run app: %s", exc)
         else:
             if self.args.repl:
                 self._repl(application)
@@ -191,6 +191,7 @@ class AnnotatorCLI(SanicCLI):
                 serve = Sanic.serve_single
             else:
                 serve = functools.partial(Sanic.serve, app_loader=application_loader)
+            logger.info(ANNOTATOR_DISPLAY)
             serve(application)
 
     def build_runtime_parameters(self):
@@ -229,6 +230,7 @@ class AnnotatorCLI(SanicCLI):
         """
         default_parameters = {
             "access_log": None,
+            "auto_tls": False,
             "coffee": False,
             "debug": False,
             "fast": False,
@@ -236,12 +238,11 @@ class AnnotatorCLI(SanicCLI):
             "motd": True,
             "noisy_exceptions": None,
             "port": None,
+            "single_process": False,
             "ssl": None,
             "unix": "",
             "verbosity": 0,
             "workers": 1,
-            "auto_tls": False,
-            "single_process": False,
         }
         runtime_parameters = super()._build_run_kwargs()
         file_parameters = self.server_configuration["application"]["runtime"]
@@ -258,78 +259,8 @@ class AnnotatorCLI(SanicCLI):
         override_parameters = file_set.difference(default_set)
         override_mapping = {tup[0]: tup[1] for tup in override_parameters}
 
-        explicit_parameters = copy.deepcopy(default_parameters) 
+        explicit_parameters = copy.deepcopy(default_parameters)
         explicit_parameters.update(override_mapping)
         explicit_parameters.update(modified_mapping)
+        logger.info("Runtime Parameters:\n %s", json.dumps(explicit_parameters, indent=4))
         return explicit_parameters
-
-    def build_application(self, configuration: dict = None) -> Sanic:
-        """
-        Generates and returns an instance of the sanic.app.Sanic application
-        for the web server
-
-        The sanic.web.Sanic application has the following constructor:
-        https://sanic.dev/api/sanic.app.html#getting-started
-        class Sanic(
-            name: str,
-            config: Optional[config_type] = None,
-            ctx: Optional[ctx_type] = None,
-            router: Optional[Router] = None,
-            signal_router: Optional[SignalRouter] = None,
-            error_handler: Optional[ErrorHandler] = None,
-            env_prefix: Optional[str] = SANIC_,
-            request_class: Optional[Type[Request]] = None,
-            strict_slashes: bool = False,
-            log_config: Optional[Dict[str, Any]] = None,
-            configure_logging: bool = True,
-            dumps: Optional[Callable[..., AnyStr]] = None,
-            loads: Optional[Callable[..., Any]] = None,
-            inspector: bool = False,
-            inspector_class: Optional[Type[Inspector]] = None,
-            certloader_class: Optional[Type[CertLoader]] = None
-        )
-
-        Loads the following additional aspects for the webserver:
-        > routes
-        > middleware
-        > exception handlers
-        """
-        application_configuration = configuration["application"]["configuration"]
-        extension_configuration = configuration["application"]["extension"]
-
-        configuration_settings = {}
-        configuration_settings.update(application_configuration)
-        configuration_settings.update(extension_configuration["openapi"])
-        configuration_settings.update(extension_configuration["cors"])
-
-        application = Sanic(name="biothings-annotator")
-        application.update_config(configuration_settings)
-
-        application_routes = build_routes()
-        for route in application_routes:
-            try:
-                application.add_route(**route)
-            except Exception as gen_exc:
-                logger.exception(gen_exc)
-                logger.error("Unable to add route %s", route)
-                raise gen_exc
-
-        application_middleware = build_middleware()
-        for middleware in application_middleware:
-            try:
-                application.register_middleware(**middleware)
-            except Exception as gen_exc:
-                logger.exception(gen_exc)
-                logger.error("Unable to add middleware %s", middleware)
-                raise gen_exc
-
-        exception_handlers = build_exception_handers()
-        for exception_handler in exception_handlers:
-            try:
-                application.error_handler.add(**exception_handler)
-            except Exception as gen_exc:
-                logger.exception(gen_exc)
-                logger.error("Unable to add exception handler %s", exception_handler)
-                raise gen_exc
-
-        return application
