@@ -12,38 +12,25 @@ from sanic import __version__
 from sanic.cli.arguments import Group
 from sanic_routing import __version__ as __routing_version__
 
-from biothings_annotator.application.cli.target import build_application
+from biothings_annotator.application import CONFIGURATION_DIRECTORY
 
 logging.basicConfig()
 logger = logging.getLogger("sanic-application")
 logger.setLevel(logging.DEBUG)
 
 
-class ForcedGeneralGroup(Group):
+class VersionGroup(Group):
     """
-    We override this to shadow the original one
-    and force the default value for the `target` argument
-    to be the sanic application factory method for the application
+    Because we remove the `GeneralGroup` to eliminate the target
+    option, we re-add a version group to include the potential argument
+    handling here
     """
 
-    name = "ForcedTarget"
+    name = "Version"
 
     def attach(self):
-        self.container.add_argument(
-            "--version",
-            action="version",
-            version=f"Sanic {__version__}; Routing {__routing_version__}",
-        )
-
-        self.container.add_argument(
-            "target",
-            help=(
-                "Overrided target argument.\n"
-                "We're forcing it to always be: "
-                "`biothings_annotator.application.cli.interface::build_application`"
-            ),
-            default=build_application,
-        )
+        version_str = f"Sanic {__version__}; " f"Routing {__routing_version__};"
+        self.container.add_argument("--version", action="version", version=version_str)
 
 
 class FileConfigurationGroup(Group):
@@ -101,7 +88,7 @@ def build_annotator_argument_groups() -> List[Group]:
     """
     group_list = [
         FileConfigurationGroup,
-        ForcedGeneralGroup,
+        VersionGroup,
     ]
     return group_list
 
@@ -134,12 +121,8 @@ def load_configuration(configuration_file: Optional[Union[str, Path]] = None) ->
     if configuration_file:
         configuration_file = Path(configuration_file).resolve().absolute()
     else:
-        application_file = Path(__file__).resolve().absolute()
-        application_directory = Path(application_file).parent
-        configuration_directory = Path(application_directory).joinpath("configuration")
-
         configuration_filename = "default.json"
-        configuration_file = configuration_directory.joinpath(configuration_filename)
+        configuration_file = CONFIGURATION_DIRECTORY.joinpath(configuration_filename)
 
     try:
         with open(str(configuration_file), "r", encoding="utf-8") as file_handle:
