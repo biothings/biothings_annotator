@@ -68,6 +68,16 @@ class VersionView(HTTPMethodView):
             return version
 
     async def get(self, _: Request):
+        """
+        openapi:
+        ---
+        summary: Checks the version of the annotator service
+        responses:
+          '200':
+            description: Successful github commit hash generation
+            content:
+              application/json:
+        """
         try:
             version = "Unknown"
 
