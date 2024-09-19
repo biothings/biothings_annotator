@@ -25,12 +25,20 @@
             }
         },
         "runtime": {
-            "host": "0.0.0.0",
-            "port": 9000,
-            "debug": false,
-            "single_process": false,
+            "access_log": false,
             "auto_reload": true,
-            "workers": 16
+            "auto_tls": false,
+            "coffee": false,
+            "debug": false,
+            "fast": false,
+            "host": "0.0.0.0",
+            "motd": true,
+            "noisy_exceptions": true,
+            "port": 9000,
+            "single_process": false,
+            "unix": "",
+            "verbosity": 2,
+            "workers": 8
         }
     }
 }
