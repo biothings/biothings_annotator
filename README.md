@@ -41,13 +41,115 @@ Separated between the annotator logic and web handler logic.
 The annotator logic primarily exists within `annotator.py` and `transformer.py`. Whereas the web server application is defined entirely within `application` directory. 
 
 
-### Invocation
+### Command-line Interface
 The `__main__.py` defines the entrypoint to the module for running the `sanic` web server. After
 installation run the following to command to start the annotator service:
 
-```
+```shell
 python3 -m biothings_annotator
 ```
+
+The `__main__.py` file points to the application module where it will run the `main` function within
+the launcher. The majority of our implementation exists within the
+`biothings_annotator/application/cli` module. We store the main command line handling logic in
+`cli/interface.py` with argument definitions and other argument handling in `cli/arguments.py`. We
+wanted to maintain the same command line interface as sanic. `sanic` has a `cli`
+module where it defines the `SanicCLI`class for handling their command-line implementation. However
+we also have additional arguments we want to support. So we override the `SanicCLI` to acquire the
+original parser handlers. The command-line steps are then divided in three steps shown below.
+
+```python
+# Entrypoint
+
+cli = AnnotatorCLI()
+cli.attach()
+cli.parse()
+cli.run()
+```
+
+The`attach` method aggregates all of the `ArgumentParser` instances stored in what `sanic` 
+defines as `Group` objects. In order to add our custom arguments we define our own implementations
+of the `Group` argument parsers to be called during the `attach` method. 
+
+The `parse` method then builds the parsers from `Group` objects. While we want to support the same
+interface as `sanic`, we do limit some of the options. The main limit is the `target` option which
+points to a module or factory for building the `AppLoader` instance. We hard-set that and a couple
+other options so that we cannot accidently change the path we point to for building the web server
+implementation. Our factory method for generating the `sanic.Sanic` application instance is defined
+with `cli/target.py`.
+
+```python
+
+# Original AppLoader instance
+app_loader = AppLoader(
+    self.args.target, self.args.factory, self.args.simple, self.args
+)
+
+# biothings-annotator AppLoader instance
+application_loader = AppLoader(
+    module_input=self.args.target, # hard-coded to ""
+    as_factory=self.args.factory, # hard-coded to False
+    as_simple=self.args.simple, # hard-coded to False
+    args=self.args,
+    factory=functools.partial(build_application, self.server_configuration),
+)
+
+# AppLoader definition
+class AppLoader:
+    """
+    A helper to load application instances.
+    Args:
+        module_input (str): The module to load the application from.
+        as_factory (bool): Whether the application is a factory.
+        as_simple (bool): Whether the application is a simple server.
+        args (Any): Arguments to pass to the application factory.
+        factory (Callable[[], SanicApp]): A callable that returns a Sanic application instance.
+    """
+
+    def __init__(
+        self,
+        module_input: str = "",
+        as_factory: bool = False,
+        as_simple: bool = False,
+        args: Any = None,
+        factory: Optional[Callable[[], SanicApp]] = None,
+    ) -> None:
+```
+
+The `run` method builds the `AppLoader` instance and the runtime arguments builder method. The
+default command line arguments are shown below:
+
+```python
+default_parameters = {
+    "access_log": None,
+    "auto_tls": False,
+    "coffee": False,
+    "debug": False,
+    "fast": False,
+    "host": None,
+    "motd": True,
+    "noisy_exceptions": None,
+    "port": None,
+    "single_process": False,
+    "ssl": None,
+    "unix": "",
+    "verbosity": 0,
+    "workers": 1,
+}
+```
+
+Some of these arguments are hard-set by the configuration file defaults and cannot be changed at the
+command-line unless the configuration file is modified. 
+
+##### Examples
+
+```shell
+python3 -m biothings_annotator --host "172.84.29.248"
+python3 -m biothings_annotator --host "172.84.29.248" --port 9384 
+python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12 
+python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12 --debug
+```
+
 
 ### Docker
 We have a Dockerfile and service through docker-compose for the biothings-annotator service. The
