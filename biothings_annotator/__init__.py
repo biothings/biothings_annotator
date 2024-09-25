@@ -9,11 +9,11 @@ from .annotator import (
 )
 
 __all__ = [
-    Annotator,
-    ResponseTransformer,
-    InvalidCurieError,
-    TRAPIInputError,
-    BIOLINK_PREFIX_to_BioThings,
-    ANNOTATOR_CLIENTS,
-    utils,
+    "Annotator",
+    "ResponseTransformer",
+    "InvalidCurieError",
+    "TRAPIInputError",
+    "BIOLINK_PREFIX_to_BioThings",
+    "ANNOTATOR_CLIENTS",
+    "utils",
 ]

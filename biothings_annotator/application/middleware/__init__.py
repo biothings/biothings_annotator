@@ -1,7 +1,9 @@
+from typing import Dict, List
+
 from .compression import compress_response
 
 
-def build_middleware() -> list[dict]:
+def build_middleware() -> List[Dict]:
     """
     Basic method for aggregating all of middleware created
     for the annotator service

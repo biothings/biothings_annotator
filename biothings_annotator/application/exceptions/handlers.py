@@ -3,6 +3,7 @@ Exception handling for the application level
 """
 
 import logging
+from typing import List
 
 import sanic
 from sanic.exceptions import MethodNotAllowed
@@ -31,7 +32,7 @@ async def handle_method_not_allowed(request: Request, exception: MethodNotAllowe
     return error_response
 
 
-def find_all_paths_by_method(request: Request) -> list[str]:
+def find_all_paths_by_method(request: Request) -> List[str]:
     """
     Finds all similar paths based off the method type
     """
