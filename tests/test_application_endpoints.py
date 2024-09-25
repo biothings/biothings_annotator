@@ -77,10 +77,10 @@ def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         expected_response_body = {"success": False, "error": "Exception('Simulated error')"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
+        assert not response.is_success
+        assert response.is_error
         assert response.is_closed
-        assert response.status_code == 200
+        assert response.status_code == 400
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
 
@@ -104,10 +104,10 @@ def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str
         expected_response_body = {"success": False, "error": "Service unavailable due to a failed data check!"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
+        assert not response.is_success
+        assert response.is_error
         assert response.is_closed
-        assert response.status_code == 200
+        assert response.status_code == 500
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
 
