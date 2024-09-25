@@ -3,7 +3,7 @@ Translator Node Annotator Service Handler
 """
 
 from collections import OrderedDict
-from typing import Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 import logging
 import os
 
@@ -24,7 +24,7 @@ class Annotator:
 
     def query_biothings(
         self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
-    ) -> dict:
+    ) -> Dict:
         """
         Query biothings client based on node_type for a list of ids
         """
@@ -52,7 +52,7 @@ class Annotator:
         logger.info("Done.")
         return res_by_id
 
-    def append_extra_annotations(self, node_d: dict, node_id_subset: Optional[List[str]] = None, batch_n: int = 1000):
+    def append_extra_annotations(self, node_d: Dict, node_id_subset: Optional[List[str]] = None, batch_n: int = 1000):
         """
         Append extra annotations to the existing node_d
         """
@@ -85,7 +85,7 @@ class Annotator:
 
     def annotate_curie(
         self, curie: str, raw: bool = False, fields: Optional[Union[str, List[str]]] = None, include_extra: bool = True
-    ) -> dict:
+    ) -> Dict:
         """
         Annotate a single curie id
         """
@@ -101,7 +101,7 @@ class Annotator:
         return {curie: res.get(_id, {})}
 
     def _annotate_node_list_by_type(
-        self, node_list_by_type: dict, raw: bool = False, fields: Optional[Union[str, List[str]]] = None
+        self, node_list_by_type: Dict, raw: bool = False, fields: Optional[Union[str, List[str]]] = None
     ) -> Iterable[tuple]:
         """This is a helper method re-used in both annotate_curie_list and annotate_trapi methods
         It returns a generator of tuples of (original_node_id, annotation_object) for each node_id,
@@ -137,7 +137,7 @@ class Annotator:
         raw: bool = False,
         fields: Optional[Union[str, List[str]]] = None,
         include_extra: bool = True,
-    ) -> Union[dict, Iterable[tuple]]:
+    ) -> Union[Dict, Iterable[tuple]]:
         """
         Annotate a list of curie ids
         """
@@ -163,13 +163,13 @@ class Annotator:
 
     def annotate_trapi(
         self,
-        trapi_input: dict,
+        trapi_input: Dict,
         append: bool = False,
         raw: bool = False,
         fields: Optional[Union[str, List[str]]] = None,
         limit: Optional[int] = None,
         include_extra: bool = True,
-    ) -> dict:
+    ) -> Dict:
         """
         Annotate a TRAPI input message with node annotator annotations
         """
@@ -226,7 +226,7 @@ class Annotator:
         return node_d
 
     def annotate_trapi_0(
-        self, trapi_input: dict, append: bool = False, raw: bool = False, fields: list = None, limit: int = None
+        self, trapi_input: Dict, append: bool = False, raw: bool = False, fields: list = None, limit: int = None
     ):
         """
         Deprecated! Kept here for reference for now, pending to be deleted soon.

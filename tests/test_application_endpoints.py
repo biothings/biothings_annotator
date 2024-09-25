@@ -1,6 +1,6 @@
 from pathlib import Path
-from typing import Union
-from unittest.mock import MagicMock, patch
+from typing import Dict, List, Union
+from unittest.mock import patch
 import json
 
 import pytest
@@ -297,7 +297,7 @@ def test_curie_get(test_annotator: sanic.Sanic):
         ],
     ),
 )
-def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[list, dict]):
+def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[List, Dict]):
     """
     Tests the CURIE endpoint POST
     """
@@ -327,7 +327,7 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Uni
 
 @pytest.mark.unit
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
-def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict):
+def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
     """
     Tests the POST endpoints for our annotation service
     """
@@ -459,7 +459,7 @@ def test_annotator_get_redirect(test_annotator: sanic.Sanic):
 @pytest.mark.unit
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
 def test_annotator_post_redirect(
-    temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict
+    temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict
 ):
     """
     Tests the annotator redirect for the /trapi/ POST endpoint

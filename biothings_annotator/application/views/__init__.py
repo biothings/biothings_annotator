@@ -1,7 +1,9 @@
+from typing import Dict, List
+
 from .annotator import StatusView, VersionView, BatchCurieView, CurieView, TrapiView, CurieLegacyView, TrapiLegacyView
 
 
-def build_routes() -> list[dict]:
+def build_routes() -> List[Dict]:
     """
     Basic method for aggregating all of the views created
     for the annotator service

@@ -3,7 +3,7 @@ Collection of miscellaenous utility methods for the biothings_annotator package
 """
 
 import logging
-from typing import Union
+from typing import Dict, List, Union
 
 try:
     from itertools import batched  # new in Python 3.12
@@ -112,7 +112,7 @@ def parse_curie(curie: str, return_type: bool = True, return_id: bool = True):
         return _id
 
 
-def group_by_subfield(collection: list[dict], search_key: str) -> dict:
+def group_by_subfield(collection: List[Dict], search_key: str) -> Dict:
     """
     Takes a collection of dictionary entries with a specify subfield key "search_key" and
     extracts the subfield from each entry in the iterable into a dictionary.
@@ -156,7 +156,7 @@ def group_by_subfield(collection: list[dict], search_key: str) -> dict:
     return sub_field_collection
 
 
-def get_dotfield_value(dotfield: str, d: dict):
+def get_dotfield_value(dotfield: str, d: Dict):
     """
     Explore dictionary d using dotfield notation and return value.
     Example::
