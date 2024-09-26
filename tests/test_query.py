@@ -4,6 +4,7 @@ Exercises the query methods within the biothings_annotator package
 
 import logging
 import random
+from typing import Dict, List
 
 import biothings_client
 import pytest
@@ -112,7 +113,7 @@ def test_biothings_query(curie_prefix: str):
         ("", [{}], {}),
     ],
 )
-def test_query_post_processing(search_keyword: str, collection: list[dict], histogram: dict):
+def test_query_post_processing(search_keyword: str, collection: List[Dict], histogram: Dict):
     """
     Evaluates the group_by_subfield helper function for creating a dictionary histrogram of the
     based off the aggregated collection of dictionaries sharing a common key.

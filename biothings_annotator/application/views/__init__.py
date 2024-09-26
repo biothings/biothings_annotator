@@ -1,8 +1,16 @@
-from .annotator import StatusView, BatchCurieView, CurieView, TrapiView, CurieLegacyView, TrapiLegacyView
-from .metadata import MetadataView, VersionView
+from typing import Dict, List
+from biothings_annotator.application.views.annotator import (
+    BatchCurieView,
+    CurieLegacyView,
+    CurieView,
+    StatusView,
+    TrapiLegacyView,
+    TrapiView,
+)
+from biothings_annotator.application.views.metadata import MetadataView, VersionView
 
 
-def build_routes() -> list[dict]:
+def build_routes() -> List[Dict]:
     """
     Basic method for aggregating all of the views created
     for the annotator service

@@ -1,6 +1,6 @@
 from pathlib import Path
-from typing import Union
-from unittest.mock import MagicMock, patch
+from typing import Dict, List, Union
+from unittest.mock import patch
 import json
 
 import pytest
@@ -38,6 +38,29 @@ def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/status/"])
+def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
+    """
+    Tests the Status endpoint HEAD when the response is HTTP 200
+    """
+    request, response = test_annotator.test_client.request(endpoint, http_method="head")
+
+    assert request.method == "HEAD"
+    assert request.query_string == ""
+    assert request.scheme == "http"
+    assert request.server_path == endpoint
+
+    assert response.json is None
+    assert response.http_version == "HTTP/1.1"
+    assert response.content_type == "application/json"
+    assert response.is_success
+    assert not response.is_error
+    assert response.is_closed
+    assert response.status_code == 200
+    assert response.encoding == "utf-8"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("endpoint", ["/status/"])
 def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint GET when an Exception is raised
@@ -54,10 +77,10 @@ def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         expected_response_body = {"success": False, "error": "Exception('Simulated error')"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
+        assert not response.is_success
+        assert response.is_error
         assert response.is_closed
-        assert response.status_code == 200
+        assert response.status_code == 400
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
 
@@ -81,10 +104,10 @@ def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str
         expected_response_body = {"success": False, "error": "Service unavailable due to a failed data check!"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
+        assert not response.is_success
+        assert response.is_error
         assert response.is_closed
-        assert response.status_code == 200
+        assert response.status_code == 500
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
 
@@ -274,7 +297,7 @@ def test_curie_get(test_annotator: sanic.Sanic):
         ],
     ),
 )
-def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[list, dict]):
+def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[List, Dict]):
     """
     Tests the CURIE endpoint POST
     """
@@ -304,7 +327,7 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Uni
 
 @pytest.mark.unit
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
-def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict):
+def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
     """
     Tests the POST endpoints for our annotation service
     """
@@ -436,7 +459,7 @@ def test_annotator_get_redirect(test_annotator: sanic.Sanic):
 @pytest.mark.unit
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
 def test_annotator_post_redirect(
-    temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict
+    temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict
 ):
     """
     Tests the annotator redirect for the /trapi/ POST endpoint

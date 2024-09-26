@@ -12,6 +12,7 @@ to make the class instance pickleable, we keep this target here for the moment
 """
 
 import logging
+from typing import Dict
 
 from sanic import Sanic
 
@@ -24,7 +25,7 @@ logger = logging.getLogger("sanic-application")
 logger.setLevel(logging.DEBUG)
 
 
-def build_application(configuration: dict = None) -> Sanic:
+def build_application(configuration: Dict = None) -> Sanic:
     """
     Generates and returns an instance of the sanic.app.Sanic application
     for the web server
