@@ -73,8 +73,8 @@ class MetadataView(HTTPMethodView):
             description: Successful generation of the OpenAPI auto-generated documentation in yaml format
             content:
               text/plain:
-              schema:
-                type: string
+                schema:
+                  type: string
           '400':
             description: Error occured during auto-generation of the OpenAPI documentation
             content:

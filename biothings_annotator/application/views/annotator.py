@@ -82,30 +82,26 @@ class CurieView(HTTPMethodView):
         ---
         summary: Retrieve annotation objects based on a CURIE ID
         parameters:
-        - curie-path:
-          name: curie
+        - name: curie
           in: path
           description: biological identifier using the CURIE format <node>:<id>.
           example: "NCBIGene:695"
           schema:
             type: string
           required: true
-        - raw-parameter:
-          name: raw
+        - name: raw
           in: query
           description: 'When true, return annotation fields in their original data structure before transformation. Useful for debugging. Defaults to false'
           required: false
           schema:
             type: boolean
-        - fields-parameter:
-          name: fields
+        - name: fields
           in: query
           description: 'Comma-separated fields to override the default set of annotation fields, or passing "fields=all" to return all available fields from the original annotation source. Defaults to none'
           required: false
           schema:
             type: string
-        - include-extra-parameter:
-          name: include_extra
+        - name: include_extra
           in: query
           description: 'When true, leverage external API(s) data to include additional annotation information in the response. Defaults to true'
           required: false
@@ -180,22 +176,19 @@ class BatchCurieView(HTTPMethodView):
         ---
         summary: For a list of curie IDs, return the expanded annotation objects
         parameters:
-        - raw-parameter:
-          name: raw
+        - name: raw
           in: query
           description: 'When true, return annotation fields in their original data structure before transformation. Useful for debugging. Defaults to false'
           required: false
           schema:
             type: boolean
-        - fields-parameter:
-          name: fields
+        - name: fields
           in: query
           description: 'Comma-separated fields to override the default set of annotation fields, or passing "fields=all" to return all available fields from the original annotation source. Defaults to none'
           required: false
           schema:
             type: string
-        - include-extra-parameter:
-          name: include_extra
+        - name: include_extra
           in: query
           description: 'When true, leverage external API(s) data to include additional annotation information in the response. Defaults to true'
           required: false
@@ -306,29 +299,25 @@ class TrapiView(HTTPMethodView):
         ---
         summary: Provides an annotated response based off the TRAPI body provided
         parameters:
-        - append-parameter:
-          name: append
+        - name: append
           in: query
           description: 'When true, append annotations to the existing "attributes" field, otherwise, overwrite the existing "attributes" field. Defaults to false'
           required: false
           schema:
             type: boolean
-        - raw-parameter:
-          name: raw
+        - name: raw
           in: query
           description: 'When true, return annotation fields in their original data structure before transformation. Useful for debugging. Defaults to false'
           required: false
           schema:
             type: boolean
-        - fields-parameter:
-          name: fields
+        - name: fields
           in: query
           description: 'Comma-separated fields to override the default set of annotation fields, or passing "fields=all" to return all available fields from the original annotation source. Defaults to none'
           required: false
           schema:
             type: string
-        - include-extra-parameter:
-          name: include_extra
+        - name: include_extra
           in: query
           description: 'When true, leverage external API(s) data to include additional annotation information in the response. Defaults to true'
           required: false
@@ -341,15 +330,15 @@ class TrapiView(HTTPMethodView):
                 type: object
                 properties:
                   message:
-                  type: object
-                  properties:
-                    knowledge_graph:
                     type: object
                     properties:
-                      nodes:
+                      knowledge_graph:
                         type: object
-                      edges:
-                        type: object
+                        properties:
+                          nodes:
+                            type: object
+                          edges:
+                            type: object
         responses:
           '200':
             description: A list of matching annotation objects
@@ -368,32 +357,28 @@ class TrapiView(HTTPMethodView):
                       type: object
                       properties:
                         message:
-                        type: object
-                        properties:
-                          knowledge_graph:
                           type: object
                           properties:
-                            nodes:
+                            knowledge_graph:
                               type: object
-                            edges:
-                              type: object
-                          expected_structure:
-                            type: object
+                              properties:
+                                nodes:
+                                  type: object
+                                edges:
+                                  type: object
                     expected_structure:
                       type: object
                       properties:
                         message:
-                        type: object
-                        properties:
-                          knowledge_graph:
                           type: object
                           properties:
-                            nodes:
+                            knowledge_graph:
                               type: object
-                            edges:
-                              type: object
-                          expected_structure:
-                            type: object
+                              properties:
+                                nodes:
+                                  type: object
+                                edges:
+                                  type: object
                     endpoint:
                       type: string
                     message:
