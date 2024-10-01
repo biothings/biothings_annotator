@@ -29,13 +29,6 @@ def build_routes() -> List[Dict]:
         "name": "status_endpoint",
     }
 
-    # --- VERSION ROUTE ---
-    version_route_main = {
-        "handler": VersionView.as_view(),
-        "uri": r"/version",
-        "name": "version_endpoint",
-    }
-
     # --- CURIE ROUTES ---
     curie_route_main = {
         "handler": CurieView.as_view(),
@@ -60,7 +53,13 @@ def build_routes() -> List[Dict]:
     trapi_route_mirror = {"handler": TrapiLegacyView.as_view(), "uri": "/annotator/", "name": "trapi_endpoint_mirror"}
 
     # --- METADATA ROUTES ---
-    metadata_route = {"handler": MetadataView.as_view(), "uri": "/metadata/", "name": "metadata"}
+    metadata_route = {"handler": MetadataView.as_view(), "uri": "/metadata/openapi", "name": "metadata"}
+
+    version_route_main = {
+        "handler": VersionView.as_view(),
+        "uri": r"/version",
+        "name": "version_endpoint",
+    }
 
     route_collection = [
         status_route_main,
