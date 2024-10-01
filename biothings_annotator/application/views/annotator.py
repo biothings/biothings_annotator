@@ -9,6 +9,7 @@ import sanic
 from sanic.views import HTTPMethodView
 from sanic.request import Request
 from sanic import response
+from sanic_ext import openapi
 
 from biothings_annotator.annotator import Annotator
 from biothings_annotator.annotator.exceptions import InvalidCurieError, TRAPIInputError
@@ -39,6 +40,32 @@ class StatusView(HTTPMethodView):
             return sanic.json(None, status=400)
 
     async def get(self, _: Request):
+        """
+        openapi:
+        ---
+        summary: Checks the health status of the annotator service
+        responses:
+          '200':
+            description: A successful network status check
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    success:
+                      type: boolean
+          '400':
+            description: An unsuccessful network status check
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    success:
+                      type: boolean
+                    error:
+                      type: string
+        """
         curie = "NCBIGene:1017"
         fields = "_id"
 
@@ -57,38 +84,6 @@ class StatusView(HTTPMethodView):
             return sanic.json(result, status=400)
 
 
-class VersionView(HTTPMethodView):
-    def __init__(self):
-        super().__init__()
-        application = sanic.Sanic.get_app()
-        cache = application.config.CACHE_MAX_AGE
-        self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
-
-    def open_version_file(self):
-        with open("version.txt", "r") as version_file:
-            version = version_file.read().strip()
-            return version
-
-    async def get(self, _: Request):
-        try:
-            version = "Unknown"
-
-            try:
-                version = self.open_version_file()
-            except FileNotFoundError:
-                logger.error("The version.txt file does not exist.")
-            except Exception as exc:
-                logger.error(f"Error getting GitHub commit hash from version.txt file: {exc}")
-
-            result = {"version": version}
-            return sanic.json(result, headers=self.default_headers)
-
-        except Exception as exc:
-            logger.error(f"Error getting GitHub commit hash: {exc}")
-            result = {"version": "Unknown"}
-            return sanic.json(result)
-
-
 class CurieView(HTTPMethodView):
     def __init__(self):
         super().__init__()
@@ -97,6 +92,64 @@ class CurieView(HTTPMethodView):
         self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
 
     async def get(self, request: Request, curie: str):
+        """
+        openapi:
+        ---
+        summary: Retrieve annotation objects based on a CURIE ID
+        parameters:
+        - name: curie
+          in: path
+          description: biological identifier using the CURIE format <node>:<id>.
+          example: "NCBIGene:695"
+          schema:
+            type: string
+          required: true
+        - name: raw
+          in: query
+          description: 'When true, return annotation fields in their original data structure before transformation. Useful for debugging. Defaults to false'
+          required: false
+          schema:
+            type: boolean
+        - name: fields
+          in: query
+          description: 'Comma-separated fields to override the default set of annotation fields, or passing "fields=all" to return all available fields from the original annotation source. Defaults to none'
+          required: false
+          schema:
+            type: string
+        - name: include_extra
+          in: query
+          description: 'When true, leverage external API(s) data to include additional annotation information in the response. Defaults to true'
+          required: false
+          schema:
+            type: boolean
+        responses:
+          '200':
+            description: A matching annotation object
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    curie:
+                      type: object
+          '400':
+            description: A response indicating an unknown or unsupported curie ID
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    input:
+                      type: string
+                    message:
+                      type: string
+                    supported_nodes:
+                      type: array
+                      items:
+                        type: string
+                    exception:
+                      type: string
+        """
         fields = request.args.get("fields", None)
         raw = bool(int(request.args.get("raw", 0)))
         include_extra = bool(int(request.args.get("include_extra", 1)))
@@ -134,17 +187,64 @@ class BatchCurieView(HTTPMethodView):
 
     async def post(self, request: Request):
         """
-        CURIE body supports two forms
-
-        {
-            "ids": []
-        }
-
-        OR
-
-        [
-            ...
-        ]
+        openapi:
+        ---
+        summary: For a list of curie IDs, return the expanded annotation objects
+        parameters:
+        - name: raw
+          in: query
+          description: 'When true, return annotation fields in their original data structure before transformation. Useful for debugging. Defaults to false'
+          required: false
+          schema:
+            type: boolean
+        - name: fields
+          in: query
+          description: 'Comma-separated fields to override the default set of annotation fields, or passing "fields=all" to return all available fields from the original annotation source. Defaults to none'
+          required: false
+          schema:
+            type: string
+        - name: include_extra
+          in: query
+          description: 'When true, leverage external API(s) data to include additional annotation information in the response. Defaults to true'
+          required: false
+          schema:
+            type: boolean
+        requestBody:
+          content:
+            application/json:
+              schema:
+                properties:
+                  ids:
+                    description: 'multiple association IDs separated by comma. Note that currently we only take the input ids up to 1000 maximum, the rest will be omitted. Type: string (list). Max: 1000.'
+                    type: string
+                required:
+                - ids
+        responses:
+          '200':
+            description: A list of matching annotation objects
+            content:
+              application/json:
+                schema:
+                  type: object
+          '400':
+            description: A response indicating an improperly formatted query
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    input:
+                      type: array
+                      items:
+                        type: string
+                    endpoint:
+                      type: string
+                    message:
+                      type: string
+                    supported_nodes:
+                      type: array
+                      items:
+                        type: string
         """
         fields = request.args.get("fields", None)
         raw = request.args.get("raw", False)
@@ -209,6 +309,96 @@ class TrapiView(HTTPMethodView):
         self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
 
     async def post(self, request: Request):
+        """
+        openapi:
+        ---
+        summary: Provides an annotated response based off the TRAPI body provided
+        parameters:
+        - name: append
+          in: query
+          description: 'When true, append annotations to the existing "attributes" field, otherwise, overwrite the existing "attributes" field. Defaults to false'
+          required: false
+          schema:
+            type: boolean
+        - name: raw
+          in: query
+          description: 'When true, return annotation fields in their original data structure before transformation. Useful for debugging. Defaults to false'
+          required: false
+          schema:
+            type: boolean
+        - name: fields
+          in: query
+          description: 'Comma-separated fields to override the default set of annotation fields, or passing "fields=all" to return all available fields from the original annotation source. Defaults to none'
+          required: false
+          schema:
+            type: string
+        - name: include_extra
+          in: query
+          description: 'When true, leverage external API(s) data to include additional annotation information in the response. Defaults to true'
+          required: false
+          schema:
+            type: boolean
+        requestBody:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: object
+                    properties:
+                      knowledge_graph:
+                        type: object
+                        properties:
+                          nodes:
+                            type: object
+                          edges:
+                            type: object
+        responses:
+          '200':
+            description: A list of matching annotation objects
+            content:
+              application/json:
+                schema:
+                  type: object
+          '400':
+            description: A response indicating an improperly formatted query
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    input:
+                      type: object
+                      properties:
+                        message:
+                          type: object
+                          properties:
+                            knowledge_graph:
+                              type: object
+                              properties:
+                                nodes:
+                                  type: object
+                                edges:
+                                  type: object
+                    expected_structure:
+                      type: object
+                      properties:
+                        message:
+                          type: object
+                          properties:
+                            knowledge_graph:
+                              type: object
+                              properties:
+                                nodes:
+                                  type: object
+                                edges:
+                                  type: object
+                    endpoint:
+                      type: string
+                    message:
+                      type: string
+        """
         fields = request.args.get("fields", None)
         raw = bool(int(request.args.get("raw", 0)))
         append = bool(int(request.args.get("append", 0)))
@@ -247,12 +437,14 @@ class TrapiView(HTTPMethodView):
 # GET /anotator/<CURIE_ID> -> /curie/<CURIE_ID> (Singular CURIE ID)
 # POST /anotator/ -> /trapi/
 class CurieLegacyView(HTTPMethodView):
+    @openapi.deprecated()
     async def get(self, request: Request, curie: str):
         redirect_response = response.redirect(f"/curie/{curie}", status=302)
         return redirect_response
 
 
 class TrapiLegacyView(HTTPMethodView):
+    @openapi.deprecated()
     async def post(self, request: Request):
         trapi_view = TrapiView()
         redirect_response = await trapi_view.post(request)
