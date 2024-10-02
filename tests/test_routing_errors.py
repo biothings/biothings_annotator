@@ -1,5 +1,5 @@
 import json
-from typing import Union
+from typing import Dict, List, Union
 
 import pytest
 import sanic
@@ -60,7 +60,7 @@ def test_invalid_curie_handling(test_annotator: sanic.Sanic, endpoint: str):
     "data",
     [{}, {"message": {"knowledge_graph": {"nodes": []}}}, {"message": {"knowledge_graph": {"node": {"node0": {}}}}}],
 )
-def test_invalid_trapi_input_handling(test_annotator: sanic.Sanic, data: dict):
+def test_invalid_trapi_input_handling(test_annotator: sanic.Sanic, data: Dict):
     """
     Similar to the input curie processing we want to ensure we provide proper JSON
     response for when the TRAPI input isn't valid
@@ -97,7 +97,7 @@ def test_invalid_trapi_input_handling(test_annotator: sanic.Sanic, data: dict):
         ["/curie/", {"ids": []}],
     ),
 )
-def test_invalid_batch_curie(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[list, dict]):
+def test_invalid_batch_curie(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[List, Dict]):
     """
     Tests erroneous formed or incorrect JSON bodies sent to the CURIE POST endpoint
     """

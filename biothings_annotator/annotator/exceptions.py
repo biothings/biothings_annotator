@@ -1,8 +1,9 @@
+from typing import Dict, List
 from biothings_annotator.annotator.settings import BIOLINK_PREFIX_to_BioThings
 
 
 class TRAPIInputError(ValueError):
-    def __init__(self, trapi_input: dict):
+    def __init__(self, trapi_input: Dict):
         self.input_structure = trapi_input
         self.expected_structure = {"message": {"knowledge_graph": {"nodes": {"node0": {}, "node1": {}, "nodeN": {}}}}}
         self.message = "Unsupported TRAPI input structure"
@@ -18,7 +19,7 @@ class InvalidCurieError(ValueError):
         super().__init__()
 
     @staticmethod
-    def annotator_supported_nodes() -> list:
+    def annotator_supported_nodes() -> List:
         """
         Returns the list of supported nodes in the annotator service
         based off the biolink prefix

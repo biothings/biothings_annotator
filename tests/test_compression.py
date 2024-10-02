@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Dict, Union
 from pathlib import Path
 import json
 
@@ -46,7 +46,7 @@ def test_get_compression(test_annotator: sanic.Sanic):
 @pytest.mark.unit
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
 @pytest.mark.xfail(reason="compression middleware disabled")
-def test_post_compression(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: dict):
+def test_post_compression(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
     """
     Tests the brotli compression when hitting our POST endpoint
     annotating a TRAPI request

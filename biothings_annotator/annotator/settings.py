@@ -43,6 +43,8 @@ ANNOTATOR_CLIENTS = {
             "MGI",
             "RGD",
             "alias",
+            "go.BP",
+            "go.MF",
             "interpro",
             "pharos",
             "taxid",

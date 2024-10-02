@@ -1,7 +1,16 @@
-from .annotator import StatusView, VersionView, BatchCurieView, CurieView, TrapiView, CurieLegacyView, TrapiLegacyView
+from typing import Dict, List
+from biothings_annotator.application.views.annotator import (
+    BatchCurieView,
+    CurieLegacyView,
+    CurieView,
+    StatusView,
+    TrapiLegacyView,
+    TrapiView,
+)
+from biothings_annotator.application.views.metadata import MetadataView, VersionView
 
 
-def build_routes() -> list[dict]:
+def build_routes() -> List[Dict]:
     """
     Basic method for aggregating all of the views created
     for the annotator service
@@ -20,13 +29,6 @@ def build_routes() -> list[dict]:
         "name": "status_endpoint",
     }
 
-    # --- VERSION ROUTE ---
-    version_route_main = {
-        "handler": VersionView.as_view(),
-        "uri": r"/version",
-        "name": "version_endpoint",
-    }
-
     # --- CURIE ROUTES ---
     curie_route_main = {
         "handler": CurieView.as_view(),
@@ -43,11 +45,21 @@ def build_routes() -> list[dict]:
     # --- TRAPI ROUTES ---
     trapi_route_main = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint"}
 
+    # --- METADATA ROUTES ---
+    metadata_route = {"handler": MetadataView.as_view(), "uri": "/metadata/openapi", "name": "metadata"}
+
+    version_route_main = {
+        "handler": VersionView.as_view(),
+        "uri": r"/version",
+        "name": "version_endpoint",
+    }
+
     route_collection = [
         status_route_main,
         version_route_main,
         curie_route_main,
         batch_curie_route,
         trapi_route_main,
+        metadata_route,
     ]
     return route_collection
