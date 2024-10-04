@@ -197,10 +197,15 @@ def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
-def test_curie_get(test_annotator: sanic.Sanic):
+@pytest.mark.parametrize("data_store", ["expected_curie.json"])
+def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
     """
     Tests the CURIE endpoint GET
     """
+    data_file_path = temporary_data_storage.joinpath(data_store)
+    with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+        expected_curie_body = json.load(file_handle)
+
     endpoint = "/curie/"
     curie_id = "NCBIGene:1017"
     url = f"{endpoint}{curie_id}"
@@ -212,50 +217,9 @@ def test_curie_get(test_annotator: sanic.Sanic):
     assert request.scheme == "http"
     assert request.server_path == url
 
-    expected_response_body = {
-        "NCBIGene:1017": [
-            {
-                "query": "1017",
-                "HGNC": "1771",
-                "MIM": "116953",
-                "_id": "1017",
-                "_score": 26.198248,
-                "alias": ["CDKN2", "p33(CDK2)"],
-                "interpro": [
-                    {"desc": "Protein kinase domain", "id": "IPR000719", "short_desc": "Prot_kinase_dom"},
-                    {
-                        "desc": "Serine/threonine-protein kinase, active site",
-                        "id": "IPR008271",
-                        "short_desc": "Ser/Thr_kinase_AS",
-                    },
-                    {
-                        "desc": "Protein kinase-like domain superfamily",
-                        "id": "IPR011009",
-                        "short_desc": "Kinase-like_dom_sf",
-                    },
-                    {
-                        "desc": "Protein kinase, ATP binding site",
-                        "id": "IPR017441",
-                        "short_desc": "Protein_kinase_ATP_BS",
-                    },
-                ],
-                "name": "cyclin dependent kinase 2",
-                "pharos": {
-                    "target_id": 10687,
-                    "tdl": "Tchem",
-                },
-                "summary": "This gene encodes a member of a family of serine/threonine protein kinases that participate in cell cycle regulation. The encoded protein is the catalytic subunit of the cyclin-dependent protein kinase complex, which regulates progression through the cell cycle. Activity of this protein is especially critical during the G1 to S phase transition. This protein associates with and regulated by other subunits of the complex including cyclin A or E, CDK inhibitor p21Cip1 (CDKN1A), and p27Kip1 (CDKN1B). Alternative splicing results in multiple transcript variants. [provided by RefSeq, Mar 2014].",
-                "symbol": "CDK2",
-                "taxid": 9606,
-                "type_of_gene": "protein-coding",
-            }
-        ]
-    }
-    expected_response_body[curie_id][0].pop("_score")
-
     response_body = response.json
     response_body[curie_id][0].pop("_score")
-    assert response.json == expected_response_body
+    assert response.json == expected_curie_body
 
     assert response.http_version == "HTTP/1.1"
     assert response.content_type == "application/json"
@@ -384,11 +348,18 @@ def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sa
 
 
 @pytest.mark.unit
-def test_annotator_get_redirect(test_annotator: sanic.Sanic):
+@pytest.mark.parametrize("data_store", ["expected_curie.json"])
+def test_annotator_get_redirect(
+    temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict
+):
     """
     Tests the legacy endpoint /annotator with a redirect to the
     /curie/ endpoint
     """
+    data_file_path = temporary_data_storage.joinpath(data_store)
+    with open(str(data_file_path), "r", encoding="utf-8") as file_handle:
+        expected_curie_body = json.load(file_handle)
+
     endpoint = "/annotator/"
     curie_id = "NCBIGene:1017"
     url = f"{endpoint}{curie_id}"
@@ -402,50 +373,9 @@ def test_annotator_get_redirect(test_annotator: sanic.Sanic):
     assert request.scheme == "http"
     assert request.server_path == url
 
-    expected_response_body = {
-        "NCBIGene:1017": [
-            {
-                "query": "1017",
-                "HGNC": "1771",
-                "MIM": "116953",
-                "_id": "1017",
-                "_score": 26.198248,
-                "alias": ["CDKN2", "p33(CDK2)"],
-                "interpro": [
-                    {"desc": "Protein kinase domain", "id": "IPR000719", "short_desc": "Prot_kinase_dom"},
-                    {
-                        "desc": "Serine/threonine-protein kinase, active site",
-                        "id": "IPR008271",
-                        "short_desc": "Ser/Thr_kinase_AS",
-                    },
-                    {
-                        "desc": "Protein kinase-like domain superfamily",
-                        "id": "IPR011009",
-                        "short_desc": "Kinase-like_dom_sf",
-                    },
-                    {
-                        "desc": "Protein kinase, ATP binding site",
-                        "id": "IPR017441",
-                        "short_desc": "Protein_kinase_ATP_BS",
-                    },
-                ],
-                "name": "cyclin dependent kinase 2",
-                "pharos": {
-                    "target_id": 10687,
-                    "tdl": "Tchem",
-                },
-                "summary": "This gene encodes a member of a family of serine/threonine protein kinases that participate in cell cycle regulation. The encoded protein is the catalytic subunit of the cyclin-dependent protein kinase complex, which regulates progression through the cell cycle. Activity of this protein is especially critical during the G1 to S phase transition. This protein associates with and regulated by other subunits of the complex including cyclin A or E, CDK inhibitor p21Cip1 (CDKN1A), and p27Kip1 (CDKN1B). Alternative splicing results in multiple transcript variants. [provided by RefSeq, Mar 2014].",
-                "symbol": "CDK2",
-                "taxid": 9606,
-                "type_of_gene": "protein-coding",
-            }
-        ]
-    }
-    expected_response_body[curie_id][0].pop("_score")
-
     response_body = response.json
     response_body[curie_id][0].pop("_score")
-    assert response.json == expected_response_body
+    assert response.json == expected_curie_body
 
     assert response.http_version == "HTTP/1.1"
     assert response.content_type == "application/json"
