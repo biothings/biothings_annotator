@@ -12,11 +12,11 @@ from biothings_annotator.application.views import VersionView
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
+def test_status_get(test_annotator: sanic.Sanic):
     """
     Tests the Status endpoint GET when the response is HTTP 200
     """
+    endpoint = "/status/"
     request, response = test_annotator.test_client.request(endpoint, http_method="get")
 
     assert request.method == "GET"
@@ -37,11 +37,11 @@ def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
+def test_status_head(test_annotator: sanic.Sanic):
     """
     Tests the Status endpoint HEAD when the response is HTTP 200
     """
+    endpoint = "/status/"
     request, response = test_annotator.test_client.request(endpoint, http_method="head")
 
     assert request.method == "HEAD"
@@ -61,11 +61,12 @@ def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
+def test_status_get_error(test_annotator: sanic.Sanic):
     """
     Tests the Status endpoint GET when an Exception is raised
     Mocking the annotate_curie method to raise an exception
     """
+    endpoint = "/status/"
     with patch.object(Annotator, "annotate_curie", side_effect=Exception("Simulated error")):
         request, response = test_annotator.test_client.request(endpoint, http_method="get")
 
@@ -86,12 +87,13 @@ def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
+def test_status_get_failed_data_check(test_annotator: sanic.Sanic):
     """
     Tests the Status endpoint GET when the data check fails
     Mocking the annotate_curie method to return a value that doesn't contain "NCBIGene:1017"
     """
+    endpoint = "/status/"
+
     # Mock the return value to simulate the data check failure
     with patch.object(Annotator, "annotate_curie", return_value={"_id": "some_other_id"}):
         request, response = test_annotator.test_client.request(endpoint, http_method="get")
@@ -231,11 +233,19 @@ def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: san
 
 
 @pytest.mark.parametrize(
-    "endpoint, batch_curie",
+    "batch_curie",
     (
         [
-            "/curie/",
-            [
+            "NCBIGene:695",
+            "MONDO:0001222",
+            "DOID:6034",
+            "CHEMBL.COMPOUND:821",
+            "PUBCHEM.COMPOUND:3406",
+            "CHEBI:192712",
+            "CHEMBL.COMPOUND:3707246",
+        ],
+        {
+            "ids": [
                 "NCBIGene:695",
                 "MONDO:0001222",
                 "DOID:6034",
@@ -243,28 +253,15 @@ def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: san
                 "PUBCHEM.COMPOUND:3406",
                 "CHEBI:192712",
                 "CHEMBL.COMPOUND:3707246",
-            ],
-        ],
-        [
-            "/curie/",
-            {
-                "ids": [
-                    "NCBIGene:695",
-                    "MONDO:0001222",
-                    "DOID:6034",
-                    "CHEMBL.COMPOUND:821",
-                    "PUBCHEM.COMPOUND:3406",
-                    "CHEBI:192712",
-                    "CHEMBL.COMPOUND:3707246",
-                ]
-            },
-        ],
+            ]
+        },
     ),
 )
-def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[List, Dict]):
+def test_curie_post(test_annotator: sanic.Sanic, batch_curie: Union[List, Dict]):
     """
     Tests the CURIE endpoint POST
     """
+    endpoint = "/curie/"
     if isinstance(batch_curie, list):
         curie_ids = set(batch_curie)
     elif isinstance(batch_curie, dict):
