@@ -1,10 +1,8 @@
 from typing import Dict, List
 from biothings_annotator.application.views.annotator import (
     BatchCurieView,
-    CurieLegacyView,
     CurieView,
     StatusView,
-    TrapiLegacyView,
     TrapiView,
 )
 from biothings_annotator.application.views.metadata import MetadataView, VersionView

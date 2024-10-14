@@ -430,22 +430,3 @@ class TrapiView(HTTPMethodView):
             }
             general_error_response = sanic.json(error_context, status=400)
             return general_error_response
-
-
-# --- Legacy Redirects ---
-# The /annotator endpoint has been deprcated so we setup these redirects:
-# GET /anotator/<CURIE_ID> -> /curie/<CURIE_ID> (Singular CURIE ID)
-# POST /anotator/ -> /trapi/
-class CurieLegacyView(HTTPMethodView):
-    @openapi.deprecated()
-    async def get(self, request: Request, curie: str):
-        redirect_response = response.redirect(f"/curie/{curie}", status=302)
-        return redirect_response
-
-
-class TrapiLegacyView(HTTPMethodView):
-    @openapi.deprecated()
-    async def post(self, request: Request):
-        trapi_view = TrapiView()
-        redirect_response = await trapi_view.post(request)
-        return redirect_response
