@@ -1,0 +1,500 @@
+{
+    "NCBIGene:1017": [
+        {
+            "query": "1017",
+            "HGNC": "1771",
+            "MIM": "116953",
+            "_id": "1017",
+            "alias": [
+                "CDKN2",
+                "p33(CDK2)"
+            ],
+            "go": {
+                "BP": [
+                    {
+                        "evidence": "IBA",
+                        "gocategory": "BP",
+                        "id": "GO:0000082",
+                        "qualifier": "involved_in",
+                        "term": "G1/S transition of mitotic cell cycle"
+                    },
+                    {
+                        "evidence": "NAS",
+                        "gocategory": "BP",
+                        "id": "GO:0000082",
+                        "pubmed": [
+                            9840943,
+                            15838514
+                        ],
+                        "qualifier": "involved_in",
+                        "term": "G1/S transition of mitotic cell cycle"
+                    },
+                    {
+                        "evidence": "NAS",
+                        "gocategory": "BP",
+                        "id": "GO:0000086",
+                        "pubmed": 1653904,
+                        "qualifier": "involved_in",
+                        "term": "G2/M transition of mitotic cell cycle"
+                    },
+                    {
+                        "evidence": "IEA",
+                        "gocategory": "BP",
+                        "id": "GO:0000122",
+                        "qualifier": "involved_in",
+                        "term": "negative regulation of transcription by RNA polymerase II"
+                    },
+                    {
+                        "evidence": "TAS",
+                        "gocategory": "BP",
+                        "id": "GO:0006260",
+                        "pubmed": 19238148,
+                        "qualifier": "involved_in",
+                        "term": "DNA replication"
+                    },
+                    {
+                        "evidence": "IEA",
+                        "gocategory": "BP",
+                        "id": "GO:0006281",
+                        "qualifier": "involved_in",
+                        "term": "DNA repair"
+                    },
+                    {
+                        "evidence": "IEA",
+                        "gocategory": "BP",
+                        "id": "GO:0006338",
+                        "qualifier": "involved_in",
+                        "term": "chromatin remodeling"
+                    },
+                    {
+                        "evidence": "IEA",
+                        "gocategory": "BP",
+                        "id": "GO:0006351",
+                        "qualifier": "involved_in",
+                        "term": "DNA-templated transcription"
+                    },
+                    {
+                        "evidence": "IDA",
+                        "gocategory": "BP",
+                        "id": "GO:0006468",
+                        "pubmed": [
+                            12944431,
+                            28666995
+                        ],
+                        "qualifier": "involved_in",
+                        "term": "protein phosphorylation"
+                    },
+                    {
+                        "evidence": "IMP",
+                        "gocategory": "BP",
+                        "id": "GO:0006468",
+                        "pubmed": 29203878,
+                        "qualifier": "involved_in",
+                        "term": "protein phosphorylation"
+                    },
+                    {
+                        "evidence": "IEA",
+                        "gocategory": "BP",
+                        "id": "GO:0006813",
+                        "qualifier": "involved_in",
+                        "term": "potassium ion transport"
+                    },
+                    {
+                        "evidence": "IMP",
+                        "gocategory": "BP",
+                        "id": "GO:0007099",
+                        "pubmed": 26297806,
+                        "qualifier": "involved_in",
+                        "term": "centriole replication"
+                    },
+                    {
+                        "evidence": "IBA",
+                        "gocategory": "BP",
+                        "id": "GO:0007165",
+                        "qualifier": "involved_in",
+                        "term": "signal transduction"
+                    },
+                    {
+                        "evidence": "IEP",
+                        "gocategory": "BP",
+                        "id": "GO:0007265",
+                        "pubmed": 9054499,
+                        "qualifier": "involved_in",
+                        "term": "Ras protein signal transduction"
+                    },
+                    {
+                        "evidence": "TAS",
+                        "gocategory": "BP",
+                        "id": "GO:0007346",
+                        "qualifier": "involved_in",
+                        "term": "regulation of mitotic cell cycle"
+                    },
+                    {
+                        "evidence": "IDA",
+                        "gocategory": "BP",
+                        "id": "GO:0008284",
+                        "pubmed": 10767298,
+                        "qualifier": "involved_in",
+                        "term": "positive regulation of cell population proliferation"
+                    },
+                    {
+                        "evidence": "IBA",
+                        "gocategory": "BP",
+                        "id": "GO:0010389",
+                        "qualifier": "involved_in",
+                        "term": "regulation of G2/M transition of mitotic cell cycle"
+                    },
+                    {
+                        "evidence": "IBA",
+                        "gocategory": "BP",
+                        "id": "GO:0010468",
+                        "qualifier": "involved_in",
+                        "term": "regulation of gene expression"
+                    },
+                    {
+                        "evidence": "IDA",
+                        "gocategory": "BP",
+                        "id": "GO:0018105",
+                        "pubmed": 23184662,
+                        "qualifier": "involved_in",
+                        "term": "peptidyl-serine phosphorylation"
+                    },
+                    {
+                        "evidence": "IDA",
+                        "gocategory": "BP",
+                        "id": "GO:0031453",
+                        "pubmed": 20935635,
+                        "qualifier": "involved_in",
+                        "term": "positive regulation of heterochromatin formation"
+                    },
+                    {
+                        "evidence": "TAS",
+                        "gocategory": "BP",
+                        "id": "GO:0031571",
+                        "pubmed": 21319273,
+                        "qualifier": "involved_in",
+                        "term": "mitotic G1 DNA damage checkpoint signaling"
+                    },
+                    {
+                        "evidence": "IEA",
+                        "gocategory": "BP",
+                        "id": "GO:0032298",
+                        "qualifier": "involved_in",
+                        "term": "positive regulation of DNA-templated DNA replication initiation"
+                    },
+                    {
+                        "evidence": "IDA",
+                        "gocategory": "BP",
+                        "id": "GO:0043247",
+                        "pubmed": 28216226,
+                        "qualifier": "involved_in",
+                        "term": "telomere maintenance in response to DNA damage"
+                    },
+                    {
+                        "evidence": "IDA",
+                        "gocategory": "BP",
+                        "id": "GO:0043687",
+                        "pubmed": 11746698,
+                        "qualifier": "involved_in",
+                        "term": "post-translational protein modification"
+                    },
+                    {
+                        "evidence": "TAS",
+                        "gocategory": "BP",
+                        "id": "GO:0045740",
+                        "qualifier": "involved_in",
+                        "term": "positive regulation of DNA replication"
+                    },
+                    {
+                        "evidence": "IEA",
+                        "gocategory": "BP",
+                        "id": "GO:0045893",
+                        "qualifier": "involved_in",
+                        "term": "positive regulation of DNA-templated transcription"
+                    },
+                    {
+                        "evidence": "TAS",
+                        "gocategory": "BP",
+                        "id": "GO:0051298",
+                        "pubmed": 19238148,
+                        "qualifier": "involved_in",
+                        "term": "centrosome duplication"
+                    },
+                    {
+                        "evidence": "IEA",
+                        "gocategory": "BP",
+                        "id": "GO:0051301",
+                        "qualifier": "involved_in",
+                        "term": "cell division"
+                    },
+                    {
+                        "evidence": "TAS",
+                        "gocategory": "BP",
+                        "id": "GO:0051321",
+                        "pubmed": 19238148,
+                        "qualifier": "involved_in",
+                        "term": "meiotic cell cycle"
+                    },
+                    {
+                        "evidence": "TAS",
+                        "gocategory": "BP",
+                        "id": "GO:0071732",
+                        "pubmed": 20079829,
+                        "qualifier": "involved_in",
+                        "term": "cellular response to nitric oxide"
+                    },
+                    {
+                        "evidence": "TAS",
+                        "gocategory": "BP",
+                        "id": "GO:0090398",
+                        "qualifier": "involved_in",
+                        "term": "cellular senescence"
+                    },
+                    {
+                        "evidence": "TAS",
+                        "gocategory": "BP",
+                        "id": "GO:1905784",
+                        "qualifier": "involved_in",
+                        "term": "regulation of anaphase-promoting complex-dependent catabolic process"
+                    }
+                ],
+                "MF": [
+                    {
+                        "category": "MF",
+                        "evidence": "IEA",
+                        "id": "GO:0000287",
+                        "qualifier": "enables",
+                        "term": "magnesium ion binding"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IDA",
+                        "id": "GO:0004674",
+                        "pubmed": 11953320,
+                        "qualifier": "enables",
+                        "term": "protein serine/threonine kinase activity"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IGI",
+                        "id": "GO:0004674",
+                        "pubmed": 26996940,
+                        "qualifier": "enables",
+                        "term": "protein serine/threonine kinase activity"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IBA",
+                        "id": "GO:0004693",
+                        "qualifier": "enables",
+                        "term": "cyclin-dependent protein serine/threonine kinase activity"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IDA",
+                        "id": "GO:0004693",
+                        "pubmed": [
+                            21596315,
+                            28216226
+                        ],
+                        "qualifier": "enables",
+                        "term": "cyclin-dependent protein serine/threonine kinase activity"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "TAS",
+                        "id": "GO:0004693",
+                        "qualifier": "enables",
+                        "term": "cyclin-dependent protein serine/threonine kinase activity"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IPI",
+                        "id": "GO:0005515",
+                        "pubmed": [
+                            2227411,
+                            7630397,
+                            8242750,
+                            8521818,
+                            8601310,
+                            8684460,
+                            8756328,
+                            8756624,
+                            9840943,
+                            10330164,
+                            11463386,
+                            11980914,
+                            12244298,
+                            12361598,
+                            12839962,
+                            12941338,
+                            15107404,
+                            15178429,
+                            15189033,
+                            15232106,
+                            15239650,
+                            15530371,
+                            15611625,
+                            15890360,
+                            16061792,
+                            16209941,
+                            16326706,
+                            16327805,
+                            16431923,
+                            16765349,
+                            16962592,
+                            17053782,
+                            17254966,
+                            17254967,
+                            17418410,
+                            17698606,
+                            18177895,
+                            19150984,
+                            19470470,
+                            19829063,
+                            20098747,
+                            20871633,
+                            21092281,
+                            21423803,
+                            21565702,
+                            21596315,
+                            21952639,
+                            22810586,
+                            22940584,
+                            23082202,
+                            23455922,
+                            23602568,
+                            23781148,
+                            23853094,
+                            24218572,
+                            24358021,
+                            25218637,
+                            25241761,
+                            25416956,
+                            25852190,
+                            26496610,
+                            28514442,
+                            28666995,
+                            29997244,
+                            30833792,
+                            31467278,
+                            32814053,
+                            33961781,
+                            34591612,
+                            34591642,
+                            35271311,
+                            37398436
+                        ],
+                        "qualifier": "enables",
+                        "term": "protein binding"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IEA",
+                        "id": "GO:0005524",
+                        "qualifier": "enables",
+                        "term": "ATP binding"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IPI",
+                        "id": "GO:0019904",
+                        "pubmed": [
+                            8876165,
+                            15024385
+                        ],
+                        "qualifier": "enables",
+                        "term": "protein domain specific binding"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IBA",
+                        "id": "GO:0030332",
+                        "qualifier": "enables",
+                        "term": "cyclin binding"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IDA",
+                        "id": "GO:0030332",
+                        "pubmed": [
+                            1653904,
+                            23781148
+                        ],
+                        "qualifier": "enables",
+                        "term": "cyclin binding"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IPI",
+                        "id": "GO:0030332",
+                        "pubmed": [
+                            1312467,
+                            15024385
+                        ],
+                        "qualifier": "enables",
+                        "term": "cyclin binding"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IDA",
+                        "id": "GO:0035173",
+                        "pubmed": 8692841,
+                        "qualifier": "contributes_to",
+                        "term": "histone kinase activity"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IDA",
+                        "id": "GO:0097472",
+                        "pubmed": [
+                            1312467,
+                            28666995
+                        ],
+                        "qualifier": "enables",
+                        "term": "cyclin-dependent protein kinase activity"
+                    },
+                    {
+                        "category": "MF",
+                        "evidence": "IEA",
+                        "id": "GO:0106310",
+                        "qualifier": "enables",
+                        "term": "protein serine kinase activity"
+                    }
+                ]
+            },
+            "interpro": [
+                {
+                    "desc": "Protein kinase domain",
+                    "id": "IPR000719",
+                    "short_desc": "Prot_kinase_dom"
+                },
+                {
+                    "desc": "Serine/threonine-protein kinase, active site",
+                    "id": "IPR008271",
+                    "short_desc": "Ser/Thr_kinase_AS"
+                },
+                {
+                    "desc": "Protein kinase-like domain superfamily",
+                    "id": "IPR011009",
+                    "short_desc": "Kinase-like_dom_sf"
+                },
+                {
+                    "desc": "Protein kinase, ATP binding site",
+                    "id": "IPR017441",
+                    "short_desc": "Protein_kinase_ATP_BS"
+                }
+            ],
+            "name": "cyclin dependent kinase 2",
+            "pharos": {
+                "target_id": 10687,
+                "tdl": "Tchem"
+            },
+            "summary": "This gene encodes a member of a family of serine/threonine protein kinases that participate in cell cycle regulation. The encoded protein is the catalytic subunit of the cyclin-dependent protein kinase complex, which regulates progression through the cell cycle. Activity of this protein is especially critical during the G1 to S phase transition. This protein associates with and regulated by other subunits of the complex including cyclin A or E, CDK inhibitor p21Cip1 (CDKN1A), and p27Kip1 (CDKN1B). Alternative splicing results in multiple transcript variants. [provided by RefSeq, Mar 2014].",
+            "symbol": "CDK2",
+            "taxid": 9606,
+            "type_of_gene": "protein-coding"
+        }
+    ]
+}
+
