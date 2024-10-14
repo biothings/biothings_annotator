@@ -60,7 +60,6 @@ def test_status_head(test_annotator: sanic.Sanic):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("endpoint", ["/status/"])
 def test_status_get_error(test_annotator: sanic.Sanic):
     """
     Tests the Status endpoint GET when an Exception is raised
