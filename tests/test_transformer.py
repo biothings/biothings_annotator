@@ -2,6 +2,8 @@
 Exercises the transformer instance
 """
 
+# pylint: disable=use-implicit-booleaness-not-comparison
+
 import logging
 import random
 
@@ -30,11 +32,11 @@ def test_annotation_transform(curie_prefix: str):
     response_transformer = ResponseTransformer(res_by_id=query_response, node_type=node_type)
     assert response_transformer.res_by_id == query_response
     assert response_transformer.node_type == node_type
-    assert response_transformer.data_cache == {}
+    assert response_transformer.data_cache == {}  # explicit empty dict
 
     response_transformer.transform()
     assert response_transformer.res_by_id == query_response
     assert response_transformer.node_type == node_type
-    assert response_transformer.data_cache == {}
+    assert response_transformer.data_cache == {}  # explicit empty dict
 
     response_transformer.transform()
