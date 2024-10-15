@@ -28,7 +28,7 @@ class Annotator:
         Query biothings client based on node_type for a list of ids
         """
         client = get_client(node_type, self.api_host)
-        if not isinstance(client, biothings_client.BiothingClient):
+        if not isinstance(client, (biothings_client.BiothingClient, biothings_client.AsyncBiothingClient)):
             logger.error("Failed to get the biothings client for %s type. This type is skipped.", node_type)
             return {}
 
