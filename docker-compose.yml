@@ -1,7 +1,6 @@
 name: biothings-annotator
 services:
   annotator:
-    image: annotator
     build:
       context: .
       dockerfile: ./docker/Dockerfile
