@@ -1,5 +1,7 @@
+name: biothings-annotator
 services:
   annotator:
+    image: annotator
     build:
       context: .
       dockerfile: ./docker/Dockerfile
@@ -7,6 +9,24 @@ services:
         - ARG ANNOTATOR_REPO=https://github.com/biothings/biothings_annotator.git
         - ARG ANNOTATOR_BRANCH=main
     container_name: biothings-annotator
-    network_mode: "host"
     ports:
-      - 9999:9999
+      - 9000:9000
+    networks:
+      - annotator-network
+
+  caddy:
+    image: caddy:2.8-alpine
+    ports:
+      - 443:443
+      - 80:80
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    restart: unless-stopped
+    depends_on:
+      - annotator
+    networks:
+      - annotator-network
+
+networks:
+  annotator-network:
+    driver: bridge

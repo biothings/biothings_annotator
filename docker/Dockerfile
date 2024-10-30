@@ -23,6 +23,7 @@ COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annot
 COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /home/annotator/configuration/version.txt
 
 STOPSIGNAL SIGINT
-EXPOSE 9999
+EXPOSE 9000
 
-ENTRYPOINT ["/home/annotator/venv/bin/python", "-m", "biothings_annotator", "--conf=/home/annotator/configuration/default.json"]
+ENTRYPOINT ["/home/annotator/venv/bin/python", "-m", "biothings_annotator"]
+CMD ["--conf=/home/annotator/configuration/default.json"]

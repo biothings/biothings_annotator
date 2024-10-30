@@ -1,0 +1,4 @@
+:9001 {
+	reverse_proxy annotator:9000
+	encode zstd gzip
+}
