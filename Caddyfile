@@ -1,4 +1,4 @@
-localhost:9000 {
-	reverse_proxy biothings-annotator:9001
+localhost {
+	reverse_proxy annotator:9001
 	encode zstd gzip
 }
