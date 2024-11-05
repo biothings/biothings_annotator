@@ -34,7 +34,7 @@
             "host": "0.0.0.0",
             "motd": true,
             "noisy_exceptions": true,
-            "port": 9000,
+            "port": 9001,
             "single_process": false,
             "unix": "",
             "verbosity": 2,
