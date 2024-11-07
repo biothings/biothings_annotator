@@ -8,7 +8,7 @@ RUN git clone -b ${ANNOTATOR_BRANCH} --recursive ${ANNOTATOR_REPO} .
 RUN git rev-parse HEAD > /build/annotator/version.txt
 RUN pip wheel --wheel-dir=/build/wheels /build/annotator
 
-FROM caddy:2.8-builder AS caddy_build
+FROM caddy:2.8-builder AS caddy_builder
 RUN xcaddy build
 
 FROM python:3.12-slim
@@ -23,9 +23,10 @@ RUN /home/annotator/venv/bin/pip install /home/annotator/wheels/*.whl && rm -rf 
 WORKDIR /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/application/configuration/default.json /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /home/annotator/configuration/version.txt
-COPY --from=builder /build/annotator/supervisord.conf /etc/supervisor/supervisord.conf
-COPY --from=caddy-build /usr/bin/caddy /usr/bin/caddy
-COPY --from=caddy_build /build/annotator/Caddyfile /etc/caddy/Caddyfile
+COPY --from=caddy_builder /usr/bin/caddy /usr/bin/caddy
+
+COPY supervisord.conf /etc/supervisor/supervisord.conf
+COPY Caddyfile /etc/caddy/Caddyfile
 
 STOPSIGNAL SIGINT
 EXPOSE 9000
