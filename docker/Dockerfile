@@ -1,8 +1,7 @@
 FROM python:3.12 AS builder
 
 ARG ANNOTATOR_REPO=https://github.com/biothings/biothings_annotator.git
-# TODO: Change to main branch
-ARG ANNOTATOR_BRANCH=add-reverse-proxy
+ARG ANNOTATOR_BRANCH=main
 
 WORKDIR /build/annotator
 RUN git clone -b ${ANNOTATOR_BRANCH} --recursive ${ANNOTATOR_REPO} .
@@ -25,8 +24,8 @@ WORKDIR /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/application/configuration/default.json /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /home/annotator/configuration/version.txt
 
-COPY --from=builder --chown=annotator:annotator /build/annotator/supervisord.conf /etc/supervisor/supervisord.conf
-COPY --from=builder --chown=annotator:annotator /build/annotator/Caddyfile /etc/caddy/Caddyfile
+COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
+COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/Caddyfile /etc/caddy/Caddyfile
 COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
 
 STOPSIGNAL SIGINT
