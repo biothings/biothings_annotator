@@ -22,7 +22,46 @@ spec:
         {{- include "biothings-annotator.selectorLabels" . | nindent 8 }}
         {{- toYaml .Values.ncats.labels | nindent 8 }}
     spec:
+      volumes:
+        - name: annotator-caddy-config
+          configMap:
+            name: annotator-caddy-config
       containers:
+        - name: annotator-caddy
+          image: caddy:2.8-alpine
+          ports:
+            - containerPort: 9000
+          volumeMounts:
+            - name: annotator-caddy-config
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+          startupProbe:  # To determine if a container application has started successfully.
+            httpGet:
+              path: /status
+              port: {{ .Values.containers.port }}
+            initialDelaySeconds: 10  # The number of seconds to wait after the container has started before performing the first startup probe.
+            periodSeconds: 15  # How often (in seconds) to perform the startup probe.
+            timeoutSeconds: 10  # The number of seconds after which the probe times out.
+            successThreshold: 1  # The number of consecutive successes required to consider the container started successfully.
+            failureThreshold: 5  # The number of consecutive failures required to consider the container startup to have failed.
+          readinessProbe:  # To determine when the container is ready to start accepting traffic
+            httpGet:
+              path: /status
+              port: {{ .Values.containers.port }}
+            initialDelaySeconds: 20  #  The number of seconds to wait after the container has started before performing the first readiness probe.
+            periodSeconds: 20  # How often (in seconds) to perform the readiness probe.
+            timeoutSeconds: 10  # The number of seconds after which the probe times out.
+            successThreshold: 1  # The number of consecutive successes required to consider the container ready after it has been failing.
+            failureThreshold: 3  # The number of consecutive failures required to consider the container not ready.
+          livenessProbe:  # To determine if a container is still running
+            httpGet:
+              path: /status
+              port: {{ .Values.containers.port }}
+            initialDelaySeconds: 30  # The number of seconds to wait after the container has started before performing the first liveness probe.
+            periodSeconds: 60  # How often (in seconds) to perform the liveness probe.
+            timeoutSeconds: 30  # The number of seconds after which the probe times out.
+            successThreshold: 1  # The number of consecutive successes required to consider the container healthy after it has been failing.
+            failureThreshold: 3  # The number of consecutive failures required to consider the container unhealthy and restart it.
         - name: {{ .Values.containers.name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -37,12 +76,12 @@ spec:
               value: "{{ .Values.containers.OPENTELEMETRY_JAEGER_PORT_VALUE }}"      
           ports:
             - name: http
-              containerPort: {{ .Values.containers.port }}
+              containerPort: 9001
               protocol: TCP
           startupProbe:  # To determine if a container application has started successfully.
             httpGet:
               path: /status
-              port: {{ .Values.containers.port }}
+              port: 9001
             initialDelaySeconds: 10  # The number of seconds to wait after the container has started before performing the first startup probe.
             periodSeconds: 30  # How often (in seconds) to perform the startup probe.
             timeoutSeconds: 15  # The number of seconds after which the probe times out.
@@ -51,7 +90,7 @@ spec:
           readinessProbe:  # To determine when the container is ready to start accepting traffic
             httpGet:
               path: /status
-              port: {{ .Values.containers.port }}
+              port: 9001
             initialDelaySeconds: 30  #  The number of seconds to wait after the container has started before performing the first readiness probe.
             periodSeconds: 60  # How often (in seconds) to perform the readiness probe.
             timeoutSeconds: 30  # The number of seconds after which the probe times out.
@@ -60,7 +99,7 @@ spec:
           livenessProbe:  # To determine if a container is still running
             httpGet:
               path: /status
-              port: {{ .Values.containers.port }}
+              port: 9001
             initialDelaySeconds: 30  # The number of seconds to wait after the container has started before performing the first liveness probe.
             periodSeconds: 60  # How often (in seconds) to perform the liveness probe.
             timeoutSeconds: 30  # The number of seconds after which the probe times out.
@@ -74,3 +113,19 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: annotator-caddy-config
+data:
+  Caddyfile: |
+    :9000 {
+      reverse_proxy localhost:9001
+      encode zstd gzip
+      log {
+        output stdout
+        format json
+      }
+    }
