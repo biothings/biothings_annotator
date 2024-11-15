@@ -30,7 +30,7 @@ spec:
         - name: annotator-caddy
           image: caddy:2.8-alpine
           ports:
-            - containerPort: 9000
+            - containerPort: {{ .Values.containers.port }}
           volumeMounts:
             - name: annotator-caddy-config
               mountPath: /etc/caddy/Caddyfile
@@ -76,12 +76,12 @@ spec:
               value: "{{ .Values.containers.OPENTELEMETRY_JAEGER_PORT_VALUE }}"      
           ports:
             - name: http
-              containerPort: 9001
+              containerPort: 9000
               protocol: TCP
           startupProbe:  # To determine if a container application has started successfully.
             httpGet:
               path: /status
-              port: 9001
+              port: 9000
             initialDelaySeconds: 10  # The number of seconds to wait after the container has started before performing the first startup probe.
             periodSeconds: 30  # How often (in seconds) to perform the startup probe.
             timeoutSeconds: 15  # The number of seconds after which the probe times out.
@@ -90,7 +90,7 @@ spec:
           readinessProbe:  # To determine when the container is ready to start accepting traffic
             httpGet:
               path: /status
-              port: 9001
+              port: 9000
             initialDelaySeconds: 30  #  The number of seconds to wait after the container has started before performing the first readiness probe.
             periodSeconds: 60  # How often (in seconds) to perform the readiness probe.
             timeoutSeconds: 30  # The number of seconds after which the probe times out.
@@ -99,7 +99,7 @@ spec:
           livenessProbe:  # To determine if a container is still running
             httpGet:
               path: /status
-              port: 9001
+              port: 9000
             initialDelaySeconds: 30  # The number of seconds to wait after the container has started before performing the first liveness probe.
             periodSeconds: 60  # How often (in seconds) to perform the liveness probe.
             timeoutSeconds: 30  # The number of seconds after which the probe times out.
@@ -121,8 +121,8 @@ metadata:
   name: annotator-caddy-config
 data:
   Caddyfile: |
-    :9000 {
-      reverse_proxy localhost:9001
+    :9001 {
+      reverse_proxy localhost:9000
       encode zstd gzip
       log {
         output stdout
