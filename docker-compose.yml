@@ -9,5 +9,5 @@ services:
         - ARG ANNOTATOR_BRANCH=main
     container_name: biothings-annotator
     ports:
-      - 9001:9001
+      - 9000:9000
 
