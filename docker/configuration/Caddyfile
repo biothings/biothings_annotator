@@ -1,4 +1,4 @@
-:9001 {
-	reverse_proxy localhost:9000
+:9000 {
+	reverse_proxy localhost:9001
 	encode zstd gzip
 }

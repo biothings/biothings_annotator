@@ -29,7 +29,7 @@ COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configur
 COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
 
 STOPSIGNAL SIGINT
-EXPOSE 9001
+EXPOSE 9000
 
 ENTRYPOINT ["supervisord"]
 CMD ["-c", "/etc/supervisor/supervisord.conf"]
