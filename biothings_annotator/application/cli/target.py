@@ -16,9 +16,10 @@ from typing import Dict
 
 from sanic import Sanic
 
-from biothings_annotator.application.views import build_routes
-from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.exceptions import build_exception_handers
+from biothings_annotator.application.listeners import build_listeners
+from biothings_annotator.application.middleware import build_middleware
+from biothings_annotator.application.views import build_routes
 
 logging.basicConfig()
 logger = logging.getLogger("sanic-application")
@@ -83,6 +84,15 @@ def build_application(configuration: Dict = None) -> Sanic:
         except Exception as gen_exc:
             logger.exception(gen_exc)
             logger.error("Unable to add middleware %s", middleware)
+            raise gen_exc
+
+    application_listeners = build_listeners()
+    for listener in application_listeners:
+        try:
+            application.register_listener(**listener)
+        except Exception as gen_exc:
+            logger.exception(gen_exc)
+            logger.error("Unable to add listener %s", listener)
             raise gen_exc
 
     exception_handlers = build_exception_handers()
