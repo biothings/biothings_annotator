@@ -8,9 +8,11 @@ RUN git clone -b ${ANNOTATOR_BRANCH} --recursive ${ANNOTATOR_REPO} .
 RUN git rev-parse HEAD > /build/annotator/version.txt
 RUN pip wheel --wheel-dir=/build/wheels /build/annotator
 
+FROM caddy:2.8-builder AS caddy_builder
+RUN xcaddy build
 
 FROM python:3.12-slim
-RUN apt update -q -y && apt install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+RUN apt update -q -y && apt install -y --no-install-recommends git supervisor curl telnet && rm -rf /var/lib/apt/lists/*
 RUN useradd -m annotator && usermod -aG sudo annotator
 USER annotator
 WORKDIR /home/annotator/
@@ -22,7 +24,12 @@ WORKDIR /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/application/configuration/default.json /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /home/annotator/configuration/version.txt
 
-STOPSIGNAL SIGINT
-EXPOSE 9999
+COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
+COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/Caddyfile /etc/caddy/Caddyfile
+COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
 
-ENTRYPOINT ["/home/annotator/venv/bin/python", "-m", "biothings_annotator", "--conf=/home/annotator/configuration/default.json"]
+STOPSIGNAL SIGINT
+EXPOSE 9000
+
+ENTRYPOINT ["supervisord"]
+CMD ["-c", "/etc/supervisor/supervisord.conf"]
