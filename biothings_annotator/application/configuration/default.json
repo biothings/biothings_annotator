@@ -7,6 +7,9 @@
             "REQUEST_MAX_SIZE": 100000000,
             "CACHE_MAX_AGE": 604800
         },
+        "sentry": {
+            "SENTRY_CLIENT_KEY": ""
+        },
         "extension": {
             "openapi": {
                 "OAS": true,
