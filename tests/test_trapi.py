@@ -60,9 +60,10 @@ class TestTrapiAnnotation:
 
     annotation_instance = Annotator()
 
+    @pytest.mark.asyncio
     @pytest.mark.unit
     @pytest.mark.parametrize("data_store", ["trapi_request.json"])
-    def test_default(self, temporary_data_storage: Union[str, Path], data_store: str):
+    async def test_default(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
         Tests the TRAPI annotation method with default arguments
         """
@@ -75,7 +76,7 @@ class TestTrapiAnnotation:
         fields = None
         limit = None
 
-        annotation = self.annotation_instance.annotate_trapi(
+        annotation = await self.annotation_instance.annotate_trapi(
             trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
         )
         node_set = set(trapi_data["message"]["knowledge_graph"]["nodes"].keys())
@@ -108,9 +109,10 @@ class TestTrapiAnnotation:
                             score = values.get("_score", None)
                             assert score is not None
 
+    @pytest.mark.asyncio
     @pytest.mark.unit
     @pytest.mark.parametrize("data_store", ["trapi_request.json"])
-    def test_append(self, temporary_data_storage: Union[str, Path], data_store: str):
+    async def test_append(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
         Tests the TRAPI annotation method with append enabled
         """
@@ -131,7 +133,7 @@ class TestTrapiAnnotation:
         nodes_list = {key: {"attributes": []} for key in nodes.keys()}
         trapi_data["message"]["knowledge_graph"]["nodes"] = nodes_list
 
-        annotation = self.annotation_instance.annotate_trapi(
+        annotation = await self.annotation_instance.annotate_trapi(
             trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
         )
         node_set = set(trapi_data["message"]["knowledge_graph"]["nodes"].keys())
@@ -163,9 +165,10 @@ class TestTrapiAnnotation:
                             score = values.get("_score", None)
                             assert score is not None
 
+    @pytest.mark.asyncio
     @pytest.mark.unit
     @pytest.mark.parametrize("data_store", ["trapi_request.json"])
-    def test_raw(self, temporary_data_storage: Union[str, Path], data_store: str):
+    async def test_raw(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
         Tests the TRAPI annotation method with raw enabled
         """
@@ -178,7 +181,7 @@ class TestTrapiAnnotation:
         fields = None
         limit = None
 
-        annotation = self.annotation_instance.annotate_trapi(
+        annotation = await self.annotation_instance.annotate_trapi(
             trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
         )
         node_set = set(trapi_data["message"]["knowledge_graph"]["nodes"].keys())
@@ -210,9 +213,10 @@ class TestTrapiAnnotation:
                             score = values.get("_score", None)
                             assert score is not None
 
+    @pytest.mark.asyncio
     @pytest.mark.unit
     @pytest.mark.parametrize("data_store", ["trapi_request.json"])
-    def test_append_and_raw(self, temporary_data_storage: Union[str, Path], data_store: str):
+    async def test_append_and_raw(self, temporary_data_storage: Union[str, Path], data_store: str):
         """
         Tests the TRAPI annotation method with append & raw enabled
         """
@@ -233,7 +237,7 @@ class TestTrapiAnnotation:
         nodes_list = {key: {"attributes": []} for key in nodes.keys()}
         trapi_data["message"]["knowledge_graph"]["nodes"] = nodes_list
 
-        annotation = self.annotation_instance.annotate_trapi(
+        annotation = await self.annotation_instance.annotate_trapi(
             trapi_input=trapi_data, append=append, raw=raw, fields=fields, limit=limit
         )
         node_set = set(trapi_data["message"]["knowledge_graph"]["nodes"].keys())
