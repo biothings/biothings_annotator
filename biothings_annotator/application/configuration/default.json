@@ -7,6 +7,12 @@
             "REQUEST_MAX_SIZE": 100000000,
             "CACHE_MAX_AGE": 604800
         },
+        "opentelemetry": {
+            "OPENTELEMETRY_ENABLED": false,
+            "OPENTELEMETRY_SERVICE_NAME": "biothings-annotator",
+            "OPENTELEMETRY_JAEGER_HOST": "http://localhost", 
+            "OPENTELEMETRY_JAEGER_PORT": 6381
+        },
         "extension": {
             "openapi": {
                 "OAS": true,
