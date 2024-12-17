@@ -169,37 +169,6 @@ class ResponseTransformer:
             if ncit_def_d:
                 self.data_cache["ncit"] = ncit_def_d
 
-    def deprecated_transform_add_ncit_description(self, doc):
-        """
-        add ncit_description field to unii object based on unii.ncit field
-        deprecated now, as ncit_description is now returned directly from mychem.info
-        """
-        if self.node_type != "chem":
-            return doc
-
-        if "ncit" not in self.data_cache:
-            self.caching_ncit_descriptions()
-
-        ncit_def_d = self.data_cache.get("ncit", {})
-
-        def _add_ncit_description(unii):
-            ncit = unii.get("ncit")
-            ncit = f"NCIT:{ncit}"
-            if ncit:
-                ncit_def = ncit_def_d.get(ncit)
-                if ncit_def:
-                    unii["ncit_description"] = ncit_def
-
-        unii = doc.get("unii", {})
-        if unii:
-            if isinstance(unii, list):
-                # in case returned chembl is a list, rare but still possible
-                for u in unii:
-                    _add_ncit_description(u)
-            else:
-                _add_ncit_description(unii)
-        return doc
-
     def transform_one_doc(self, doc):
         """transform the response from biothings client"""
         for fn_name, fn in inspect.getmembers(self, predicate=inspect.ismethod):

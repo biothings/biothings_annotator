@@ -39,7 +39,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-    "brotli >= 1.1.0",
     "biothings_client >= 0.3.1",
     "sanic[ext] >= 23.12.1",
 ]
