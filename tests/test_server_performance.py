@@ -22,7 +22,6 @@ import uuid
 
 import httpx
 import pytest
-import requests
 import sanic
 
 
@@ -116,9 +115,9 @@ def test_multiple_users_querying(
             body = user_query["body"]
 
             if method == "GET":
-                httpcallback = requests.get
+                httpcallback = httpx.get
             elif method == "POST":
-                httpcallback = requests.post
+                httpcallback = httpx.post
 
             data = None
             if body != "":
