@@ -219,7 +219,18 @@ def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: san
 
     response_body = response.json
     response_body[curie_id][0].pop("_score")
-    assert response.json == expected_curie_body
+
+    assert response.json.keys() == expected_curie_body.keys()
+    response_curie_annotation = response.json.get(curie_id)
+    expected_curie_annotation = expected_curie_body.get(curie_id)
+
+    # Expected length of 1 response for one anootation
+    assert len(response_curie_annotation) == len(expected_curie_annotation)
+
+    # Verify structure without the content to avoid having to capture drifting changes
+    # in the responses over time. The structure should be more static
+    # ['query', 'HGNC', 'MIM', '_id', 'alias', 'go', 'interpro', 'name', 'pharos', 'summary', 'symbol', 'taxid', 'type_of_gene']
+    assert response_curie_annotation[0].keys() == expected_curie_annotation[0].keys()
 
     assert response.http_version == "HTTP/1.1"
     assert response.content_type == "application/json"
@@ -375,7 +386,18 @@ def test_annotator_get_redirect(
 
     response_body = response.json
     response_body[curie_id][0].pop("_score")
-    assert response.json == expected_curie_body
+
+    assert response.json.keys() == expected_curie_body.keys()
+    response_curie_annotation = response.json.get(curie_id)
+    expected_curie_annotation = expected_curie_body.get(curie_id)
+
+    # Expected length of 1 response for one anootation
+    assert len(response_curie_annotation) == len(expected_curie_annotation)
+
+    # Verify structure without the content to avoid having to capture drifting changes
+    # in the responses over time. The structure should be more static
+    # ['query', 'HGNC', 'MIM', '_id', 'alias', 'go', 'interpro', 'name', 'pharos', 'summary', 'symbol', 'taxid', 'type_of_gene']
+    assert response_curie_annotation[0].keys() == expected_curie_annotation[0].keys()
 
     assert response.http_version == "HTTP/1.1"
     assert response.content_type == "application/json"

@@ -167,7 +167,7 @@ def test_bulk_get(temporary_data_storage: Union[str, Path], test_annotator: sani
     with multiprocessing.Pool(num_workers) as worker_pool:
         for index, (request_uuid, request_args) in enumerate(bulk_requests.items()):
             logger.info("Spawning process #%s -> %s", index, request_args["url"])
-            async_integration_future = worker_pool.apply_async(requests.get, kwds=request_args)
+            async_integration_future = worker_pool.apply_async(httpx.get, kwds=request_args)
 
             integration_futures[request_uuid] = async_integration_future
             random_delay = random.random() * delay
@@ -222,7 +222,7 @@ def test_bulk_post(
     with multiprocessing.Pool(num_workers) as worker_pool:
         for index, (request_uuid, request_args) in enumerate(bulk_requests.items()):
             logger.info("Spawning process #%s -> %s", index, request_args["url"])
-            async_integration_future = worker_pool.apply_async(requests.post, kwds=request_args)
+            async_integration_future = worker_pool.apply_async(httpx.post, kwds=request_args)
 
             integration_futures[request_uuid] = async_integration_future
             random_delay = random.random() * delay
@@ -267,7 +267,7 @@ def test_ara_integration_trapi_requests(
 
     with multiprocessing.Pool(num_workers) as worker_pool:
         for worker in range(num_workers):
-            integration_future = worker_pool.apply_async(requests.post, kwds=worker_request_arguments)
+            integration_future = worker_pool.apply_async(httpx.post, kwds=worker_request_arguments)
             logger.info("Spawning process #%s -> %s", worker, worker_request_arguments["url"])
             integration_futures.append(integration_future)
             random_delay = random.random() * 1e-3
