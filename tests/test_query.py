@@ -31,15 +31,16 @@ def test_annotation_client(node_type: str):
     """
     if node_type in ANNOTATOR_CLIENTS.keys():
         client = utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
-        assert isinstance(client, biothings_client.BiothingClient)
+        assert isinstance(client, biothings_client.AsyncBiothingClient)
     else:
         with pytest.raises(ValueError):
             utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
 @pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
-def test_biothings_query(curie_prefix: str):
+async def test_biothings_query(curie_prefix: str):
     random_index = random.randint(0, 10000)
     curie_query = f"{curie_prefix}:{str(random_index)}"
 
@@ -53,7 +54,7 @@ def test_biothings_query(curie_prefix: str):
 
     fields = ANNOTATOR_CLIENTS[node_type]["fields"]
     scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
-    querymany_result = client.querymany([node_id], scopes=scopes, fields=fields)
+    querymany_result = await client.querymany([node_id], scopes=scopes, fields=fields)
     logger.info("Done. %s annotation objects returned.", len(querymany_result))
     query_response = utils.group_by_subfield(collection=querymany_result, search_key="query")
 
