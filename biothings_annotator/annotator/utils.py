@@ -21,13 +21,13 @@ except ImportError:
 
 import biothings_client
 
-from .exceptions import InvalidCurieError
-from .settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
+from biothings_annotator.annotator.exceptions import InvalidCurieError
+from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
 
 logger = logging.getLogger(__name__)
 
 
-def get_client(node_type: str, api_host: str) -> Union[biothings_client.BiothingClient, None]:
+def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBiothingClient, None]:
     """
     Attempts to lazy load the biothings-client instance
 
@@ -59,8 +59,7 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.Biothing
     client_configuration = client_parameters.get("configuration")
     client_endpoint = client_parameters.get("endpoint")
     client_instance = client_parameters.get("instance")
-
-    if client_instance is not None and isinstance(client_instance, biothings_client.BiothingClient):
+    if client_instance is not None and isinstance(client_instance, biothings_client.AsyncBiothingClient):
         client = client_instance
 
     elif client_configuration is not None and isinstance(client_configuration, dict):
@@ -84,7 +83,7 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.Biothing
         )
 
     # cache the client
-    if isinstance(client, biothings_client.BiothingClient):
+    if isinstance(client, biothings_client.AsyncBiothingClient):
         ANNOTATOR_CLIENTS[node_type]["client"]["instance"] = client
 
     return client
