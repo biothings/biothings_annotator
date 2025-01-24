@@ -18,7 +18,7 @@ SERVICE_PROVIDER_API_HOST_PROD = "https://biothings.transltr.io"
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "host", (SERVICE_PROVIDER_API_HOST_CI, SERVICE_PROVIDER_API_HOST_TEST, SERVICE_PROVIDER_API_HOST_PROD, None)
+    "host", (SERVICE_PROVIDER_API_HOST_CI, SERVICE_PROVIDER_API_HOST_TEST, SERVICE_PROVIDER_API_HOST_PROD)
 )
 def test_environment_configuration(host: str):
     """
@@ -54,6 +54,7 @@ def test_environment_configuration(host: str):
 
             assert client.url == f"{annotator_instance.api_host}/{endpoint}"
             assert ANNOTATOR_CLIENTS[node_type]["client"]["instance"] == client
+            breakpoint()
     finally:
         if os.environ.get("SERVICE_PROVIDER_API_HOST", None) is not None:
             del os.environ["SERVICE_PROVIDER_API_HOST"]

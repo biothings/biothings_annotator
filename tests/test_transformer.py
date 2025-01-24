@@ -9,7 +9,7 @@ import random
 
 import pytest
 
-from biothings_annotator import ANNOTATOR_CLIENTS, Annotator, BIOLINK_PREFIX_to_BioThings, ResponseTransformer, utils
+from biothings_annotator import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings, Annotator, ResponseTransformer, utils
 from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ logger.setLevel(logging.DEBUG)
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
+@pytest.mark.asyncio(scope="module")
 @pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
 async def test_annotation_transform(curie_prefix: str):
     annotation_instance = Annotator()

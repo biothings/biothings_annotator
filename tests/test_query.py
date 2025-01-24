@@ -38,7 +38,7 @@ def test_annotation_client(node_type: str):
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
+@pytest.mark.asyncio(scope="module")
 @pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
 async def test_biothings_query(curie_prefix: str):
     random_index = random.randint(0, 10000)
