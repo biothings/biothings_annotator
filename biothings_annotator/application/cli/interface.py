@@ -164,9 +164,6 @@ class AnnotatorCLI(SanicCLI):
         > Build an HTTP server using the network parameters from the configuration
         and the sanic application
         """
-        if self.inspecting:
-            self._inspector()
-            return
 
         self._precheck()
         try:
