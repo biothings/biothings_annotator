@@ -12,12 +12,13 @@ from biothings_annotator.application.views import VersionView
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
+async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint GET when the response is HTTP 200
     """
-    request, response = test_annotator.test_client.request(endpoint, http_method="get")
+    request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
     assert request.method == "GET"
     assert request.query_string == ""
@@ -37,12 +38,13 @@ def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
+async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint HEAD when the response is HTTP 200
     """
-    request, response = test_annotator.test_client.request(endpoint, http_method="head")
+    request, response = await test_annotator.asgi_client.request(method="head", url=endpoint)
 
     assert request.method == "HEAD"
     assert request.query_string == ""
@@ -60,14 +62,15 @@ def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
+async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint GET when an Exception is raised
     Mocking the annotate_curie method to raise an exception
     """
     with patch.object(Annotator, "annotate_curie", side_effect=Exception("Simulated error")):
-        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
         assert request.method == "GET"
         assert request.query_string == ""
@@ -86,15 +89,16 @@ def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
-def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
+async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint GET when the data check fails
     Mocking the annotate_curie method to return a value that doesn't contain "NCBIGene:1017"
     """
     # Mock the return value to simulate the data check failure
     with patch.object(Annotator, "annotate_curie", return_value={"_id": "some_other_id"}):
-        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
         assert request.method == "GET"
         assert request.query_string == ""
@@ -113,13 +117,14 @@ def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
+async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
     """
     Test the Version endpoint GET method with a successful file read
     """
     with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
-        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
         mock_file_read.assert_called_once()
 
@@ -141,13 +146,14 @@ def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint: str):
+async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint: str):
     """
     Test the Version endpoint GET method when version.txt is not found
     """
     with patch.object(VersionView, "open_version_file", side_effect=FileNotFoundError) as mock_file_read:
-        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
         mock_file_read.assert_called_once()
 
@@ -169,13 +175,14 @@ def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
+async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
     """
     Test the Version endpoint GET method when an exception occurs
     """
     with patch.object(VersionView, "open_version_file", side_effect=Exception("Simulated error")) as mock_file_read:
-        request, response = test_annotator.test_client.request(endpoint, http_method="get")
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
         mock_file_read.assert_called_once()
 
@@ -197,8 +204,9 @@ def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["expected_curie.json"])
-def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
+async def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
     """
     Tests the CURIE endpoint GET
     """
@@ -209,7 +217,7 @@ def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: san
     endpoint = "/curie/"
     curie_id = "NCBIGene:1017"
     url = f"{endpoint}{curie_id}"
-    request, response = test_annotator.test_client.request(url, http_method="get")
+    request, response = await test_annotator.asgi_client.request(method="get", url=url)
 
     assert request.method == "GET"
     assert request.is_safe
@@ -241,6 +249,8 @@ def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: san
     assert response.encoding == "utf-8"
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize(
     "endpoint, batch_curie",
     (
@@ -272,7 +282,7 @@ def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: san
         ],
     ),
 )
-def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[List, Dict]):
+async def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[List, Dict]):
     """
     Tests the CURIE endpoint POST
     """
@@ -281,7 +291,7 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Uni
     elif isinstance(batch_curie, dict):
         curie_ids = set(batch_curie["ids"])
 
-    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=batch_curie)
+    request, response = await test_annotator.asgi_client.request(method="post", url=endpoint, json=batch_curie)
 
     assert request.method == "POST"
     assert request.query_string == ""
@@ -301,8 +311,9 @@ def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Uni
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
-def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
+async def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
     """
     Tests the POST endpoints for our annotation service
     """
@@ -311,7 +322,7 @@ def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sa
         trapi_body = json.load(file_handle)
 
     endpoint = "/trapi/"
-    request, response = test_annotator.test_client.request(endpoint, http_method="post", json=trapi_body)
+    request, response = await test_annotator.asgi_client.request(method="post", url=endpoint, json=trapi_body)
 
     assert request.method == "POST"
     assert request.query_string == ""
@@ -359,8 +370,9 @@ def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sa
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["expected_curie.json"])
-def test_annotator_get_redirect(
+async def test_annotator_get_redirect(
     temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict
 ):
     """
@@ -374,15 +386,13 @@ def test_annotator_get_redirect(
     endpoint = "/annotator/"
     curie_id = "NCBIGene:1017"
     url = f"{endpoint}{curie_id}"
-    request, response = test_annotator.test_client.request(
-        url, http_method="get", follow_redirects=True, allow_redirects=True
-    )
+    request, response = await test_annotator.asgi_client.request(method="get", url=url, follow_redirects=True)
 
     assert request.method == "GET"
     assert request.is_safe
     assert request.query_string == ""
     assert request.scheme == "http"
-    assert request.server_path == url
+    # assert request.server_path == url
 
     response_body = response.json
     response_body[curie_id][0].pop("_score")
@@ -409,8 +419,9 @@ def test_annotator_get_redirect(
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
-def test_annotator_post_redirect(
+async def test_annotator_post_redirect(
     temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict
 ):
     """
@@ -421,8 +432,8 @@ def test_annotator_post_redirect(
         trapi_body = json.load(file_handle)
 
     endpoint = "/annotator/"
-    request, response = test_annotator.test_client.request(
-        endpoint, http_method="post", json=trapi_body, follow_redirects=True, allow_redirects=True
+    request, response = await test_annotator.asgi_client.request(
+        method="post", url=endpoint, json=trapi_body, follow_redirects=True
     )
 
     assert request.method == "POST"

@@ -39,15 +39,18 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-    "biothings_client >= 0.3.1",
+    "biothings_client >= 0.4.0",
     "sanic[ext] >= 23.12.1",
 ]
+
 
 [project.optional-dependencies]
 tests = [
     "pytest >= 8.1.1",
     "pytest-asyncio >= 0.23.8",
-    "sanic-testing >= 24.6.0"
+    "pytest-randomly",
+    "sanic-testing >= 24.6.0",
+    "pytest-randomly"
 ]
 
 
@@ -65,12 +68,14 @@ extend-exclude = '''
 )
 '''
 
+
 [tool.isort]
 profile = "black"
 combine_as_imports = true
 line_length = 120
 src_paths = ["."]
 extend_skip = []
+
 
 
 # pytest configuration
@@ -94,6 +99,7 @@ addopts = [
     "--code-highlight=yes"
 ]
 
+
 # Path
 norecursedirs = [
     ".svn",
@@ -105,13 +111,20 @@ norecursedirs = [
 ]
 testpaths = ["test"]
 
+
+# Markers
 markers = [
     "unit",
     "performance"
 ]
+
 
 # Logging
 log_cli = true
 log_cli_level = "DEBUG"
 log_cli_format = "%(asctime)s [%(levelname)] %(message)s"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+
+# Asyncio
+asyncio_mode = "auto"
