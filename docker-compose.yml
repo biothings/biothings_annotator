@@ -1,3 +1,4 @@
+name: biothings-annotator
 services:
   annotator:
     build:
@@ -7,6 +8,6 @@ services:
         - ARG ANNOTATOR_REPO=https://github.com/biothings/biothings_annotator.git
         - ARG ANNOTATOR_BRANCH=main
     container_name: biothings-annotator
-    network_mode: "host"
     ports:
-      - 9999:9999
+      - 9000:9000
+

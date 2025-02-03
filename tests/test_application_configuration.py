@@ -18,7 +18,7 @@ SERVICE_PROVIDER_API_HOST_PROD = "https://biothings.transltr.io"
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "host", (SERVICE_PROVIDER_API_HOST_CI, SERVICE_PROVIDER_API_HOST_TEST, SERVICE_PROVIDER_API_HOST_PROD, None)
+    "host", (SERVICE_PROVIDER_API_HOST_CI, SERVICE_PROVIDER_API_HOST_TEST, SERVICE_PROVIDER_API_HOST_PROD)
 )
 def test_environment_configuration(host: str):
     """

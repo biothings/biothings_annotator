@@ -5,10 +5,10 @@ recieve within the biothings annotator
 
 import inspect
 import logging
-import os
+from typing import Dict
 
-from .settings import SERVICE_PROVIDER_API_HOST
-from .utils import get_client
+from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST
+from biothings_annotator.annotator.utils import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -22,31 +22,33 @@ def append_prefix(id, prefix):
 atc_cache = {}  # The global atc_cache will be load once when Transformer is initialized for the first time
 
 
-def load_atc_cache(api_host: str):
-    """Load WHO atc code-to-name mapping in a dictionary, which will be used in ResponseTransformer._transform_atc_classifications method"""
+async def load_atc_cache(api_host: str) -> Dict:
+    """
+    Load WHO atc code-to-name mapping in a dictionary, which will be used in ResponseTransformer._transform_atc_classifications method
+    """
     global atc_cache
     if not atc_cache:
         logger.info("Loading WHO ATC code-to-name mapping...")
         atc_client = get_client("extra", api_host)
-        atc_li = atc_client.query("_exists_:atc.code", fields="atc.code,atc.name", fetch_all=True)
+        atc_li = await atc_client.query("_exists_:atc.code", fields="atc.code,atc.name", fetch_all=True)
         atc_cache = {}
-        for atc in atc_li:
+        async for atc in atc_li:
             atc_cache[atc["atc"]["code"]] = atc["atc"]["name"]
         logger.info(f"Loaded {len(atc_cache)} WHO ATC code-to-name mappings.")
     return atc_cache
 
 
 class ResponseTransformer:
-    def __init__(self, res_by_id, node_type):
+    def __init__(self, res_by_id: Dict, node_type: str, api_host: str, atc_cache: Dict):
         self.res_by_id = res_by_id
         self.node_type = node_type
-        self.api_host = os.environ.get("SERVICE_PROVIDER_API_HOST", SERVICE_PROVIDER_API_HOST)
+        self.api_host = api_host
 
         self.data_cache = {}  # used to cached required mapping data used for individual transformation
         # typically those data coming from other biothings APIs, we will do a batch
         # query to get them all, and cache them here for later use, to avoid slow
         # one by one queries.
-        self.atc_cache = load_atc_cache(self.api_host)
+        self.atc_cache = atc_cache
 
     def _transform_chembl_drug_indications(self, doc):
         if self.node_type != "chem":
@@ -71,7 +73,9 @@ class ResponseTransformer:
         return doc
 
     def _transform_atc_classifications(self, doc):
-        """add atc_classifications field to chem object based on chembl.atc_classifications and pharmgkb.xrefs.atc fields"""
+        """
+        add atc_classifications field to chem object based on chembl.atc_classifications and pharmgkb.xrefs.atc fields
+        """
         if not self.atc_cache:
             return doc
 
