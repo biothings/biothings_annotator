@@ -8,7 +8,7 @@ import yaml
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 async def test_metadata_generation(test_annotator: sanic.Sanic):
     """
     Tests the metadata endpoint for generating the openapi spec

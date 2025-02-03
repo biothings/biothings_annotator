@@ -12,7 +12,7 @@ from biothings_annotator.application.views import VersionView
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
 async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -38,7 +38,7 @@ async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
 async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -62,7 +62,7 @@ async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
 async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -89,7 +89,7 @@ async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
 async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -117,7 +117,7 @@ async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoin
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
 async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -146,7 +146,7 @@ async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
 async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -175,7 +175,7 @@ async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint:
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
 async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
     """
@@ -204,7 +204,7 @@ async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str)
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["expected_curie.json"])
 async def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
     """
@@ -250,7 +250,7 @@ async def test_curie_get(temporary_data_storage: Union[str, Path], test_annotato
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize(
     "endpoint, batch_curie",
     (
@@ -311,7 +311,7 @@ async def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curi
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
 async def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
     """
@@ -370,7 +370,7 @@ async def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotat
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["expected_curie.json"])
 async def test_annotator_get_redirect(
     temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict
@@ -419,7 +419,7 @@ async def test_annotator_get_redirect(
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["trapi_request.json"])
 async def test_annotator_post_redirect(
     temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict

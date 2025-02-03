@@ -54,7 +54,6 @@ def test_environment_configuration(host: str):
 
             assert client.url == f"{annotator_instance.api_host}/{endpoint}"
             assert ANNOTATOR_CLIENTS[node_type]["client"]["instance"] == client
-            breakpoint()
     finally:
         if os.environ.get("SERVICE_PROVIDER_API_HOST", None) is not None:
             del os.environ["SERVICE_PROVIDER_API_HOST"]

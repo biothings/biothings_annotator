@@ -38,31 +38,6 @@ def test_annotation_client(node_type: str):
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio(scope="module")
-@pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
-async def test_biothings_query(curie_prefix: str):
-    random_index = random.randint(0, 10000)
-    curie_query = f"{curie_prefix}:{str(random_index)}"
-
-    node_type, node_id = utils.parse_curie(curie=curie_query, return_type=True, return_id=True)
-
-    domain_fields = ANNOTATOR_CLIENTS[node_type]["fields"]
-    client = utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
-    if not client:
-        logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)
-        return {}
-
-    fields = ANNOTATOR_CLIENTS[node_type]["fields"]
-    scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
-    querymany_result = await client.querymany([node_id], scopes=scopes, fields=fields)
-    logger.info("Done. %s annotation objects returned.", len(querymany_result))
-    query_response = utils.group_by_subfield(collection=querymany_result, search_key="query")
-
-    assert isinstance(query_response, dict)
-    logger.info((f"Query Response: {query_response}" f"Query Fields: {domain_fields}"))
-
-
-@pytest.mark.unit
 @pytest.mark.parametrize(
     "search_keyword, collection, histogram",
     [
@@ -130,3 +105,27 @@ def test_query_post_processing(search_keyword: str, collection: List[Dict], hist
     histogram_response = utils.group_by_subfield(collection=collection, search_key=search_keyword)
     assert isinstance(histogram_response, dict)
     assert histogram_response == histogram
+
+
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
+async def test_biothings_query(curie_prefix: str):
+    random_index = random.randint(0, 10000)
+    curie_query = f"{curie_prefix}:{str(random_index)}"
+
+    node_type, node_id = utils.parse_curie(curie=curie_query, return_type=True, return_id=True)
+
+    domain_fields = ANNOTATOR_CLIENTS[node_type]["fields"]
+    client = utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
+    if not client:
+        logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)
+        return {}
+
+    fields = ANNOTATOR_CLIENTS[node_type]["fields"]
+    scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
+    querymany_result = await client.querymany([node_id], scopes=scopes, fields=fields)
+    logger.info("Done. %s annotation objects returned.", len(querymany_result))
+    query_response = utils.group_by_subfield(collection=querymany_result, search_key="query")
+
+    assert isinstance(query_response, dict)
+    logger.info((f"Query Response: {query_response}" f"Query Fields: {domain_fields}"))

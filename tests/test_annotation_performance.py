@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.performance
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["cleaned_annotator_logs.json"])
 async def test_integration_server_responses(
     temporary_data_storage: Union[str, Path],
@@ -281,7 +281,7 @@ def test_ara_integration_trapi_requests(
 
 
 @pytest.mark.performance
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["cleaned_annotator_logs.json"])
 async def test_asynchronous_bulk_requests(
     temporary_data_storage: Union[str, Path],
@@ -312,7 +312,7 @@ async def test_asynchronous_bulk_requests(
 
 
 @pytest.mark.performance
-@pytest.mark.asyncio(scope="module")
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize(
     "data_store",
     [
