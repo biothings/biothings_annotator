@@ -50,6 +50,7 @@ tests = [
     "pytest-asyncio >= 0.23.8",
     "pytest-randomly",
     "sanic-testing >= 24.6.0",
+    "pytest-randomly"
 ]
 
 
