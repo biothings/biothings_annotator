@@ -21,13 +21,13 @@ except ImportError:
 
 import biothings_client
 
-from .exceptions import InvalidCurieError
-from .settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
+from biothings_annotator.annotator.exceptions import InvalidCurieError
+from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
 
 logger = logging.getLogger(__name__)
 
 
-def get_client(node_type: str, api_host: str) -> Union[biothings_client.BiothingClient, None]:
+def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBiothingClient, None]:
     """
     Attempts to lazy load the biothings-client instance
 
@@ -59,13 +59,12 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.Biothing
     client_configuration = client_parameters.get("configuration")
     client_endpoint = client_parameters.get("endpoint")
     client_instance = client_parameters.get("instance")
-
-    if client_instance is not None and isinstance(client_instance, biothings_client.BiothingClient):
+    if client_instance is not None and isinstance(client_instance, biothings_client.AsyncBiothingClient):
         client = client_instance
 
     elif client_configuration is not None and isinstance(client_configuration, dict):
         try:
-            client = biothings_client.get_client(**client_configuration)
+            client = biothings_client.get_async_client(**client_configuration)
         except RuntimeError as runtime_error:
             logger.error("%s [%s]", runtime_error, client_configuration)
             client = None
@@ -73,7 +72,7 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.Biothing
     elif client_endpoint is not None and isinstance(client_endpoint, str):
         client_url = f"{api_host}/{client_endpoint}"
         try:
-            client = biothings_client.get_client(biothing_type=None, instance=True, url=client_url)
+            client = biothings_client.get_async_client(biothing_type=None, instance=True, url=client_url)
         except RuntimeError as runtime_error:
             logger.error("%s [%s]", runtime_error, client_url)
             client = None
@@ -84,7 +83,7 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.Biothing
         )
 
     # cache the client
-    if isinstance(client, biothings_client.BiothingClient):
+    if isinstance(client, biothings_client.AsyncBiothingClient):
         ANNOTATOR_CLIENTS[node_type]["client"]["instance"] = client
 
     return client
@@ -92,7 +91,7 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.Biothing
 
 def parse_curie(curie: str, return_type: bool = True, return_id: bool = True):
     """
-    return a both type and if (as a tuple) or either based on the input curie
+    return both type and if (as a tuple) or either based on the input curie
     """
     if ":" not in curie:
         raise InvalidCurieError(curie)
@@ -117,7 +116,7 @@ def group_by_subfield(collection: List[Dict], search_key: str) -> Dict:
     Takes a collection of dictionary entries with a specify subfield key "search_key" and
     extracts the subfield from each entry in the iterable into a dictionary.
 
-    It then bins entries into the dictionary so that identical keys have all results in one
+    It the bins entries into the dictionary so that identical keys have all results in one
     aggregated list across the entire collection of dictionary entries
 
     Example:
@@ -173,5 +172,4 @@ def get_dotfield_value(dotfield: str, d: Dict):
         return d[fields[0]]
     else:
         first = fields[0]
-        return get_dotfield_value(".".join(fields[1:]), d[first])
         return get_dotfield_value(".".join(fields[1:]), d[first])

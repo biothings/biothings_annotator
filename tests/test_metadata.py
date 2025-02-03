@@ -2,16 +2,19 @@
 Tests the metadata generation and configuration
 """
 
+import pytest
 import sanic
 import yaml
 
 
-def test_metadata_generation(test_annotator: sanic.Sanic):
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_metadata_generation(test_annotator: sanic.Sanic):
     """
-    Tests the Status endpoint GET when the response is HTTP 200
+    Tests the metadata endpoint for generating the openapi spec
     """
-    endpoint = "/metadata/"
-    request, response = test_annotator.test_client.request(endpoint, http_method="get")
+    endpoint = "/metadata/openapi"
+    request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
     assert response.status_code == 200
 

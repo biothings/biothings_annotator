@@ -30,7 +30,7 @@ class StatusView(HTTPMethodView):
 
         annotator = Annotator()
         try:
-            annotated_node = annotator.annotate_curie(curie, fields=fields, raw=False, include_extra=False)
+            annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=False, include_extra=False)
 
             if "NCBIGene:1017" not in annotated_node:
                 return sanic.json(None, status=500)
@@ -71,7 +71,7 @@ class StatusView(HTTPMethodView):
 
         annotator = Annotator()
         try:
-            annotated_node = annotator.annotate_curie(curie, fields=fields, raw=False, include_extra=False)
+            annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=False, include_extra=False)
 
             if "NCBIGene:1017" not in annotated_node:
                 result = {"success": False, "error": "Service unavailable due to a failed data check!"}
@@ -157,7 +157,7 @@ class CurieView(HTTPMethodView):
         annotator = Annotator()
 
         try:
-            annotated_node = annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
+            annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
             return sanic.json(annotated_node, headers=self.default_headers)
         except InvalidCurieError as curie_err:
             error_context = {
@@ -276,7 +276,7 @@ class BatchCurieView(HTTPMethodView):
             return curie_error_response
 
         try:
-            annotated_node = annotator.annotate_curie_list(
+            annotated_node = await annotator.annotate_curie_list(
                 curie_list=curie_list, fields=fields, raw=raw, include_extra=include_extra
             )
             return sanic.json(annotated_node, headers=self.default_headers)
@@ -408,7 +408,7 @@ class TrapiView(HTTPMethodView):
         annotator = Annotator()
         trapi_body = request.json
         try:
-            annotated_node = annotator.annotate_trapi(
+            annotated_node = await annotator.annotate_trapi(
                 trapi_body, fields=fields, raw=raw, append=append, limit=limit, include_extra=include_extra
             )
             return sanic.json(annotated_node, headers=self.default_headers)
