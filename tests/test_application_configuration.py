@@ -18,31 +18,26 @@ SERVICE_PROVIDER_API_HOST_PROD = "https://biothings.transltr.io"
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "host", (SERVICE_PROVIDER_API_HOST_CI, SERVICE_PROVIDER_API_HOST_TEST, SERVICE_PROVIDER_API_HOST_PROD)
+    "server_provider_host",
+    (SERVICE_PROVIDER_API_HOST_CI, SERVICE_PROVIDER_API_HOST_TEST, SERVICE_PROVIDER_API_HOST_PROD),
 )
-def test_environment_configuration(host: str):
+def test_environment_configuration(server_provider_host: str):
     """
-    Tests modifying the environment values for the host API
+    Tests modifying the environment values for the server_provider_host API
     so that we can launch the application with the following values
-    for the host API:
-    >>> "https://biothings.ci.transltr.io"
-    >>> "https://biothings.test.transltr.io"
-    >>> "https://biothings.transltr.io"
+    for the server_provider_host API:
+    * "https://biothings.ci.transltr.io"
+    * "https://biothings.test.transltr.io"
+    * "https://biothings.transltr.io"
 
     This only requires us checking the annotator instance and ensuring it is
     able to grab the correct environment variable and then applying that to
     the biothings_client construction
     """
     try:
-        if host:
-            os.environ["SERVICE_PROVIDER_API_HOST"] = host
-
+        os.environ["SERVICE_PROVIDER_API_HOST"] = server_provider_host
         annotator_instance = Annotator()
-
-        if host:
-            assert annotator_instance.api_host == host
-        else:
-            assert annotator_instance.api_host == SERVICE_PROVIDER_API_HOST
+        assert annotator_instance.api_host == server_provider_host
 
         nodes = ["phenotype", "ncit", "extra"]
         for node_type in nodes:
