@@ -52,7 +52,13 @@ tests = [
     "sanic-testing >= 24.6.0",
     "pytest-randomly"
 ]
-
+telemetry = [
+    "opentelemetry-api >= 1.28.2",
+    "opentelemetry-sdk >= 1.28.2",
+    "opentelemetry-exporter-otlp >= 1.28.2",
+    "opentelemetry.exporter.jaeger.thrift >= 1.21.0",
+    "opentelemetry-instrumentation >= 0.49b2"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/biothings/biothings_annotator"
