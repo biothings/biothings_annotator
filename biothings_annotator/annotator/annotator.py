@@ -165,7 +165,7 @@ class Annotator:
 
         if include_extra:
             # currently, we only need to append extra annotations for chem nodes
-            self.append_extra_annotations(node_d, node_id_subset=node_list_by_type.get("chem", []))
+            await self.append_extra_annotations(node_d, node_id_subset=node_list_by_type.get("chem", []))
         return node_d
 
     async def annotate_trapi(
@@ -215,7 +215,7 @@ class Annotator:
 
         if include_extra:
             # currently, we only need to append extra annotations for chem nodes
-            self.append_extra_annotations(_node_d, node_id_subset=node_list_by_type["chem"])
+            await self.append_extra_annotations(_node_d, node_id_subset=node_list_by_type["chem"])
 
         # place the annotation objects back to the original node_d as TRAPI attributes
         for node_id, res in _node_d.items():
