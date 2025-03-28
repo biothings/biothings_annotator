@@ -223,7 +223,6 @@ async def generate_index(client: elasticsearch.AsyncElasticsearch, index_name: s
             "index": {
                 "number_of_shards": 1,
                 "number_of_replicas": 0,
-                "mapping": {"total_fields": {"limit": 3000, "ignore_dynamic_beyond_limit": True}},
             },
             "query": {"default_field": "_id,all"},
             "codec": "best_compression",
@@ -248,9 +247,7 @@ async def generate_index(client: elasticsearch.AsyncElasticsearch, index_name: s
                 },
             },
         },
-        "mappings": {
-            "dynamic": "true",
-        },
+        "mappings": {"properties": {"curie": {"type": "keyword"}, "annotation": {"type": "object", "enabled": false}}},
     }
 
     if not (await client.indices.exists(index=index_name)):
@@ -297,7 +294,7 @@ async def seed_cache_index(
                 )
 
                 for key, documents in annotated_documents.items():
-                    yield {key: documents}
+                    yield {"curie": key, "annotation": documents}
 
                 offset += chunk_size
                 print(f"Batch offset: {offset}")
