@@ -247,7 +247,7 @@ async def generate_index(client: elasticsearch.AsyncElasticsearch, index_name: s
                 },
             },
         },
-        "mappings": {"properties": {"curie": {"type": "keyword"}, "annotation": {"type": "object", "enabled": false}}},
+        "mappings": {"properties": {"_id": {"type": "keyword"}, "attributes": {"type": "object", "enabled": False}}},
     }
 
     if not (await client.indices.exists(index=index_name)):
@@ -277,7 +277,7 @@ async def seed_cache_index(
     fields: list[str],
 ) -> None:
 
-    async def curie_database_generator(database: str, table: str) -> list:
+    async def curie_database_generator(index_name: str, database: str, table: str) -> list:
         connection = sqlite3.connect(database)
         cursor = connection.cursor()
         chunk_size = 10000
@@ -294,7 +294,7 @@ async def seed_cache_index(
                 )
 
                 for key, documents in annotated_documents.items():
-                    yield {"curie": key, "annotation": documents}
+                    yield {"_index": index_name, "curie": key, "annotation": documents}
 
                 offset += chunk_size
                 print(f"Batch offset: {offset}")
@@ -303,8 +303,13 @@ async def seed_cache_index(
 
     annotator = biothings_annotator.annotator.Annotator()
     if await client.indices.exists(index=index_name):
-        async for document in curie_database_generator(database_file, database_table):
-            await client.index(index=index_name, document=document)
+        async for ok, result in helpers.async_streaming_bulk(
+            client=client, actions=curie_database_generator(index_name, database_file, database_table), chunk_size=1000
+        ):
+            action, result = result.popitem()
+            if not ok:
+                breakpoint()
+                pass
 
 
 async def bulk_populate_index(
