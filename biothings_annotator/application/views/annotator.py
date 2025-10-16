@@ -101,6 +101,7 @@ class CurieView(HTTPMethodView):
           in: path
           description: biological identifier using the CURIE format <node>:<id>.
           example: "NCBIGene:695"
+          allowReserved: true
           schema:
             type: string
           required: true
