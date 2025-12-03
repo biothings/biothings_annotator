@@ -1,13 +1,9 @@
 from typing import Dict, List
-from biothings_annotator.application.views.annotator import (
-    BatchCurieView,
-    CurieLegacyView,
-    CurieView,
-    StatusView,
-    TrapiLegacyView,
-    TrapiView,
-)
+from biothings_annotator.application.views.curie import BatchCurieView, CurieView
+from biothings_annotator.application.views.legacy import CurieLegacyView, TrapiLegacyView
 from biothings_annotator.application.views.metadata import MetadataView, VersionView
+from biothings_annotator.application.views.status import StatusView
+from biothings_annotator.application.views.trapi import TrapiView
 
 
 def build_routes() -> List[Dict]:
@@ -18,7 +14,7 @@ def build_routes() -> List[Dict]:
     This builds the arguments to be passed to
     https://sanic.dev/api/sanic.app.html#sanic-app-sanic-addroute
 
-    For the moment however, we're only targetting adding the handler
+    For the moment however, we're only adding the handler
     and uri argument for simplicity
     """
 
