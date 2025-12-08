@@ -8,8 +8,6 @@ import json
 import sanic
 from sanic.views import HTTPMethodView
 from sanic.request import Request
-from sanic import response
-from sanic_ext import openapi
 
 from biothings_annotator.annotator import Annotator
 from biothings_annotator.annotator.exceptions import InvalidCurieError
@@ -108,14 +106,6 @@ class CurieView(HTTPMethodView):
             }
             general_error_response = sanic.json(error_context, status=400)
             return general_error_response
-
-
-class BatchCurieView(HTTPMethodView):
-    def __init__(self):
-        super().__init__()
-        application = sanic.Sanic.get_app()
-        cache = application.config.CACHE_MAX_AGE
-        self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
 
     async def post(self, request: Request):
         """
