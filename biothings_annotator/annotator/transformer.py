@@ -7,7 +7,6 @@ import inspect
 import logging
 from typing import Dict
 
-from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST
 from biothings_annotator.annotator.utils import get_client
 
 logger = logging.getLogger(__name__)
