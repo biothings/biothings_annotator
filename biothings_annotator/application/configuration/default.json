@@ -8,14 +8,6 @@
             "CACHE_MAX_AGE": 604800
         },
         "extension": {
-            "openapi": {
-                "OAS": true,
-                "OAS_AUTODOC": true,
-                "OAS_UI_DEFAULT": "swagger",
-                "OAS_UI_REDOC": false,
-                "OAS_UI_SWAGGER": true,
-                "OAS_URL_PREFIX": "/"
-            },
             "cors": {
                 "CORS_ALLOW_HEADERS": "*",
                 "CORS_METHODS": "*",
@@ -26,7 +18,7 @@
         },
         "runtime": {
             "access_log": false,
-            "auto_reload": true,
+            "auto_reload": false,
             "auto_tls": false,
             "coffee": false,
             "debug": false,
