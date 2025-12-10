@@ -61,7 +61,6 @@ def build_application(configuration: Dict = None) -> Sanic:
 
     configuration_settings = {}
     configuration_settings.update(application_configuration)
-    configuration_settings.update(extension_configuration["openapi"])
     configuration_settings.update(extension_configuration["cors"])
 
     application = Sanic(name="biothings-annotator")
