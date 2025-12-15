@@ -4,7 +4,7 @@ import pathlib
 
 from sanic import Sanic
 
-from biothings_annotator.application.views import build_routes, build_static_content
+from biothings_annotator.application.views import build_routes
 from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.exceptions import build_exception_handers
 
@@ -107,3 +107,20 @@ def build_application(configuration: Dict = None) -> Sanic:
             raise gen_exc
 
     return application
+
+
+def build_static_content() -> Dict:
+    """
+    Loads the static file content
+
+    At the moment, this is only used for the swagger openapi frontend
+    we're loading
+    """
+    static_content = {}
+
+    # Attempt to load the docker file path if we're running in a container.
+    DOCKER_SWAGGER_PATH = pathlib.Path("/swagger/dist/index.html")
+
+    if DOCKER_SWAGGER_PATH.exists():
+        static_content["swagger"] = {"endpoint": "/", "path": DOCKER_SWAGGER_PATH}
+    return static_content
