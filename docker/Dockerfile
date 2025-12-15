@@ -1,7 +1,7 @@
 FROM python:3.12 AS builder
 
 ARG ANNOTATOR_REPO=https://github.com/biothings/biothings_annotator.git
-ARG ANNOTATOR_BRANCH=main
+ARG ANNOTATOR_BRANCH=bugfix-swagger-ui-path-parameter-serialization
 
 WORKDIR /build/annotator
 RUN git clone -b ${ANNOTATOR_BRANCH} --recursive ${ANNOTATOR_REPO} .
@@ -10,6 +10,12 @@ RUN pip wheel --wheel-dir=/build/wheels /build/annotator
 
 FROM caddy:2.8-builder AS caddy_builder
 RUN xcaddy build
+
+FROM node:lts-trixie-slim AS node_builder
+WORKDIR /frontend
+COPY --from=builder /build/annotator/biothings_annotator/frontend /frontend
+RUN npm install /frontend
+RUN npm run build --prefix /frontend
 
 FROM python:3.12-slim
 RUN apt update -q -y && apt install -y --no-install-recommends git supervisor curl telnet && rm -rf /var/lib/apt/lists/*
@@ -26,7 +32,11 @@ COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /ho
 
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/Caddyfile /etc/caddy/Caddyfile
+
 COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
+
+COPY --from=node_builder --chown=annotator:annotator /frontend/dist /frontend/dist
+
 
 STOPSIGNAL SIGINT
 EXPOSE 9000
