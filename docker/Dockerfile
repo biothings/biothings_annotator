@@ -8,8 +8,8 @@ RUN git clone -b ${ANNOTATOR_BRANCH} --recursive ${ANNOTATOR_REPO} .
 RUN git rev-parse HEAD > /build/annotator/version.txt
 RUN pip wheel --wheel-dir=/build/wheels /build/annotator
 
-# FROM caddy:2.8-builder AS caddy_builder
-# RUN xcaddy build
+FROM caddy:2.8-builder AS caddy_builder
+RUN xcaddy build
 
 FROM node:lts-trixie-slim AS node_builder
 WORKDIR /swagger
@@ -33,10 +33,9 @@ COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /ho
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/Caddyfile /etc/caddy/Caddyfile
 
-# COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
+COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
 
 COPY --from=node_builder --chown=annotator:annotator /swagger/dist /swagger/dist
-
 
 STOPSIGNAL SIGINT
 EXPOSE 9000
