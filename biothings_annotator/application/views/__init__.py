@@ -1,4 +1,6 @@
+import pathlib
 from typing import Dict, List
+from biothings_annotator.application import SWAGGER_DIRECTORY
 from biothings_annotator.application.views.curie import CurieView
 from biothings_annotator.application.views.legacy import CurieLegacyView, TrapiLegacyView
 from biothings_annotator.application.views.metadata import VersionView
@@ -69,3 +71,24 @@ def build_routes() -> List[Dict]:
         trapi_route_legacy,
     ]
     return route_collection
+
+
+def build_static_content() -> Dict:
+    """
+    Loads the static file content
+
+    At the moment, this is only used for the swagger openapi frontend
+    we're loading
+    """
+    static_content = {}
+
+    # Attempt to load the docker file path if we're running in a container.
+    # Otherwise we look locally within the application directory
+    DOCKER_SWAGGER_PATH = pathlib.Path("/swagger/dist/index.html")
+    LOCAL_SWAGGER_PATH = SWAGGER_DIRECTORY / "dist" / "index.html"
+
+    if DOCKER_SWAGGER_PATH.exists():
+        static_content["swagger"] = {"endpoint": "/", "path": DOCKER_SWAGGER_PATH}
+    elif LOCAL_SWAGGER_PATH.exists():
+        static_content["swagger"] = {"endpoint": "/", "path": LOCAL_SWAGGER_PATH}
+    return static_content
