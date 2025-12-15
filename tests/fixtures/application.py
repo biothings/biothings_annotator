@@ -3,7 +3,7 @@ import sanic
 from sanic_testing import TestManager
 
 
-from biothings_annotator.application.cli.target import build_application
+from biothings_annotator.application import build_application
 from biothings_annotator.application.cli.arguments import load_configuration
 
 
