@@ -12,10 +12,10 @@ FROM caddy:2.8-builder AS caddy_builder
 RUN xcaddy build
 
 FROM node:lts-trixie-slim AS node_builder
-WORKDIR /frontend
-COPY --from=builder /build/annotator/biothings_annotator/frontend /frontend
-RUN npm install /frontend
-RUN npm run build --prefix /frontend
+WORKDIR /swagger
+COPY --from=builder /build/annotator/biothings_annotator/application/swagger /swagger
+RUN npm install /swagger
+RUN npm run build --prefix /swagger
 
 FROM python:3.12-slim
 RUN apt update -q -y && apt install -y --no-install-recommends git supervisor curl telnet && rm -rf /var/lib/apt/lists/*
@@ -35,7 +35,7 @@ COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configur
 
 COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
 
-COPY --from=node_builder --chown=annotator:annotator /frontend/dist /frontend/dist
+COPY --from=node_builder --chown=annotator:annotator /swagger/dist /swagger/dist
 
 
 STOPSIGNAL SIGINT
