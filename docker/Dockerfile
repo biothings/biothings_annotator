@@ -13,7 +13,7 @@ RUN xcaddy build
 
 FROM node:lts-trixie-slim AS node_builder
 WORKDIR /web-app
-COPY --from=builder /build/annotator/biothings_annotator/web-app/ /web-app
+COPY --from=builder /build/annotator/web-app /web-app
 RUN npm install /web-app
 RUN npm run build --prefix /web-app
 

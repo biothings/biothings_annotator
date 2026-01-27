@@ -119,7 +119,7 @@ def build_static_content() -> Dict:
     static_content = {}
 
     # Attempt to load the docker file path if we're running in a container.
-    DOCKER_SWAGGER_PATH = pathlib.Path("/swagger/dist/index.html")
+    DOCKER_SWAGGER_PATH = pathlib.Path("/web-app/dist/index.html")
 
     if DOCKER_SWAGGER_PATH.exists():
         static_content["swagger"] = {"endpoint": "/", "path": DOCKER_SWAGGER_PATH}
