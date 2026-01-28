@@ -3,6 +3,7 @@ Collection of miscellaenous utility methods for the biothings_annotator package
 """
 
 import logging
+import urllib.parse
 from typing import Dict, List, Union
 
 try:
@@ -93,8 +94,14 @@ def parse_curie(curie: str, return_type: bool = True, return_id: bool = True):
     """
     return both type and if (as a tuple) or either based on the input curie
     """
+    try:
+        curie = urllib.parse.unquote(curie, encoding="utf-8", errors="strict")
+    except UnicodeError as unicode_err:
+        raise InvalidCurieError(curie) from unicode_err
+
     if ":" not in curie:
         raise InvalidCurieError(curie)
+
     _prefix, _id = curie.split(":", 1)
     _type = BIOLINK_PREFIX_to_BioThings.get(_prefix, {}).get("type", None)
     if return_id:
