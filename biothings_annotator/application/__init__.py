@@ -8,12 +8,21 @@ from biothings_annotator.application.views import build_routes
 from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.exceptions import build_exception_handers
 
+
+# Pathing
 APPLICATION_DIRECTORY = pathlib.Path(__file__).resolve().absolute().parent
 CLI_DIRECTORY = APPLICATION_DIRECTORY.joinpath("cli")
 CONFIGURATION_DIRECTORY = APPLICATION_DIRECTORY.joinpath("configuration")
+EXCEPTIONS_DIRECTORY = APPLICATION_DIRECTORY.joinpath("exceptions")
 MIDDLEWARE_DIRECTORY = APPLICATION_DIRECTORY.joinpath("middleware")
-SWAGGER_DIRECTORY = APPLICATION_DIRECTORY.joinpath("swagger")
 VIEWS_DIRECTORY = APPLICATION_DIRECTORY.joinpath("views")
+
+BIOTHINGS_ANNOTATOR_DIRECTORY = APPLICATION_DIRECTORY.parent
+ANNOTATOR_DIRECTORY = BIOTHINGS_ANNOTATOR_DIRECTORY.joinpath("annotator")
+
+ROOT_DIRECTORY = BIOTHINGS_ANNOTATOR_DIRECTORY.parent
+WEB_APP_DIRECTORY = ROOT_DIRECTORY.joinpath("web-app")
+DOCKER_WEB_APP_DIRECTORY = pathlib.Path("/web-app/")
 
 
 logging.basicConfig()
@@ -110,17 +119,18 @@ def build_application(configuration: Dict = None) -> Sanic:
 
 
 def build_static_content() -> Dict:
-    """
-    Loads the static file content
-
-    At the moment, this is only used for the swagger openapi frontend
-    we're loading
-    """
+    """Loads the static (HTML) file content for web frontend"""
     static_content = {}
 
-    # Attempt to load the docker file path if we're running in a container.
-    DOCKER_SWAGGER_PATH = pathlib.Path("/web-app/dist/index.html")
-
-    if DOCKER_SWAGGER_PATH.exists():
-        static_content["swagger"] = {"endpoint": "/", "path": DOCKER_SWAGGER_PATH}
+    swagger_frontend_html_filename = "api-frontend.html"
+    if DOCKER_WEB_APP_DIRECTORY.exists():
+        static_content["swagger"] = {
+            "endpoint": "/",
+            "path": DOCKER_WEB_APP_DIRECTORY.joinpath(swagger_frontend_html_filename),
+        }
+    elif WEB_APP_DIRECTORY.exists():
+        static_content["swagger"] = {
+            "endpoint": "/",
+            "path": WEB_APP_DIRECTORY.joinpath(swagger_frontend_html_filename),
+        }
     return static_content
