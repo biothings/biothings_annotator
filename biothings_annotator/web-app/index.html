@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>Annotator API</title>
   <!-- Load Swagger UI CSS -->
-  <link rel="stylesheet" type="text/css" href="dist/swagger-ui.css">
+  <link rel="stylesheet" type="text/css" href="/web-app/dist/swagger-ui.css">
   <style>
     /* Optional: Custom styles */
     .swagger-ui .topbar { display: none;} /* Hide Swagger UI logo */
@@ -15,14 +15,14 @@
   <div id="swagger-ui"></div>
 
   <!-- Load Swagger UI JS -->
-  <script src="dist/swagger-ui-bundle.js"></script>
-  <script src="dist/swagger-ui-standalone-preset.js"></script>
+  <script src="/web-app/dist/swagger-ui-bundle.js"></script>
+  <script src="/web-app/dist/swagger-ui-standalone-preset.js"></script>
 
   <script>
     // Initialize Swagger UI
     window.onload = function() {
       const ui = SwaggerUIBundle({
-        url: "openapi.json",
+        url: "/web-app/openapi.json",
         dom_id: '#swagger-ui',
         presets: [
           SwaggerUIBundle.presets.apis,
