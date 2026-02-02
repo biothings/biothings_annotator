@@ -25,3 +25,19 @@ class StaticFrontendView(HTTPMethodView):
         else:
             html_index_file = WEB_APP_DIRECTORY.joinpath("index.html")
         return await file(html_index_file)
+
+
+class FaviconView(HTTPMethodView):
+
+    async def get(self, _: Request) -> file:
+        """Loads the favicon file when we view our swagger ui.
+
+        This should eliminate logs unable to find the favicon clogging
+        our stdout for the annotator
+        """
+        favicon_file_name = "favicon-32x32.png"
+        if DOCKER_WEB_APP_DIRECTORY.exists():
+            favicon_file = DOCKER_WEB_APP_DIRECTORY / "swaggerui" / favicon_file_name
+        else:
+            favicon_file = WEB_APP_DIRECTORY / "swaggerui" / favicon_file_name
+        return await file(favicon_file)

@@ -1,5 +1,5 @@
 from typing import Dict, List, Tuple
-from biothings_annotator.application.static.views import StaticFrontendView
+from biothings_annotator.application.static.views import StaticFrontendView, FaviconView
 from biothings_annotator.application.structure import WEB_APP_DIRECTORY, DOCKER_WEB_APP_DIRECTORY
 
 
@@ -13,7 +13,14 @@ def build_static_routes() -> List[Dict]:
         "name": "frontpage_endpoint",
     }
 
-    route_collection = [frontpage_route]
+    # --- FRONTPAGE ROUTE ---
+    favicon_route = {
+        "handler": FaviconView.as_view(),
+        "uri": "/favicon.ico",
+        "name": "favicon_endpoint",
+    }
+
+    route_collection = [frontpage_route, favicon_route]
     return route_collection
 
 

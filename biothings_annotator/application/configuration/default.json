@@ -17,7 +17,7 @@
             }
         },
         "runtime": {
-            "access_log": false,
+            "access_log": true,
             "auto_reload": false,
             "auto_tls": false,
             "coffee": false,
