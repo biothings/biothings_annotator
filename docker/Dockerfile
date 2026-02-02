@@ -22,13 +22,15 @@ RUN /home/annotator/venv/bin/pip install /home/annotator/wheels/*.whl && rm -rf 
 
 WORKDIR /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/application/configuration/default.json /home/annotator/configuration
-COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/webapp /webapp
 COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /home/annotator/configuration/version.txt
 
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/Caddyfile /etc/caddy/Caddyfile
 
 COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
+
+WORKDIR /webapp
+COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/webapp /webapp
 
 STOPSIGNAL SIGINT
 EXPOSE 9000

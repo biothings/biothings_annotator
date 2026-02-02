@@ -13,7 +13,7 @@ exclude = ["tests*"]  # exclude packages matching these glob patterns
 namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
 
 [tool.setuptools.package-data]
-"web_app" = ["webapp/**/*"]
+"web_app" = ["biothings_annotator/webapp/**/*"]
 
 
 [project]
