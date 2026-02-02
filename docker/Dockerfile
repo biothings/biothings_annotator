@@ -1,7 +1,7 @@
 FROM python:3.12 AS builder
 
 ARG ANNOTATOR_REPO=https://github.com/biothings/biothings_annotator.git
-ARG ANNOTATOR_BRANCH=main
+ARG ANNOTATOR_BRANCH=bugfix-swagger-ui-path-parameter-serialization
 
 WORKDIR /build/annotator
 RUN git clone -b ${ANNOTATOR_BRANCH} --recursive ${ANNOTATOR_REPO} .
@@ -22,11 +22,11 @@ RUN /home/annotator/venv/bin/pip install /home/annotator/wheels/*.whl && rm -rf 
 
 WORKDIR /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/application/configuration/default.json /home/annotator/configuration
+COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/webapp /webapp
 COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /home/annotator/configuration/version.txt
 
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/Caddyfile /etc/caddy/Caddyfile
-COPY --from=builder --chown=annotator:annotator /build/annotator/web-app /web-app
 
 COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
 
