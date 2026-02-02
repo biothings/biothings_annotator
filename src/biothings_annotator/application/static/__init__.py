@@ -21,9 +21,9 @@ def build_static_content() -> List[Tuple]:
     """Aggregation method for all of the annotator service static contents."""
     static_content = []
     if DOCKER_WEB_APP_DIRECTORY.exists():
-        static_web_app_content = ("/web-app", DOCKER_WEB_APP_DIRECTORY)  # absolute pathing  # relative pathing
+        static_web_app_content = ("/webapp", DOCKER_WEB_APP_DIRECTORY)  # absolute pathing  # relative pathing
     else:
-        static_web_app_content = ("/web-app", WEB_APP_DIRECTORY)  # absolute pathing  # relative pathing
+        static_web_app_content = ("/webapp", WEB_APP_DIRECTORY)  # absolute pathing  # relative pathing
 
     static_content.append(static_web_app_content)
     return static_content

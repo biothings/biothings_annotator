@@ -13,10 +13,10 @@ class StaticFrontendView(HTTPMethodView):
         The local file must be relative given we have both local
         development and docker development
 
-        The WEB_APP_DIRECTORY is relative to the web-app directory
+        The WEB_APP_DIRECTORY is relative to the webapp directory
         in the biothings-annotator repository
 
-        The DOCKER_WEB_APP_DIRECTORY is /web-app at the root of the
+        The DOCKER_WEB_APP_DIRECTORY is /webapp at the root of the
         docker container
         """
 
