@@ -4,25 +4,10 @@ import pathlib
 
 from sanic import Sanic
 
-from biothings_annotator.application.views import build_routes
-from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.exceptions import build_exception_handers
-
-
-# Pathing
-APPLICATION_DIRECTORY = pathlib.Path(__file__).resolve().absolute().parent
-CLI_DIRECTORY = APPLICATION_DIRECTORY.joinpath("cli")
-CONFIGURATION_DIRECTORY = APPLICATION_DIRECTORY.joinpath("configuration")
-EXCEPTIONS_DIRECTORY = APPLICATION_DIRECTORY.joinpath("exceptions")
-MIDDLEWARE_DIRECTORY = APPLICATION_DIRECTORY.joinpath("middleware")
-VIEWS_DIRECTORY = APPLICATION_DIRECTORY.joinpath("views")
-
-BIOTHINGS_ANNOTATOR_DIRECTORY = APPLICATION_DIRECTORY.parent
-ANNOTATOR_DIRECTORY = BIOTHINGS_ANNOTATOR_DIRECTORY.joinpath("annotator")
-
-ROOT_DIRECTORY = BIOTHINGS_ANNOTATOR_DIRECTORY.parent
-WEB_APP_DIRECTORY = ROOT_DIRECTORY.joinpath("web-app")
-DOCKER_WEB_APP_DIRECTORY = pathlib.Path("/web-app/")
+from biothings_annotator.application.middleware import build_middleware
+from biothings_annotator.application.static import build_static_routes, build_static_content
+from biothings_annotator.application.views import build_routes
 
 
 logging.basicConfig()
@@ -80,7 +65,8 @@ def build_application(configuration: Dict = None) -> Sanic:
     application.update_config(configuration_settings)
 
     application_routes = build_routes()
-    for route in application_routes:
+    static_routes = build_static_routes()
+    for route in (*application_routes, *static_routes):
         try:
             application.add_route(**route)
         except Exception as gen_exc:
@@ -89,12 +75,12 @@ def build_application(configuration: Dict = None) -> Sanic:
             raise gen_exc
 
     static_content = build_static_content()
-    for content_name, content in static_content.items():
+    for static_entry in static_content:
         try:
-            application.static(content["endpoint"], content["path"], name=content_name)
+            application.static(static_entry[0], static_entry[1])
         except Exception as gen_exc:
             logger.exception(gen_exc)
-            logger.error("Unable to add static content %s", content)
+            logger.error("Unable to add static content %s", static_entry)
             raise gen_exc
 
     application_middleware = build_middleware()
@@ -116,21 +102,3 @@ def build_application(configuration: Dict = None) -> Sanic:
             raise gen_exc
 
     return application
-
-
-def build_static_content() -> Dict:
-    """Loads the static (HTML) file content for web frontend"""
-    static_content = {}
-
-    swagger_frontend_html_filename = "api-frontend.html"
-    if DOCKER_WEB_APP_DIRECTORY.exists():
-        static_content["swagger"] = {
-            "endpoint": "/",
-            "path": DOCKER_WEB_APP_DIRECTORY.joinpath(swagger_frontend_html_filename),
-        }
-    elif WEB_APP_DIRECTORY.exists():
-        static_content["swagger"] = {
-            "endpoint": "/",
-            "path": WEB_APP_DIRECTORY.joinpath(swagger_frontend_html_filename),
-        }
-    return static_content
