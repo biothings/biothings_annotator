@@ -29,6 +29,7 @@ COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configur
 
 COPY --from=caddy_builder --chown=annotator:annotator /usr/bin/caddy /usr/bin/caddy
 
+
 WORKDIR /webapp
 COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/webapp /webapp
 
