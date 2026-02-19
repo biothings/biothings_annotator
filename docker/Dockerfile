@@ -1,7 +1,7 @@
 FROM python:3.12 AS builder
 
 ARG ANNOTATOR_REPO=https://github.com/biothings/biothings_annotator.git
-ARG ANNOTATOR_BRANCH=bugfix-swagger-ui-path-parameter-serialization
+ARG ANNOTATOR_BRANCH=main
 
 WORKDIR /build/annotator
 RUN git clone -b ${ANNOTATOR_BRANCH} --recursive ${ANNOTATOR_REPO} .
