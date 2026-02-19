@@ -62,5 +62,4 @@ def test_curie_decode_parsing(encoded_curie: str, decoded_curie: str):
     See the following reference for more information on reserved characters:
     https://www.rfc-editor.org/rfc/rfc1738
     """
-    breakpoint()
     parsed_result = utils.parse_curie(curie=encoded_curie, return_type=True, return_id=True)
