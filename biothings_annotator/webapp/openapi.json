@@ -429,45 +429,6 @@
         }
       }
     },
-    "/metadata/openapi": {
-      "get": {
-        "operationId": "get~metadata",
-        "summary": "Generates the auto-documented OpenAPI specification dynamically from the annotator application",
-        "responses": {
-          "200": {
-            "description": "Successful generation of the OpenAPI auto-generated documentation in yaml format",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error occured during auto-generation of the OpenAPI documentation",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "endpoint": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "exception": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/annotator/{curie}": {
       "get": {
         "operationId": "get~curie_endpoint_mirror",
