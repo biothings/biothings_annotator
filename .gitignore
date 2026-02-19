@@ -302,3 +302,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+
+# local webapp
+biothings_annotator/webapp/*.sqlite3
