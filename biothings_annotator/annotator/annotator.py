@@ -94,14 +94,17 @@ class Annotator:
         node_type, _id = parse_curie(curie)
         if not node_type:
             raise InvalidCurieError(curie)
+
         res = await self.query_biothings(node_type, [_id], fields=fields)
+
         if not raw:
             res = await self.transform(res, node_type)
-            # res = [self.transform(r) for r in res[_id]]
+
         if res and include_extra:
             await self.append_extra_annotations(res)
 
-        curie_annotation = {curie: res.get(_id, {})}
+        parsed_curie = f"{node_type}:{_id}"
+        curie_annotation = {parsed_curie: res.get(_id, {})}
         return curie_annotation
 
     async def _annotate_node_list_by_type(
