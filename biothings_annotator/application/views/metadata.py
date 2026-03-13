@@ -9,7 +9,6 @@ from sanic import json
 from sanic.views import HTTPMethodView
 from sanic.request import Request
 
-
 logger = logging.getLogger(__name__)
 
 

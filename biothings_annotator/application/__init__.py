@@ -9,7 +9,6 @@ from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.static import build_static_routes, build_static_content
 from biothings_annotator.application.views import build_routes
 
-
 logging.basicConfig()
 logger = logging.getLogger("sanic-application")
 logger.setLevel(logging.DEBUG)

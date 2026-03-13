@@ -1,7 +1,6 @@
 import pathlib
 import importlib.resources
 
-
 MODULE_NAME = "biothings_annotator"
 ROOT_DIRECTORY = importlib.resources.files(MODULE_NAME)
 

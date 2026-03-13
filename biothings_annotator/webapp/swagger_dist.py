@@ -12,7 +12,6 @@ import time
 import urllib.parse
 import urllib.request
 
-
 SWAGGER_UI_REPO = "https://api.github.com/repos/swagger-api/swagger-ui/releases"
 SWAGGER_UI_DIRECTORY = pathlib.Path(__file__).parent.joinpath("swaggerui")
 
