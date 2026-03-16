@@ -22,12 +22,13 @@ class TrapiView(HTTPMethodView):
         fields: Optional[list[str]] = request.args.get("fields", None)
         raw: bool = request.args.get("raw", False)
         append: bool = request.args.get("append", False)
-        limit: Optional[int] = request.args.get("limit", None)
+        limit: Optional[int] = int(request.args.get("limit", 0))
         include_extra: bool = request.args.get("include_extra", True)
 
         annotator = Annotator()
         trapi_body = request.json
         try:
+            breakpoint()
             annotated_node = await annotator.annotate_trapi(
                 trapi_body, fields=fields, raw=raw, append=append, limit=limit, include_extra=include_extra
             )
