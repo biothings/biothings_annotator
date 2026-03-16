@@ -28,7 +28,6 @@ class TrapiView(HTTPMethodView):
         annotator = Annotator()
         trapi_body = request.json
         try:
-            breakpoint()
             annotated_node = await annotator.annotate_trapi(
                 trapi_body, fields=fields, raw=raw, append=append, limit=limit, include_extra=include_extra
             )
