@@ -226,6 +226,11 @@ class Annotator:
                 "attribute_type_id": "biothings_annotations",
                 "value": res,
             }
+
+            node_attributes = node_d[node_id].get("attributes", None)
+            if node_attributes is None:
+                node_d[node_id]["attributes"] = []
+
             if append:
                 # append annotations to existing "attributes" field
                 node_d[node_id]["attributes"].append(res)
