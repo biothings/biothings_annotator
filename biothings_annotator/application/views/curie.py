@@ -23,9 +23,9 @@ class CurieView(HTTPMethodView):
         self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
 
     async def get(self, request: Request, curie: str):
-        fields = request.args.get("fields", None)
-        raw = bool(int(request.args.get("raw", 0)))
-        include_extra = bool(int(request.args.get("include_extra", 1)))
+        fields: list[str] = request.args.get("fields", None)
+        raw: bool = request.args.get("raw", False)
+        include_extra: bool = request.args.get("include_extra", True)
 
         annotator = Annotator()
 
