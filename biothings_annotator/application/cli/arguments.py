@@ -12,7 +12,7 @@ from sanic import __version__
 from sanic.cli.arguments import Group
 from sanic_routing import __version__ as __routing_version__
 
-from biothings_annotator.application import CONFIGURATION_DIRECTORY
+from biothings_annotator.application.structure import CONFIGURATION_DIRECTORY
 
 logging.basicConfig()
 logger = logging.getLogger("sanic-application")

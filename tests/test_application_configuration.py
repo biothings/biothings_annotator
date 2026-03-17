@@ -10,13 +10,11 @@ from biothings_annotator.annotator.annotator import Annotator
 from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, SERVICE_PROVIDER_API_HOST
 from biothings_annotator.annotator.utils import get_client
 
-
 SERVICE_PROVIDER_API_HOST_CI = "https://biothings.ci.transltr.io"
 SERVICE_PROVIDER_API_HOST_TEST = "https://biothings.test.transltr.io"
 SERVICE_PROVIDER_API_HOST_PROD = "https://biothings.transltr.io"
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize(
     "server_provider_host",
     (SERVICE_PROVIDER_API_HOST_CI, SERVICE_PROVIDER_API_HOST_TEST, SERVICE_PROVIDER_API_HOST_PROD),

@@ -252,6 +252,41 @@ async def test_curie_get(temporary_data_storage: Union[str, Path], test_annotato
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize(
+    "encoded_curie,decoded_curie",
+    [("NCBIGene%3A1017", "NCBIGene:1017"), ("UniProtKB%3AA0A087WZL8", "UniProtKB:A0A087WZL8")],
+)
+async def test_curie_decode_parsing(test_annotator: sanic.Sanic, encoded_curie: str, decoded_curie: str):
+    """
+    Due to the swagger API frontend, we have to ensure that our GET endpoint
+    can properly decode the reserved character `:`
+
+    See the following reference for more information on reserved characters:
+    https://www.rfc-editor.org/rfc/rfc1738
+    """
+    endpoint = "/curie/"
+    url = f"{endpoint}{encoded_curie}"
+    request, response = await test_annotator.asgi_client.request(method="get", url=url)
+
+    assert request.method == "GET"
+    assert request.is_safe
+    assert request.query_string == ""
+    assert request.scheme == "http"
+    assert request.server_path == url
+
+    assert response.json[decoded_curie]
+
+    assert response.http_version == "HTTP/1.1"
+    assert response.content_type == "application/json"
+    assert response.is_success
+    assert not response.is_error
+    assert response.is_closed
+    assert response.status_code == 200
+    assert response.encoding == "utf-8"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize(
     "endpoint, batch_curie",
     (
         [
@@ -443,10 +478,9 @@ async def test_annotator_post_redirect(
 
     assert response.http_version == "HTTP/1.1"
     assert response.content_type == "application/json"
-    assert response.is_success
     assert not response.is_error
     assert response.is_closed
-    assert response.status_code == 200
+    assert response.status_code == 302
     assert response.encoding == "utf-8"
 
     node_set = set(trapi_body["message"]["knowledge_graph"]["nodes"].keys())
