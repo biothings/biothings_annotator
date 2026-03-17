@@ -43,23 +43,3 @@ def test_curie_parsing(curie_prefix: str):
     assert parsed_result[1] == parsed_id
     assert parsed_null is None
     logger.info(f"Query: {curie_query} | Parsed Type: {parsed_type} | Parsed ID: {parsed_id}")
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    "encoded_curie,decoded_curie",
-    [
-        ("NCBIGene%3A1017", "NCBIGene:1017"),
-        ("UMLS%3A8294", "UMLS:8294"),
-        ("MESH%3A1192", "MESH:1192"),
-    ],
-)
-def test_curie_decode_parsing(encoded_curie: str, decoded_curie: str):
-    """
-    Due to the swagger API frontend, we have to ensure that our GET endpoint
-    can properly decode the reserved character `:`
-
-    See the following reference for more information on reserved characters:
-    https://www.rfc-editor.org/rfc/rfc1738
-    """
-    parsed_result = utils.parse_curie(curie=encoded_curie, return_type=True, return_id=True)

@@ -103,8 +103,7 @@ class Annotator:
         if res and include_extra:
             await self.append_extra_annotations(res)
 
-        parsed_curie = f"{node_type}:{_id}"
-        curie_annotation = {parsed_curie: res.get(_id, {})}
+        curie_annotation = {curie: res.get(_id, {})}
         return curie_annotation
 
     async def _annotate_node_list_by_type(

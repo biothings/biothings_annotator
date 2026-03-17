@@ -4,6 +4,7 @@ Translator Node Annotator Service Handler translated to sanic
 
 import logging
 import json
+import urllib.parse
 
 import sanic
 from sanic.views import HTTPMethodView
@@ -28,6 +29,18 @@ class CurieView(HTTPMethodView):
         include_extra: bool = request.args.get("include_extra", True)
 
         annotator = Annotator()
+
+        try:
+            curie = urllib.parse.unquote(curie, encoding="utf-8", errors="strict")
+        except UnicodeError as unicode_err:
+            error_context = {
+                "input": curie,
+                "endpoint": "/curie/",
+                "message": "Unicode issue while attempting to process curie",
+                "exception": repr(exc),
+            }
+            unicode_curie_error_response = sanic.json(error_context, status=400)
+            return unicode_curie_error_response
 
         try:
             annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
@@ -80,12 +93,26 @@ class CurieView(HTTPMethodView):
             curie_error_response = sanic.json(error_context, status=400)
             return curie_error_response
 
+        parsed_curie_list = []
+        try:
+            for curie in curie_list:
+                curie = urllib.parse.unquote(curie, encoding="utf-8", errors="strict")
+                parsed_curie_list.append(curie)
+        except UnicodeError as unicode_err:
+            error_context = {
+                "input": curie_list,
+                "endpoint": "/curie/",
+                "message": "Unicode issue while attempting to process curie list",
+                "exception": repr(exc),
+            }
+            unicode_curie_error_response = sanic.json(error_context, status=400)
+            return unicode_curie_error_response
+
         try:
             annotated_node = await annotator.annotate_curie_list(
-                curie_list=curie_list, fields=fields, raw=raw, include_extra=include_extra
+                curie_list=parsed_curie_list, fields=fields, raw=raw, include_extra=include_extra
             )
             return sanic.json(annotated_node, headers=self.default_headers)
-
         except InvalidCurieError as curie_err:
             error_context = {
                 "input": curie_list,
