@@ -44,7 +44,8 @@ classifiers = [
 ]
 dependencies = [
     "biothings_client >= 0.4.0",
-    "sanic[ext] == 24.12.0"
+    "sanic[ext] == 24.12.0",
+    "sentry-sdk[sanic] >= 2.19.0",
 ]
 
 
@@ -54,7 +55,7 @@ tests = [
     "pytest-asyncio >= 0.23.8",
     "pytest-randomly",
     "sanic-testing >= 24.6.0",
-    "pytest-randomly"
+    "pytest-randomly",
 ]
 
 
@@ -64,7 +65,7 @@ tests = [
 
 [tool.black]
 line-length = 120
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312', 'py313', 'py314']
 extend-exclude = '''
 # A regex preceded with ^/ will apply only to files and directories
 # in the root of the project.
