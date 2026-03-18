@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Annotator API</title>
+  <!-- Load Swagger UI CSS -->
+  <link rel="stylesheet" type="text/css" href="/webapp/swaggerui/swagger-ui.css">
+  <style>
+    /* Optional: Custom styles */
+    .swagger-ui .topbar { display: none;} /* Hide Swagger UI logo */
+  </style>
+</head>
+<body>
+  <!-- Container for Swagger UI -->
+  <div id="swagger-ui"></div>
+
+  <!-- Load Swagger UI JS -->
+  <script src="/webapp/swaggerui/swagger-ui-bundle.js"></script>
+  <script src="/webapp/swaggerui/swagger-ui-standalone-preset.js"></script>
+
+  <script>
+    // Initialize Swagger UI
+    window.onload = function() {
+      const ui = SwaggerUIBundle({
+        url: "/webapp/openapi.json",
+        dom_id: '#swagger-ui',
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        layout: "StandaloneLayout",
+        deepLinking: true,
+        docExpansion: "list"
+      });
+      window.ui = ui;
+    };
+  </script>
+</body>
+</html>

@@ -24,7 +24,6 @@ import httpx
 import pytest
 import sanic
 
-
 logger = logging.getLogger(__name__)
 
 

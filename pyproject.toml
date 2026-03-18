@@ -12,6 +12,9 @@ include = ["biothings_annotator*"]  # package names should match these glob patt
 exclude = ["tests*"]  # exclude packages matching these glob patterns
 namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
 
+[tool.setuptools.package-data]
+"web_app" = ["biothings_annotator/webapp/**/*"]
+
 
 [project]
 name = "biothings_annotator"
@@ -22,16 +25,17 @@ authors = [
 ]
 description = "Translator Annotation Service"
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",

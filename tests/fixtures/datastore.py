@@ -4,7 +4,6 @@ import shutil
 
 import pytest
 
-
 logger = logging.getLogger(__name__)
 
 

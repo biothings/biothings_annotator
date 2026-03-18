@@ -107,7 +107,7 @@ def test_query_post_processing(search_keyword: str, collection: List[Dict], hist
     assert histogram_response == histogram
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(scope="session")
 @pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
 async def test_biothings_query(curie_prefix: str):
     random_index = random.randint(0, 10000)

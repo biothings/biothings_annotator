@@ -1,11 +1,8 @@
 from typing import Dict, List
-from biothings_annotator.application.views.annotator import (
-    BatchCurieView,
-    CurieView,
-    StatusView,
-    TrapiView,
-)
-from biothings_annotator.application.views.metadata import MetadataView, VersionView
+from biothings_annotator.application.views.curie import CurieView
+from biothings_annotator.application.views.metadata import VersionView
+from biothings_annotator.application.views.status import StatusView
+from biothings_annotator.application.views.trapi import TrapiView
 
 
 def build_routes() -> List[Dict]:
@@ -16,48 +13,47 @@ def build_routes() -> List[Dict]:
     This builds the arguments to be passed to
     https://sanic.dev/api/sanic.app.html#sanic-app-sanic-addroute
 
-    For the moment however, we're only targetting adding the handler
+    For the moment however, we're only adding the handler
     and uri argument for simplicity
     """
 
     # --- STATUS ROUTE ---
-    status_route_main = {
+    status_route = {
         "handler": StatusView.as_view(),
         "uri": r"/status",
         "name": "status_endpoint",
     }
 
     # --- CURIE ROUTES ---
-    curie_route_main = {
+    curie_route_get = {
         "handler": CurieView.as_view(),
         "uri": r"/curie/<curie:str>",
         "name": "curie_endpoint",
+        "methods": ["GET"],
     }
 
-    batch_curie_route = {
-        "handler": BatchCurieView.as_view(),
+    curie_route_post = {
+        "handler": CurieView.as_view(),
         "uri": r"/curie/",
         "name": "batch_curie_endpoint",
+        "methods": ["POST"],
     }
 
     # --- TRAPI ROUTES ---
-    trapi_route_main = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint"}
+    trapi_route = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint"}
 
     # --- METADATA ROUTES ---
-    metadata_route = {"handler": MetadataView.as_view(), "uri": "/metadata/openapi", "name": "metadata"}
-
-    version_route_main = {
+    version_route = {
         "handler": VersionView.as_view(),
         "uri": r"/version",
         "name": "version_endpoint",
     }
 
     route_collection = [
-        status_route_main,
-        version_route_main,
-        curie_route_main,
-        batch_curie_route,
-        trapi_route_main,
-        metadata_route,
+        curie_route_get,
+        curie_route_post,
+        trapi_route,
+        status_route,
+        version_route,
     ]
     return route_collection
