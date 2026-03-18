@@ -12,6 +12,9 @@ include = ["biothings_annotator*"]  # package names should match these glob patt
 exclude = ["tests*"]  # exclude packages matching these glob patterns
 namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
 
+[tool.setuptools.package-data]
+"web_app" = ["biothings_annotator/webapp/**/*"]
+
 
 [project]
 name = "biothings_annotator"
@@ -22,16 +25,17 @@ authors = [
 ]
 description = "Translator Annotation Service"
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
@@ -39,16 +43,19 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-    "brotli >= 1.1.0",
-    "biothings_client >= 0.3.1",
-    "sanic[ext] >= 23.12.1",
+    "biothings_client >= 0.4.0",
+    "sanic[ext] == 24.12.0",
+    "sentry-sdk[sanic] >= 2.19.0",
 ]
+
 
 [project.optional-dependencies]
 tests = [
     "pytest >= 8.1.1",
     "pytest-asyncio >= 0.23.8",
-    "sanic-testing >= 24.6.0"
+    "pytest-randomly",
+    "sanic-testing >= 24.6.0",
+    "pytest-randomly",
 ]
 
 
@@ -58,7 +65,7 @@ tests = [
 
 [tool.black]
 line-length = 120
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312', 'py313', 'py314']
 extend-exclude = '''
 # A regex preceded with ^/ will apply only to files and directories
 # in the root of the project.
@@ -66,12 +73,14 @@ extend-exclude = '''
 )
 '''
 
+
 [tool.isort]
 profile = "black"
 combine_as_imports = true
 line_length = 120
 src_paths = ["."]
 extend_skip = []
+
 
 
 # pytest configuration
@@ -95,6 +104,7 @@ addopts = [
     "--code-highlight=yes"
 ]
 
+
 # Path
 norecursedirs = [
     ".svn",
@@ -106,13 +116,20 @@ norecursedirs = [
 ]
 testpaths = ["test"]
 
+
+# Markers
 markers = [
     "unit",
     "performance"
 ]
+
 
 # Logging
 log_cli = true
 log_cli_level = "DEBUG"
 log_cli_format = "%(asctime)s [%(levelname)] %(message)s"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+
+# Asyncio
+asyncio_mode = "auto"

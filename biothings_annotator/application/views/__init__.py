@@ -1,13 +1,9 @@
 from typing import Dict, List
-from biothings_annotator.application.views.annotator import (
-    BatchCurieView,
-    CurieLegacyView,
-    CurieView,
-    StatusView,
-    TrapiLegacyView,
-    TrapiView,
-)
-from biothings_annotator.application.views.metadata import MetadataView, VersionView
+from biothings_annotator.application.views.curie import CurieView
+from biothings_annotator.application.views.legacy import CurieLegacyView, TrapiLegacyView
+from biothings_annotator.application.views.metadata import VersionView
+from biothings_annotator.application.views.status import StatusView
+from biothings_annotator.application.views.trapi import TrapiView
 
 
 def build_routes() -> List[Dict]:
@@ -18,7 +14,7 @@ def build_routes() -> List[Dict]:
     This builds the arguments to be passed to
     https://sanic.dev/api/sanic.app.html#sanic-app-sanic-addroute
 
-    For the moment however, we're only targetting adding the handler
+    For the moment however, we're only adding the handler
     and uri argument for simplicity
     """
 
@@ -30,45 +26,46 @@ def build_routes() -> List[Dict]:
     }
 
     # --- CURIE ROUTES ---
-    curie_route_main = {
+    curie_route_get = {
         "handler": CurieView.as_view(),
         "uri": r"/curie/<curie:str>",
         "name": "curie_endpoint",
+        "methods": ["GET"],
     }
 
-    curie_route_mirror = {
-        "handler": CurieLegacyView.as_view(),
-        "uri": r"/annotator/<curie:str>",
-        "name": "curie_endpoint_mirror",
-    }
-
-    batch_curie_route = {
-        "handler": BatchCurieView.as_view(),
+    curie_route_post = {
+        "handler": CurieView.as_view(),
         "uri": r"/curie/",
         "name": "batch_curie_endpoint",
+        "methods": ["POST"],
     }
 
     # --- TRAPI ROUTES ---
     trapi_route_main = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint"}
-    trapi_route_mirror = {"handler": TrapiLegacyView.as_view(), "uri": "/annotator/", "name": "trapi_endpoint_mirror"}
 
     # --- METADATA ROUTES ---
-    metadata_route = {"handler": MetadataView.as_view(), "uri": "/metadata/openapi", "name": "metadata"}
-
     version_route_main = {
         "handler": VersionView.as_view(),
         "uri": r"/version",
         "name": "version_endpoint",
     }
 
+    # --- LEGACY ROUTES ---
+    trapi_route_legacy = {"handler": TrapiLegacyView.as_view(), "uri": "/annotator/", "name": "trapi_endpoint_mirror"}
+
+    curie_route_legacy = {
+        "handler": CurieLegacyView.as_view(),
+        "uri": r"/annotator/<curie:str>",
+        "name": "curie_endpoint_mirror",
+    }
+
     route_collection = [
+        curie_route_get,
+        curie_route_post,
+        trapi_route_main,
         status_route_main,
         version_route_main,
-        curie_route_main,
-        curie_route_mirror,
-        batch_curie_route,
-        trapi_route_main,
-        trapi_route_mirror,
-        metadata_route,
+        curie_route_legacy,
+        trapi_route_legacy,
     ]
     return route_collection

@@ -26,6 +26,6 @@ logger = logging.getLogger(__name__)
 # ENVIRONMENT CONFIGURATION
 @pytest.fixture(scope="session", autouse=True)
 def annotator_environment():
-    api_host = "https://biothings.test.transltr.io"
+    api_host = "https://biothings.ci.transltr.io"
     os.environ["SERVICE_PROVIDER_API_HOST"] = api_host
     logger.info("Set SERVICE PROVIDER API HOST: %s for tests", api_host)

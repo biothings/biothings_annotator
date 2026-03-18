@@ -21,7 +21,7 @@ from sanic.cli.base import SanicArgumentParser, SanicHelpFormatter
 from sanic.worker.loader import AppLoader
 
 from biothings_annotator.application.cli.arguments import build_annotator_argument_groups, load_configuration
-from biothings_annotator.application.cli.target import build_application
+from biothings_annotator.application import build_application
 
 logging.basicConfig()
 logger = logging.getLogger("sanic-application")
@@ -164,9 +164,6 @@ class AnnotatorCLI(SanicCLI):
         > Build an HTTP server using the network parameters from the configuration
         and the sanic application
         """
-        if self.inspecting:
-            self._inspector()
-            return
 
         self._precheck()
         try:
