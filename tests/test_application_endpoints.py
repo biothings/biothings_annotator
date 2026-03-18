@@ -292,16 +292,8 @@ async def test_curie_decode_parsing(test_annotator: sanic.Sanic, encoded_curie: 
     "endpoint, batch_curie",
     (
         [
-            "NCBIGene:695",
-            "MONDO:0001222",
-            "DOID:6034",
-            "CHEMBL.COMPOUND:821",
-            "PUBCHEM.COMPOUND:3406",
-            "CHEBI:192712",
-            "CHEMBL.COMPOUND:3707246",
-        ],
-        {
-            "ids": [
+            "/curie/",
+            [
                 "NCBIGene:695",
                 "MONDO:0001222",
                 "DOID:6034",
@@ -309,15 +301,29 @@ async def test_curie_decode_parsing(test_annotator: sanic.Sanic, encoded_curie: 
                 "PUBCHEM.COMPOUND:3406",
                 "CHEBI:192712",
                 "CHEMBL.COMPOUND:3707246",
-            ]
-        },
+            ],
+        ],
+        [
+            "/curie/",
+            {
+                "ids": [
+                    "NCBIGene:695",
+                    "MONDO:0001222",
+                    "DOID:6034",
+                    "CHEMBL.COMPOUND:821",
+                    "PUBCHEM.COMPOUND:3406",
+                    "CHEBI:192712",
+                    "CHEMBL.COMPOUND:3707246",
+                ]
+            },
+        ],
     ),
 )
-async def test_curie_post(test_annotator: sanic.Sanic, batch_curie: Union[List, Dict]):
+async def test_curie_post(test_annotator: sanic.Sanic, endpoint: str, batch_curie: Union[List, Dict]):
     """
     Tests the CURIE endpoint POST
     """
-    endpoint = "/curie/"
+    curie_ids = None
     if isinstance(batch_curie, list):
         curie_ids = set(batch_curie)
     elif isinstance(batch_curie, dict):
