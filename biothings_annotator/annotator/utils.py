@@ -95,6 +95,7 @@ def parse_curie(curie: str, return_type: bool = True, return_id: bool = True):
     """
     if ":" not in curie:
         raise InvalidCurieError(curie)
+
     _prefix, _id = curie.split(":", 1)
     _type = BIOLINK_PREFIX_to_BioThings.get(_prefix, {}).get("type", None)
     if return_id:

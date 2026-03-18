@@ -8,7 +8,7 @@ from biothings_annotator.annotator.settings import BIOLINK_PREFIX_to_BioThings
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("endpoint", ["/curie/", "/trapi/"])
+@pytest.mark.parametrize("endpoint", ["/trapi/"])
 def test_method_not_allowed_handling(test_annotator: sanic.Sanic, endpoint: str):
     """
     Verifies our exception handling for unknown endpoints

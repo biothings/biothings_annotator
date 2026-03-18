@@ -94,10 +94,12 @@ class Annotator:
         node_type, _id = parse_curie(curie)
         if not node_type:
             raise InvalidCurieError(curie)
+
         res = await self.query_biothings(node_type, [_id], fields=fields)
+
         if not raw:
             res = await self.transform(res, node_type)
-            # res = [self.transform(r) for r in res[_id]]
+
         if res and include_extra:
             await self.append_extra_annotations(res)
 
@@ -165,7 +167,7 @@ class Annotator:
 
         if include_extra:
             # currently, we only need to append extra annotations for chem nodes
-            self.append_extra_annotations(node_d, node_id_subset=node_list_by_type.get("chem", []))
+            await self.append_extra_annotations(node_d, node_id_subset=node_list_by_type.get("chem", []))
         return node_d
 
     async def annotate_trapi(
@@ -215,7 +217,7 @@ class Annotator:
 
         if include_extra:
             # currently, we only need to append extra annotations for chem nodes
-            self.append_extra_annotations(_node_d, node_id_subset=node_list_by_type["chem"])
+            await self.append_extra_annotations(_node_d, node_id_subset=node_list_by_type["chem"])
 
         # place the annotation objects back to the original node_d as TRAPI attributes
         for node_id, res in _node_d.items():
@@ -223,6 +225,11 @@ class Annotator:
                 "attribute_type_id": "biothings_annotations",
                 "value": res,
             }
+
+            node_attributes = node_d[node_id].get("attributes", None)
+            if node_attributes is None:
+                node_d[node_id]["attributes"] = []
+
             if append:
                 # append annotations to existing "attributes" field
                 node_d[node_id]["attributes"].append(res)

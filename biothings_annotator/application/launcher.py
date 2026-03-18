@@ -16,7 +16,7 @@ def main():
     """
     The entry point for launching the sanic server instance from CLI
     """
-    cli_instance = AnnotatorCLI()
-    cli_instance.attach()
-    cli_instance.parse()
-    cli_instance.run()
+    application = AnnotatorCLI()
+    application.attach()
+    application.parse()
+    application.run()
