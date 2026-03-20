@@ -1,6 +1,5 @@
 from typing import Dict, List
 from biothings_annotator.application.views.curie import CurieView
-from biothings_annotator.application.views.legacy import CurieLegacyView, TrapiLegacyView
 from biothings_annotator.application.views.metadata import VersionView
 from biothings_annotator.application.views.status import StatusView
 from biothings_annotator.application.views.trapi import TrapiView
@@ -19,7 +18,7 @@ def build_routes() -> List[Dict]:
     """
 
     # --- STATUS ROUTE ---
-    status_route_main = {
+    status_route = {
         "handler": StatusView.as_view(),
         "uri": r"/status",
         "name": "status_endpoint",
@@ -41,31 +40,20 @@ def build_routes() -> List[Dict]:
     }
 
     # --- TRAPI ROUTES ---
-    trapi_route_main = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint"}
+    trapi_route = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint"}
 
     # --- METADATA ROUTES ---
-    version_route_main = {
+    version_route = {
         "handler": VersionView.as_view(),
         "uri": r"/version",
         "name": "version_endpoint",
     }
 
-    # --- LEGACY ROUTES ---
-    trapi_route_legacy = {"handler": TrapiLegacyView.as_view(), "uri": "/annotator/", "name": "trapi_endpoint_mirror"}
-
-    curie_route_legacy = {
-        "handler": CurieLegacyView.as_view(),
-        "uri": r"/annotator/<curie:str>",
-        "name": "curie_endpoint_mirror",
-    }
-
     route_collection = [
         curie_route_get,
         curie_route_post,
-        trapi_route_main,
-        status_route_main,
-        version_route_main,
-        curie_route_legacy,
-        trapi_route_legacy,
+        trapi_route,
+        status_route,
+        version_route,
     ]
     return route_collection

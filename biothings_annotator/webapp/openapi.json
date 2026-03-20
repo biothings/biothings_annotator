@@ -21,6 +21,7 @@
       "get": {
         "operationId": "get~status_endpoint",
         "summary": "Checks the health status of the annotator service",
+        "tags": ["health"],
         "responses": {
           "200": {
             "description": "A successful network status check",
@@ -62,6 +63,7 @@
       "get": {
         "operationId": "get~version_endpoint",
         "summary": "Checks the version of the annotator service",
+        "tags": ["metadata"],
         "responses": {
           "200": {
             "description": "Successful github commit hash generation",
@@ -85,6 +87,7 @@
       "get": {
         "operationId": "get~curie_endpoint",
         "summary": "Retrieve annotation objects based on a CURIE ID",
+        "tags": ["translator"],
         "parameters": [
           {
             "name": "curie",
@@ -418,6 +421,7 @@
       "post": {
         "operationId": "post~curie_endpoint",
         "summary": "For a list of curie IDs, return the expanded annotation objects",
+        "tags": ["translator"],
         "parameters": [
           {
             "name": "raw",
@@ -1328,6 +1332,7 @@
       "post": {
         "operationId": "post~trapi_endpoint",
         "summary": "Provides an annotated response based off the TRAPI body provided",
+        "tags": ["translator"],
         "parameters": [
           {
             "name": "fields",
@@ -1917,50 +1922,12 @@
           }
         }
       }
-    },
-    "/annotator": {
-      "post": {
-        "operationId": "post~trapi_endpoint_mirror",
-        "summary": "Trapi Endpoint Mirror",
-        "deprecated": true,
-        "responses": {
-          "default": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/annotator/{curie}": {
-      "get": {
-        "operationId": "get~curie_endpoint_mirror",
-        "summary": "Curie Endpoint Mirror",
-        "parameters": [
-          {
-            "name": "curie",
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "in": "path"
-          }
-        ],
-        "deprecated": true,
-        "responses": {
-          "default": {
-            "description": "OK"
-          }
-        }
-      }
     }
   },
   "tags": [
-    {"gene_tag": "gene"},
-    {"chemical_tag": "chemical"},
-    {"drug_tag": "drug"},
-    {"disease_tag": "disease"},
-    {"phenotype_tag": "phenotype"},
-    {"annotation_tag": "annotation"},
-    {"translator_tag": "translator"}
+    {"name": "translator"},
+    {"name": "health"},
+    {"name": "metadata"}
   ],
   "servers": [
     {
