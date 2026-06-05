@@ -2,6 +2,7 @@
 Collection of miscellaenous utility methods for the biothings_annotator package
 """
 
+import asyncio
 import logging
 from typing import Dict, List, Union
 
@@ -25,6 +26,16 @@ from biothings_annotator.annotator.exceptions import InvalidCurieError
 from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
 
 logger = logging.getLogger(__name__)
+
+
+def _current_event_loop_id() -> Union[int, None]:
+    """
+    Return a stable cache token for the running event loop, if one exists.
+    """
+    try:
+        return id(asyncio.get_running_loop())
+    except RuntimeError:
+        return None
 
 
 def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBiothingClient, None]:
@@ -59,7 +70,19 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBio
     client_configuration = client_parameters.get("configuration")
     client_endpoint = client_parameters.get("endpoint")
     client_instance = client_parameters.get("instance")
-    if client_instance is not None and isinstance(client_instance, biothings_client.AsyncBiothingClient):
+    current_loop_id = _current_event_loop_id()
+    if client_configuration is not None and isinstance(client_configuration, dict):
+        cache_key = ("configuration", tuple(sorted(client_configuration.items())), current_loop_id)
+    elif client_endpoint is not None and isinstance(client_endpoint, str):
+        cache_key = ("endpoint", f"{api_host}/{client_endpoint}", current_loop_id)
+    else:
+        cache_key = None
+
+    if (
+        client_instance is not None
+        and isinstance(client_instance, biothings_client.AsyncBiothingClient)
+        and client_parameters.get("instance_cache_key") == cache_key
+    ):
         client = client_instance
 
     elif client_configuration is not None and isinstance(client_configuration, dict):
@@ -85,6 +108,7 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBio
     # cache the client
     if isinstance(client, biothings_client.AsyncBiothingClient):
         ANNOTATOR_CLIENTS[node_type]["client"]["instance"] = client
+        ANNOTATOR_CLIENTS[node_type]["client"]["instance_cache_key"] = cache_key
 
     return client
 
