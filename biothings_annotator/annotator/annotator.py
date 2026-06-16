@@ -10,9 +10,20 @@ import os
 import biothings_client
 
 from biothings_annotator.annotator.exceptions import InvalidCurieError, TRAPIInputError
-from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, SERVICE_PROVIDER_API_HOST
+from biothings_annotator.annotator.settings import (
+    ANNOTATOR_CLIENTS,
+    ELASTICSEARCH_HOST,
+    SERVICE_PROVIDER_API_HOST,
+)
 from biothings_annotator.annotator.transformer import ResponseTransformer, load_atc_cache
-from biothings_annotator.annotator.utils import batched, get_client, get_dotfield_value, group_by_subfield, parse_curie
+from biothings_annotator.annotator.utils import (
+    batched,
+    get_client,
+    get_dotfield_value,
+    get_query_client,
+    group_by_subfield,
+    parse_curie,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +31,15 @@ logger = logging.getLogger(__name__)
 class Annotator:
     def __init__(self):
         self.api_host = os.environ.get("SERVICE_PROVIDER_API_HOST", SERVICE_PROVIDER_API_HOST)
+        self.query_backend = "biothings"
+        # self.query_backend = "elasticsearch"
+        self.elasticsearch_host = os.environ.get("ELASTICSEARCH_HOST", ELASTICSEARCH_HOST)
+
+    @property
+    def atc_cache_key(self) -> str:
+        if self.query_backend == "elasticsearch":
+            return f"{self.query_backend}:{self.elasticsearch_host}"
+        return f"{self.query_backend}:{self.api_host}"
 
     async def query_biothings(
         self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
@@ -40,13 +60,44 @@ class Annotator:
         grouped_response = group_by_subfield(collection=res, search_key="query")
         return grouped_response
 
+    async def query_annotations(
+        self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
+    ) -> Dict:
+        """
+        Query annotations through the configured backend.
+        """
+        client = get_query_client(
+            node_type=node_type,
+            query_backend=self.query_backend,
+            api_host=self.api_host,
+            elasticsearch_host=self.elasticsearch_host,
+        )
+        if client is None or not hasattr(client, "querymany"):
+            logger.error("Failed to get the annotation query client for %s type. This type is skipped.", node_type)
+            return {}
+
+        query_list = list(query_list)
+        fields = fields or ANNOTATOR_CLIENTS[node_type].get("fields", "all")
+        scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
+        logger.info("Querying %s annotations for %s %ss...", self.query_backend, len(query_list), node_type)
+        res = await client.querymany(query_list, scopes=scopes, fields=fields)
+        logger.info("Done. %s %s annotation objects returned.", len(res), self.query_backend)
+        grouped_response = group_by_subfield(collection=res, search_key="query")
+        return grouped_response
+
     async def transform(self, res_by_id: Dict, node_type: str):
         """
         perform any transformation on the annotation object, but in-place also returned object
-        res_by_id is the output of query_biothings, node_type is the same passed to query_biothings
+        res_by_id is the output of query_annotations, node_type is the same passed to query_annotations
         """
         logger.info("Transforming output annotations for %s %ss...", len(res_by_id), node_type)
-        atc_cache = await load_atc_cache(self.api_host)
+        atc_client = get_query_client(
+            node_type="extra",
+            query_backend=self.query_backend,
+            api_host=self.api_host,
+            elasticsearch_host=self.elasticsearch_host,
+        )
+        atc_cache = await load_atc_cache(self.api_host, atc_client=atc_client, cache_key=self.atc_cache_key)
         transformer = ResponseTransformer(res_by_id, node_type, self.api_host, atc_cache)
         transformer.transform()
         logger.info("Done.")
@@ -59,9 +110,14 @@ class Annotator:
         Append extra annotations to the existing node_d
         """
         node_id_list = node_d.keys() if node_id_subset is None else node_id_subset
-        extra_api = get_client("extra", self.api_host)
         cnt = 0
         logger.info("Retrieving extra annotations...")
+        extra_api = get_query_client(
+            node_type="extra",
+            query_backend=self.query_backend,
+            api_host=self.api_host,
+            elasticsearch_host=self.elasticsearch_host,
+        )
         for node_id_batch in batched(node_id_list, batch_n):
             extra_res = await extra_api.querymany(node_id_batch, scopes="_id", fields="all")
             for hit in extra_res:
@@ -95,7 +151,7 @@ class Annotator:
         if not node_type:
             raise InvalidCurieError(curie)
 
-        res = await self.query_biothings(node_type, [_id], fields=fields)
+        res = await self.query_annotations(node_type, [_id], fields=fields)
 
         if not raw:
             res = await self.transform(res, node_type)
@@ -127,7 +183,7 @@ class Annotator:
 
             # query_id to original id mapping
             node_id_d = dict(zip(query_list, node_list))
-            res_by_id = await self.query_biothings(node_type, query_list, fields=fields)
+            res_by_id = await self.query_annotations(node_type, query_list, fields=fields)
             if not raw:
                 res_by_id = await self.transform(res_by_id, node_type)
 

@@ -22,8 +22,14 @@ except ImportError:
 
 import biothings_client
 
+from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient
 from biothings_annotator.annotator.exceptions import InvalidCurieError
-from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
+from biothings_annotator.annotator.settings import (
+    ANNOTATOR_CLIENTS,
+    BIOLINK_PREFIX_to_BioThings,
+    ELASTICSEARCH_QUERY_SIZE,
+    ELASTICSEARCH_REQUEST_TIMEOUT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +117,50 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBio
         ANNOTATOR_CLIENTS[node_type]["client"]["instance_cache_key"] = cache_key
 
     return client
+
+
+def get_elasticsearch_client(node_type: str, elasticsearch_host: str) -> ElasticsearchAnnotatorClient:
+    """
+    Lazily build an Elasticsearch-backed client for annotator queries.
+    """
+    annotator_node = ANNOTATOR_CLIENTS.get(node_type, None)
+    if annotator_node is None:
+        raise ValueError(f"Unable to get annotator client with `node_type`: {node_type}")
+
+    elasticsearch_parameters = annotator_node.get("elasticsearch", {})
+    elasticsearch_index = elasticsearch_parameters.get("index")
+    if not elasticsearch_index:
+        raise ValueError(f"Missing Elasticsearch index configuration for `node_type`: {node_type}")
+
+    client_instance = elasticsearch_parameters.get("instance")
+    if isinstance(client_instance, ElasticsearchAnnotatorClient) and client_instance.host == elasticsearch_host.rstrip("/"):
+        return client_instance
+
+    client = ElasticsearchAnnotatorClient(
+        host=elasticsearch_host,
+        index=elasticsearch_index,
+        query_size=ELASTICSEARCH_QUERY_SIZE,
+        timeout=ELASTICSEARCH_REQUEST_TIMEOUT,
+    )
+    ANNOTATOR_CLIENTS[node_type]["elasticsearch"]["instance"] = client
+    return client
+
+
+def get_query_client(
+    node_type: str,
+    query_backend: str,
+    api_host: str,
+    elasticsearch_host: str,
+) -> Union[biothings_client.AsyncBiothingClient, ElasticsearchAnnotatorClient, None]:
+    """
+    Return the configured annotator query client.
+    """
+    if query_backend == "biothings":
+        return get_client(node_type, api_host)
+    if query_backend == "elasticsearch":
+        return get_elasticsearch_client(node_type, elasticsearch_host)
+
+    raise ValueError(f"Unsupported annotator query backend: {query_backend}")
 
 
 def parse_curie(curie: str, return_type: bool = True, return_id: bool = True):
