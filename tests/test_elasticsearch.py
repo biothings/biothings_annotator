@@ -164,20 +164,122 @@ async def test_elasticsearch_querymany_batches_input_terms():
 
 
 @pytest.mark.asyncio
-async def test_elasticsearch_query_fetch_all_supports_exists_query():
+async def test_elasticsearch_query_accepts_size_and_skip():
     requests = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
         requests.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "took": 7,
+                "hits": {
+                    "total": {"value": 2302, "relation": "eq"},
+                    "max_score": 138.9,
+                    "hits": [
+                        {
+                            "_id": "1017",
+                            "_score": 138.9,
+                            "_source": {"symbol": "CDK2"},
+                        }
+                    ]
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient("http://localhost:9200", "gene", http_client=http_client)
+        result = await client.query("CDK2", fields=["symbol"], size=25, skip=10)
+
+    assert requests == [
+        {
+            "size": 25,
+            "_source": ["symbol"],
+            "query": {"query_string": {"query": "CDK2"}},
+            "from": 10,
+        }
+    ]
+    assert result == {
+        "took": 7,
+        "total": 2302,
+        "max_score": 138.9,
+        "hits": [{"symbol": "CDK2", "_id": "1017", "_score": 138.9}],
+    }
+
+
+@pytest.mark.asyncio
+async def test_elasticsearch_query_fetch_all_uses_point_in_time():
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        content = json.loads(request.content) if request.content else {}
+        requests.append({"method": request.method, "path": request.url.path, "body": content})
+        if request.url.path == "/annotator_extra/_pit":
+            return httpx.Response(200, json={"id": "pit-1"})
+        if request.url.path == "/_search":
+            hits = [
+                {
+                    "_id": "A01",
+                    "_source": {"atc": {"code": "A01", "name": "Stomatological preparations"}},
+                    "sort": [1],
+                },
+                {
+                    "_id": "A02",
+                    "_source": {"atc": {"code": "A02", "name": "Drugs for acid related disorders"}},
+                    "sort": [2],
+                },
+            ]
+            if "search_after" in content:
+                hits = [
+                    {
+                        "_id": "A03",
+                        "_source": {"atc": {"code": "A03", "name": "Drugs for functional gastrointestinal disorders"}},
+                        "sort": [3],
+                    }
+                ]
+            return httpx.Response(200, json={"pit_id": "pit-2", "hits": {"hits": hits}})
+        if request.url.path == "/_pit":
+            return httpx.Response(200, json={"succeeded": True, "num_freed": 1})
+        raise AssertionError(f"Unexpected request path: {request.url.path}")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient("http://localhost:9200", "annotator_extra", http_client=http_client)
+        result_iterator = await client.query("_exists_:atc.code", fields="atc.code,atc.name", fetch_all=True, size=2)
+        result = [doc async for doc in result_iterator]
+
+    assert requests[0] == {"method": "POST", "path": "/annotator_extra/_pit", "body": {}}
+    assert requests[1]["body"]["query"] == {"exists": {"field": "atc.code"}}
+    assert requests[1]["body"]["pit"] == {"id": "pit-1", "keep_alive": "1m"}
+    assert requests[1]["body"]["size"] == 2
+    assert requests[2]["body"]["search_after"] == [2]
+    assert requests[-1] == {"method": "DELETE", "path": "/_pit", "body": {"id": "pit-2"}}
+    assert result == [
+        {"atc": {"code": "A01", "name": "Stomatological preparations"}, "_id": "A01"},
+        {"atc": {"code": "A02", "name": "Drugs for acid related disorders"}, "_id": "A02"},
+        {"atc": {"code": "A03", "name": "Drugs for functional gastrointestinal disorders"}, "_id": "A03"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_elasticsearch_query_fetch_all_falls_back_when_point_in_time_is_unavailable():
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        content = json.loads(request.content) if request.content else {}
+        requests.append({"method": request.method, "path": request.url.path, "body": content})
+        if request.url.path == "/annotator_extra/_pit":
+            return httpx.Response(404, json={"error": "no handler found for uri"})
+
         hits = [
             {
                 "_id": "A01",
                 "_source": {"atc": {"code": "A01", "name": "Stomatological preparations"}},
             }
         ]
-        if len(requests) > 1:
+        if content.get("from", 0) > 0:
             hits = []
-
         return httpx.Response(200, json={"hits": {"hits": hits}})
 
     transport = httpx.MockTransport(handler)
@@ -186,7 +288,10 @@ async def test_elasticsearch_query_fetch_all_supports_exists_query():
         result_iterator = await client.query("_exists_:atc.code", fields="atc.code,atc.name", fetch_all=True)
         result = [doc async for doc in result_iterator]
 
-    assert requests[0]["query"] == {"exists": {"field": "atc.code"}}
+    assert requests[0]["path"] == "/annotator_extra/_pit"
+    assert requests[1]["path"] == "/annotator_extra/_search"
+    assert requests[1]["body"]["from"] == 0
+    assert requests[1]["body"]["size"] == 1000
     assert result == [{"atc": {"code": "A01", "name": "Stomatological preparations"}, "_id": "A01"}]
 
 
