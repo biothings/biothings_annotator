@@ -18,12 +18,16 @@ class ElasticsearchAnnotatorClient:
         host: str,
         index: str,
         query_size: int = 10,
+        query_batch_size: int = 1000,
         timeout: Union[int, float] = 30,
         http_client: Optional[httpx.AsyncClient] = None,
     ):
         self.host = host.rstrip("/")
         self.index = index
         self.query_size = query_size
+        if query_batch_size < 1:
+            raise ValueError("query_batch_size must be at least 1")
+        self.query_batch_size = query_batch_size
         self.timeout = timeout
         self.http_client = http_client
 
@@ -33,6 +37,7 @@ class ElasticsearchAnnotatorClient:
         query_list: Iterable[str],
         scopes: Union[str, List[str]],
         fields: Optional[Union[str, List[str]]] = None,
+        size: Optional[int] = None,
     ) -> List[Dict]:
         """
         Query ES once per input ID and return BioThings-style hits with a query field.
@@ -41,12 +46,27 @@ class ElasticsearchAnnotatorClient:
         if not query_list:
             return []
 
+        query_size = self.query_size if size is None else size
+        results = []
+        for query_batch in self._iter_batches(query_list, self.query_batch_size):
+            results.extend(await self._querymany_batch(query_batch, scopes=scopes, fields=fields, size=query_size))
+
+        return results
+
+    async def _querymany_batch(
+        self,
+        query_list: List[str],
+        scopes: Union[str, List[str]],
+        fields: Optional[Union[str, List[str]]] = None,
+        size: Optional[int] = None,
+    ) -> List[Dict]:
         lines = []
+        query_size = self.query_size if size is None else size
         for query_id in query_list:
             lines.append({})
             lines.append(
                 {
-                    "size": self.query_size,
+                    "size": query_size,
                     "_source": self._source_filter(fields),
                     "query": self._scope_query(query_id, scopes),
                 }
@@ -162,6 +182,11 @@ class ElasticsearchAnnotatorClient:
         if isinstance(scopes, str):
             return [scopes]
         return scopes
+
+    @staticmethod
+    def _iter_batches(query_list: List[str], batch_size: int) -> Iterable[List[str]]:
+        for index in range(0, len(query_list), batch_size):
+            yield query_list[index : index + batch_size]
 
     def _scope_query(self, query_id: str, scopes: Union[str, List[str]]) -> Dict:
         should_queries = []

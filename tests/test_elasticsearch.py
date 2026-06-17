@@ -66,6 +66,104 @@ async def test_elasticsearch_querymany_formats_biothings_style_hits():
 
 
 @pytest.mark.asyncio
+async def test_elasticsearch_querymany_accepts_size_kwarg():
+    requested_sizes = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        lines = [json.loads(line) for line in request.content.decode().splitlines()]
+        requested_sizes.extend(line["size"] for line in lines if "query" in line)
+
+        return httpx.Response(
+            200,
+            json={
+                "responses": [
+                    {
+                        "hits": {
+                            "hits": [
+                                {
+                                    "_id": "1017",
+                                    "_source": {"symbol": "CDK2"},
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "hits": {
+                            "hits": [
+                                {
+                                    "_id": "1018",
+                                    "_source": {"symbol": "CDK3"},
+                                }
+                            ]
+                        }
+                    },
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient("http://localhost:9200", "gene", http_client=http_client)
+        result = await client.querymany(["1017", "1018"], scopes=["entrezgene"], fields=["symbol"], size=1000)
+
+    assert requested_sizes == [1000, 1000]
+    assert result == [
+        {"symbol": "CDK2", "_id": "1017", "query": "1017"},
+        {"symbol": "CDK3", "_id": "1018", "query": "1018"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_elasticsearch_querymany_batches_input_terms():
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        lines = [json.loads(line) for line in request.content.decode().splitlines()]
+        query_ids = [
+            line["query"]["bool"]["should"][0]["ids"]["values"][0]
+            for line in lines
+            if "query" in line
+        ]
+        requests.append(query_ids)
+
+        return httpx.Response(
+            200,
+            json={
+                "responses": [
+                    {
+                        "hits": {
+                            "hits": [
+                                {
+                                    "_id": query_id,
+                                    "_source": {"name": f"node-{query_id}"},
+                                }
+                            ]
+                        }
+                    }
+                    for query_id in query_ids
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "gene",
+            query_batch_size=2,
+            http_client=http_client,
+        )
+        result = await client.querymany(["1", "2", "3"], scopes="_id", fields=["name"])
+
+    assert requests == [["1", "2"], ["3"]]
+    assert result == [
+        {"name": "node-1", "_id": "1", "query": "1"},
+        {"name": "node-2", "_id": "2", "query": "2"},
+        {"name": "node-3", "_id": "3", "query": "3"},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_elasticsearch_query_fetch_all_supports_exists_query():
     requests = []
 

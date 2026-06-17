@@ -27,6 +27,7 @@ from biothings_annotator.annotator.exceptions import InvalidCurieError
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
     BIOLINK_PREFIX_to_BioThings,
+    ELASTICSEARCH_QUERY_BATCH_SIZE,
     ELASTICSEARCH_QUERY_SIZE,
     ELASTICSEARCH_REQUEST_TIMEOUT,
 )
@@ -140,6 +141,7 @@ def get_elasticsearch_client(node_type: str, elasticsearch_host: str) -> Elastic
         host=elasticsearch_host,
         index=elasticsearch_index,
         query_size=ELASTICSEARCH_QUERY_SIZE,
+        query_batch_size=ELASTICSEARCH_QUERY_BATCH_SIZE,
         timeout=ELASTICSEARCH_REQUEST_TIMEOUT,
     )
     ANNOTATOR_CLIENTS[node_type]["elasticsearch"]["instance"] = client
