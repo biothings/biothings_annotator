@@ -30,6 +30,7 @@ class ElasticsearchAnnotatorClient:
         query_size: int = 10,
         query_batch_size: int = 1000,
         timeout: Union[int, float] = 30,
+        headers: Optional[Dict[str, str]] = None,
         http_client: Optional[httpx.AsyncClient] = None,
     ):
         self.host = host.rstrip("/")
@@ -39,6 +40,7 @@ class ElasticsearchAnnotatorClient:
             raise ValueError("query_batch_size must be at least 1")
         self.query_batch_size = query_batch_size
         self.timeout = timeout
+        self.headers = dict(headers or {})
         self.http_client = http_client
 
     #todo match biothings client `querymany` pagination - could be direct import from SDK
@@ -257,6 +259,11 @@ class ElasticsearchAnnotatorClient:
         return await self._request("DELETE", url, **kwargs)
 
     async def _request(self, method: str, url: str, raise_for_status: bool = True, **kwargs) -> httpx.Response:
+        request_headers = dict(self.headers)
+        request_headers.update(kwargs.pop("headers", {}) or {})
+        if request_headers:
+            kwargs["headers"] = request_headers
+
         if self.http_client is not None:
             response = await self.http_client.request(method, url, **kwargs)
         else:

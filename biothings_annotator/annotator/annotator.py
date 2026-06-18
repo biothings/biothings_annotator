@@ -12,7 +12,7 @@ import biothings_client
 from biothings_annotator.annotator.exceptions import InvalidCurieError, TRAPIInputError
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
-    ELASTICSEARCH_HOST,
+    ELASTICSEARCH_CONNECTION,
     SERVICE_PROVIDER_API_HOST,
 )
 from biothings_annotator.annotator.transformer import ResponseTransformer, load_atc_cache
@@ -33,12 +33,12 @@ class Annotator:
         self.api_host = os.environ.get("SERVICE_PROVIDER_API_HOST", SERVICE_PROVIDER_API_HOST)
         self.query_backend = "biothings"
         # self.query_backend = "elasticsearch"
-        self.elasticsearch_host = os.environ.get("ELASTICSEARCH_HOST", ELASTICSEARCH_HOST)
+        self.elasticsearch_connection = os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION)
 
     @property
     def atc_cache_key(self) -> str:
         if self.query_backend == "elasticsearch":
-            return f"{self.query_backend}:{self.elasticsearch_host}"
+            return f"{self.query_backend}:{self.elasticsearch_connection}"
         return f"{self.query_backend}:{self.api_host}"
 
     async def query_biothings(
@@ -70,7 +70,7 @@ class Annotator:
             node_type=node_type,
             query_backend=self.query_backend,
             api_host=self.api_host,
-            elasticsearch_host=self.elasticsearch_host,
+            elasticsearch_connection=self.elasticsearch_connection,
         )
         if client is None or not hasattr(client, "querymany"):
             logger.error("Failed to get the annotation query client for %s type. This type is skipped.", node_type)
@@ -95,7 +95,7 @@ class Annotator:
             node_type="extra",
             query_backend=self.query_backend,
             api_host=self.api_host,
-            elasticsearch_host=self.elasticsearch_host,
+            elasticsearch_connection=self.elasticsearch_connection,
         )
         atc_cache = await load_atc_cache(self.api_host, atc_client=atc_client, cache_key=self.atc_cache_key)
         transformer = ResponseTransformer(res_by_id, node_type, self.api_host, atc_cache)
@@ -116,7 +116,7 @@ class Annotator:
             node_type="extra",
             query_backend=self.query_backend,
             api_host=self.api_host,
-            elasticsearch_host=self.elasticsearch_host,
+            elasticsearch_connection=self.elasticsearch_connection,
         )
         for node_id_batch in batched(node_id_list, batch_n):
             extra_res = await extra_api.querymany(node_id_batch, scopes="_id", fields="all")

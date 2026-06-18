@@ -4,7 +4,21 @@ Defines the mapping from the biolink model to the Biothings data model
 
 SERVICE_PROVIDER_API_HOST = "https://biothings.ci.transltr.io"
 
-ELASTICSEARCH_HOST = "http://localhost:9200"
+ELASTICSEARCH_CONNECTION = "ci_forward"
+ELASTICSEARCH_CONNECTIONS = {
+    "local": {
+        "host": "http://localhost:9200",
+        "headers": {},
+    },
+    "ci": {
+        "host": "http://core-components-es.ci.transltr.io:9200",
+        "headers": {},
+    },
+    "ci_forward": {
+        "host": "http://localhost:9200",
+        "headers": {"Host": "core-components-es.ci.transltr.io"},
+    },
+}
 ELASTICSEARCH_REQUEST_TIMEOUT = 30
 ELASTICSEARCH_QUERY_SIZE = 10
 ELASTICSEARCH_QUERY_BATCH_SIZE = 1000
@@ -32,7 +46,6 @@ BIOLINK_PREFIX_to_BioThings = {
 
 
 ANNOTATOR_CLIENTS = {
-
     #todo  snapshots restorable to CoCo ES - ask Everaldo
     #todo  expose options to frontend usage to switch backend
     "gene": {
