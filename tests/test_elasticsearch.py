@@ -9,11 +9,13 @@ import pytest
 
 from biothings_annotator.annotator.annotator import Annotator
 from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient
-from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS
+from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, QUERY_BACKEND_ENV
 from biothings_annotator.annotator.utils import get_elasticsearch_client, get_elasticsearch_connection
 
 
-def test_annotator_can_switch_query_backend_by_assignment():
+def test_annotator_can_switch_query_backend_by_assignment(monkeypatch):
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+
     annotator = Annotator()
     assert annotator.query_backend == "biothings"
     assert annotator.elasticsearch_connection == "ci_forward"
@@ -29,6 +31,14 @@ def test_annotator_can_switch_query_backend_by_assignment():
     annotator.api_host = "https://biothings.test.example.org"
     assert annotator.query_backend == "biothings"
     assert annotator.api_host == "https://biothings.test.example.org"
+
+
+def test_annotator_uses_query_backend_environment(monkeypatch):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, " Elasticsearch ")
+
+    annotator = Annotator()
+
+    assert annotator.query_backend == "elasticsearch"
 
 
 @pytest.mark.asyncio

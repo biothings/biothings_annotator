@@ -4,6 +4,9 @@ Defines the mapping from the biolink model to the Biothings data model
 
 SERVICE_PROVIDER_API_HOST = "https://biothings.ci.transltr.io"
 
+QUERY_BACKEND = "biothings"
+QUERY_BACKEND_ENV = "ANNOTATOR_QUERY_BACKEND"
+
 ELASTICSEARCH_CONNECTION = "ci_forward"
 ELASTICSEARCH_CONNECTIONS = {
     "local": {

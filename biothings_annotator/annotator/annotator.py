@@ -13,6 +13,8 @@ from biothings_annotator.annotator.exceptions import InvalidCurieError, TRAPIInp
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
     ELASTICSEARCH_CONNECTION,
+    QUERY_BACKEND,
+    QUERY_BACKEND_ENV,
     SERVICE_PROVIDER_API_HOST,
 )
 from biothings_annotator.annotator.transformer import ResponseTransformer, load_atc_cache
@@ -31,8 +33,7 @@ logger = logging.getLogger(__name__)
 class Annotator:
     def __init__(self):
         self.api_host = os.environ.get("SERVICE_PROVIDER_API_HOST", SERVICE_PROVIDER_API_HOST)
-        self.query_backend = "biothings"
-        # self.query_backend = "elasticsearch"
+        self.query_backend = os.environ.get(QUERY_BACKEND_ENV, QUERY_BACKEND).strip().lower()
         self.elasticsearch_connection = os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION)
 
     @property
