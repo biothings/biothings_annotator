@@ -43,7 +43,6 @@ class ElasticsearchAnnotatorClient:
         self.headers = dict(headers or {})
         self.http_client = http_client
 
-    #todo match biothings client `querymany` pagination - could be direct import from SDK
     async def querymany(
         self,
         query_list: Iterable[str],
