@@ -31,9 +31,10 @@ async def load_atc_cache(api_host: str, atc_client: Optional[object] = None, cac
         logger.info("Loading WHO ATC code-to-name mapping...")
         atc_client = atc_client or get_client("extra", api_host)
         atc_li = await atc_client.query("_exists_:atc.code", fields="atc.code,atc.name", fetch_all=True)
-        atc_cache[cache_key] = {}
+        cache = {}
         async for atc in atc_li:
-            atc_cache[cache_key][atc["atc"]["code"]] = atc["atc"]["name"]
+            cache[atc["atc"]["code"]] = atc["atc"]["name"]
+        atc_cache[cache_key] = cache
         logger.info(f"Loaded {len(atc_cache[cache_key])} WHO ATC code-to-name mappings.")
     return atc_cache[cache_key]
 

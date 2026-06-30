@@ -10,6 +10,7 @@ import random
 import pytest
 
 from biothings_annotator import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings, Annotator, ResponseTransformer, utils
+from biothings_annotator.annotator import transformer
 from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST
 
 logger = logging.getLogger(__name__)
@@ -97,3 +98,27 @@ async def test_chem_transform_continues_when_atc_cache_load_fails(monkeypatch):
 
     assert chembl_hit["chembl"]["drug_indications"] == [{"mesh_id": "MESH:D012345"}]
     assert "atc_classifications" not in chembl_hit
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_atc_cache_load_failure_does_not_cache_partial_results():
+    cache_key = "test-atc-cache-load-failure"
+    transformer.atc_cache.pop(cache_key, None)
+
+    class FailingAtcClient:
+        async def query(self, query, fields, fetch_all):
+            async def results():
+                yield {"atc": {"code": "A01", "name": "Stomatological preparations"}}
+                raise RuntimeError("ATC stream failed")
+
+            return results()
+
+    with pytest.raises(RuntimeError):
+        await transformer.load_atc_cache(
+            SERVICE_PROVIDER_API_HOST,
+            atc_client=FailingAtcClient(),
+            cache_key=cache_key,
+        )
+
+    assert cache_key not in transformer.atc_cache
