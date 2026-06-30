@@ -106,7 +106,7 @@ class Annotator:
                 else:
                     atc_cache = await load_atc_cache(self.api_host, atc_client=atc_client, cache_key=self.atc_cache_key)
             except Exception as exc:
-                logger.warning("Unable to load WHO ATC code-to-name mapping. ATC enrichment is skipped: %r", exc)
+                logger.warning("Unable to load WHO ATC code-to-name mapping; skipping ATC enrichment: %r", exc)
         transformer = ResponseTransformer(res_by_id, node_type, self.api_host, atc_cache)
         transformer.transform()
         logger.info("Done.")
