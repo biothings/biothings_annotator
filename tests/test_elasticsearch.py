@@ -41,6 +41,14 @@ def test_annotator_uses_query_backend_environment(monkeypatch):
     assert annotator.query_backend == "elasticsearch"
 
 
+def test_annotator_strips_elasticsearch_connection_environment(monkeypatch):
+    monkeypatch.setenv("ELASTICSEARCH_CONNECTION", " ci_forward ")
+
+    annotator = Annotator()
+
+    assert annotator.elasticsearch_connection == "ci_forward"
+
+
 @pytest.mark.asyncio
 async def test_elasticsearch_querymany_formats_biothings_style_hits():
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -137,6 +145,19 @@ def test_elasticsearch_client_uses_named_connection_config():
         assert local_client.headers == {}
     finally:
         elasticsearch_settings["instance"] = original_instance
+
+
+@pytest.mark.asyncio
+async def test_elasticsearch_client_reuses_owned_http_client():
+    client = ElasticsearchAnnotatorClient("http://localhost:9200", "gene")
+
+    first_http_client = client._http_client
+    second_http_client = client._http_client
+
+    assert first_http_client is second_http_client
+
+    await client.aclose()
+    assert client._owned_http_client is None
 
 
 @pytest.mark.asyncio
@@ -430,3 +451,18 @@ async def test_query_annotations_keeps_biothings_default(monkeypatch):
     result = await annotator.query_annotations("gene", ["1017"])
 
     assert result == {"1017": [{"query": "1017", "_id": "1017"}]}
+
+
+@pytest.mark.asyncio
+async def test_append_extra_annotations_skips_missing_query_client(monkeypatch):
+    annotator = Annotator()
+    node_d = {"CHEMBL.COMPOUND:CHEMBL123": [{"query": "CHEMBL123", "_id": "CHEMBL123"}]}
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: None,
+    )
+
+    await annotator.append_extra_annotations(node_d)
+
+    assert node_d == {"CHEMBL.COMPOUND:CHEMBL123": [{"query": "CHEMBL123", "_id": "CHEMBL123"}]}

@@ -34,7 +34,7 @@ class Annotator:
     def __init__(self):
         self.api_host = os.environ.get("SERVICE_PROVIDER_API_HOST", SERVICE_PROVIDER_API_HOST)
         self.query_backend = os.environ.get(QUERY_BACKEND_ENV, QUERY_BACKEND).strip().lower()
-        self.elasticsearch_connection = os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION)
+        self.elasticsearch_connection = os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION).strip()
 
     @property
     def atc_cache_key(self) -> str:
@@ -119,6 +119,10 @@ class Annotator:
             api_host=self.api_host,
             elasticsearch_connection=self.elasticsearch_connection,
         )
+        if extra_api is None or not hasattr(extra_api, "querymany"):
+            logger.error("Failed to get the extra annotation query client. Extra annotations are skipped.")
+            return
+
         for node_id_batch in batched(node_id_list, batch_n):
             extra_res = await extra_api.querymany(node_id_batch, scopes="_id", fields="all")
             for hit in extra_res:

@@ -42,6 +42,7 @@ class ElasticsearchAnnotatorClient:
         self.timeout = timeout
         self.headers = dict(headers or {})
         self.http_client = http_client
+        self._owned_http_client: Optional[httpx.AsyncClient] = None
 
     async def querymany(
         self,
@@ -263,15 +264,25 @@ class ElasticsearchAnnotatorClient:
         if request_headers:
             kwargs["headers"] = request_headers
 
-        if self.http_client is not None:
-            response = await self.http_client.request(method, url, **kwargs)
-        else:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.request(method, url, **kwargs)
+        response = await self._http_client.request(method, url, **kwargs)
 
         if raise_for_status:
             response.raise_for_status()
         return response
+
+    @property
+    def _http_client(self) -> httpx.AsyncClient:
+        if self.http_client is not None:
+            return self.http_client
+
+        if self._owned_http_client is None:
+            self._owned_http_client = httpx.AsyncClient(timeout=self.timeout)
+        return self._owned_http_client
+
+    async def aclose(self) -> None:
+        if self._owned_http_client is not None:
+            await self._owned_http_client.aclose()
+            self._owned_http_client = None
 
     @staticmethod
     def _source_filter(fields: Optional[Union[str, List[str]]]) -> Union[bool, List[str]]:
