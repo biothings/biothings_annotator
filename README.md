@@ -153,6 +153,8 @@ The annotator query backend is controlled with `ANNOTATOR_QUERY_BACKEND`. Suppor
 `biothings` and `elasticsearch`; when unset, the service uses `biothings`.
 The Helm/Jenkins deployment defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch`; set it to
 `biothings` during deployment to switch back.
+The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
+the selected `elasticsearch_connection`.
 
 
 ### Builds

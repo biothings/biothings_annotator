@@ -8,6 +8,7 @@ import sanic
 
 from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
+from biothings_annotator.annotator.settings import QUERY_BACKEND_ENV
 from biothings_annotator.application.views import VersionView
 
 
@@ -135,10 +136,13 @@ async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoin
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
+async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str, monkeypatch):
     """
     Test the Version endpoint GET method with a successful file read
     """
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
+
     with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
@@ -150,7 +154,7 @@ async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
         assert request.scheme == "http"
         assert request.server_path == endpoint
 
-        expected_response_body = {"version": "GITHUB_HASH_VERSION_ABC123"}
+        expected_response_body = {"version": "GITHUB_HASH_VERSION_ABC123", "query_backend": "biothings"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
         assert response.is_success
@@ -164,10 +168,49 @@ async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint: str):
+async def test_version_get_reports_elasticsearch_backend(test_annotator: sanic.Sanic, endpoint: str, monkeypatch):
+    """
+    Test the Version endpoint GET method includes runtime backend metadata.
+    """
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "elasticsearch")
+    monkeypatch.setenv("ELASTICSEARCH_CONNECTION", "ci_forward")
+
+    with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+
+        mock_file_read.assert_called_once()
+
+        assert request.method == "GET"
+        assert response.status_code == 200
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        expected_response_body = {
+            "version": "GITHUB_HASH_VERSION_ABC123",
+            "query_backend": "elasticsearch",
+            "elasticsearch_connection": "ci_forward",
+        }
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("endpoint", ["/version/"])
+async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint: str, monkeypatch):
     """
     Test the Version endpoint GET method when version.txt is not found
     """
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
+
     with patch.object(VersionView, "open_version_file", side_effect=FileNotFoundError) as mock_file_read:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
@@ -179,7 +222,7 @@ async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint:
         assert request.scheme == "http"
         assert request.server_path == endpoint
 
-        expected_response_body = {"version": "Unknown"}
+        expected_response_body = {"version": "Unknown", "query_backend": "biothings"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
         assert response.is_success
@@ -193,10 +236,13 @@ async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint:
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
+async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str, monkeypatch):
     """
     Test the Version endpoint GET method when an exception occurs
     """
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
+
     with patch.object(VersionView, "open_version_file", side_effect=Exception("Simulated error")) as mock_file_read:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
@@ -208,7 +254,7 @@ async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str)
         assert request.scheme == "http"
         assert request.server_path == endpoint
 
-        expected_response_body = {"version": "Unknown"}
+        expected_response_body = {"version": "Unknown", "query_backend": "biothings"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
         assert response.is_success
