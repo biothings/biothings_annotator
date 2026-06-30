@@ -18,7 +18,7 @@ class StatusView(HTTPMethodView):
 
         annotator = Annotator()
         try:
-            annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=False, include_extra=False)
+            annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=True, include_extra=False)
 
             if "NCBIGene:1017" not in annotated_node:
                 return sanic.json(None, status=500)
@@ -40,7 +40,7 @@ class StatusView(HTTPMethodView):
 
         annotator = Annotator()
         try:
-            annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=False, include_extra=False)
+            annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=True, include_extra=False)
 
             if "NCBIGene:1017" not in annotated_node:
                 result = {"success": False, "error": "Service unavailable due to a failed data check!"}

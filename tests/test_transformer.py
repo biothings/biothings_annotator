@@ -46,3 +46,54 @@ async def test_annotation_transform(curie_prefix: str):
     assert response_transformer.data_cache == {}  # explicit empty dict
 
     response_transformer.transform()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_non_chem_transform_does_not_load_atc_cache(monkeypatch):
+    annotation_instance = Annotator()
+    query_response = {"1017": [{"query": "1017", "_id": "1017", "symbol": "CDK2"}]}
+
+    def fail_get_query_client(node_type, query_backend, api_host, elasticsearch_connection):
+        raise AssertionError("non-chem transforms should not load extra ATC metadata")
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        fail_get_query_client,
+    )
+
+    response = await annotation_instance.transform(query_response, node_type="gene")
+
+    assert response == query_response
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_chem_transform_continues_when_atc_cache_load_fails(monkeypatch):
+    annotation_instance = Annotator()
+    query_response = {
+        "CHEMBL123": [
+            {
+                "query": "CHEMBL123",
+                "_id": "CHEMBL123",
+                "chembl": {
+                    "drug_indications": [{"mesh_id": "D012345"}],
+                    "atc_classifications": "A01AB02",
+                },
+            }
+        ]
+    }
+
+    def fail_get_query_client(node_type, query_backend, api_host, elasticsearch_connection):
+        raise RuntimeError("extra metadata unavailable")
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        fail_get_query_client,
+    )
+
+    response = await annotation_instance.transform(query_response, node_type="chem")
+    chembl_hit = response["CHEMBL123"][0]
+
+    assert chembl_hit["chembl"]["drug_indications"] == [{"mesh_id": "MESH:D012345"}]
+    assert "atc_classifications" not in chembl_hit
