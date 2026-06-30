@@ -267,6 +267,37 @@ async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str,
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("endpoint", ["/version/"])
+async def test_version_get_outer_exception_keeps_cache_header(
+    test_annotator: sanic.Sanic, endpoint: str, monkeypatch
+):
+    """
+    Test the Version endpoint preserves default headers on the outer fallback path.
+    """
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
+
+    with patch.object(
+        VersionView,
+        "build_response_body",
+        side_effect=[
+            Exception("Simulated response error"),
+            {"version": "Unknown", "query_backend": "biothings"},
+        ],
+    ) as mock_build_response_body:
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+
+        assert mock_build_response_body.call_count == 2
+
+        assert request.method == "GET"
+        assert response.status_code == 200
+        expected_cache_control = f"max-age={test_annotator.config.CACHE_MAX_AGE}, public"
+        assert response.headers["Cache-Control"] == expected_cache_control
+        assert response.json == {"version": "Unknown", "query_backend": "biothings"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("data_store", ["expected_curie.json"])
 async def test_curie_get(temporary_data_storage: Union[str, Path], test_annotator: sanic.Sanic, data_store: Dict):
     """

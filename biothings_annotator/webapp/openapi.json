@@ -77,7 +77,7 @@
                     },
                     "query_backend": {
                       "type": "string",
-                      "enum": ["biothings", "elasticsearch"]
+                      "description": "Configured runtime query backend."
                     },
                     "elasticsearch_connection": {
                       "type": "string",

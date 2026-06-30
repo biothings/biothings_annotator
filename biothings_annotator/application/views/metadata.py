@@ -62,4 +62,4 @@ class VersionView(HTTPMethodView):
         except Exception as exc:
             logger.error(f"Error getting GitHub commit hash: {exc}")
             result = self.build_response_body("Unknown")
-            return sanic.json(result)
+            return sanic.json(result, headers=self.default_headers)
