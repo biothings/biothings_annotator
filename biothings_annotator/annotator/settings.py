@@ -4,6 +4,28 @@ Defines the mapping from the biolink model to the Biothings data model
 
 SERVICE_PROVIDER_API_HOST = "https://biothings.ci.transltr.io"
 
+QUERY_BACKEND = "biothings"
+QUERY_BACKEND_ENV = "ANNOTATOR_QUERY_BACKEND"
+
+ELASTICSEARCH_CONNECTION = "ci_forward"
+ELASTICSEARCH_CONNECTIONS = {
+    "local": {
+        "host": "http://localhost:9200",
+        "headers": {},
+    },
+    "ci": {
+        "host": "http://core-components-es.ci.transltr.io:9200",
+        "headers": {},
+    },
+    "ci_forward": {
+        "host": "http://localhost:9200",
+        "headers": {"Host": "core-components-es.ci.transltr.io"},
+    },
+}
+ELASTICSEARCH_REQUEST_TIMEOUT = 30
+ELASTICSEARCH_QUERY_SIZE = 10
+ELASTICSEARCH_QUERY_BATCH_SIZE = 1000
+
 
 BIOLINK_PREFIX_to_BioThings = {
     "NCBIGene": {"type": "gene", "field": "entrezgene"},
@@ -27,12 +49,15 @@ BIOLINK_PREFIX_to_BioThings = {
 
 
 ANNOTATOR_CLIENTS = {
+    #todo  snapshots restorable to CoCo ES - ask Everaldo
+    #todo  expose options to frontend usage to switch backend
     "gene": {
         "client": {
             "configuration": {"biothing_type": "gene"},  # the kwargs passed to biothings_client.get_client
             "endpoint": None,
             "instance": None,
         },
+        "elasticsearch": {"index": "gene", "instance": None},
         "fields": [
             "name",
             "symbol",
@@ -57,6 +82,7 @@ ANNOTATOR_CLIENTS = {
             "endpoint": None,
             "instance": None,
         },
+        "elasticsearch": {"index": "chem", "instance": None},
         "fields": [
             # IDs
             "pubchem.cid",
@@ -115,6 +141,7 @@ ANNOTATOR_CLIENTS = {
             "endpoint": None,
             "instance": None,
         },
+        "elasticsearch": {"index": "disease", "instance": None},
         "fields": [
             # IDs
             "disease_ontology.doid",
@@ -137,18 +164,21 @@ ANNOTATOR_CLIENTS = {
     },
     "phenotype": {
         "client": {"configuration": None, "endpoint": "hpo", "instance": None},
+        "elasticsearch": {"index": "hpo", "instance": None},
         "fields": ["hp", "name", "annotations", "comment", "def", "subset", "synonym", "xrefs"],
         "scopes": ["hp"],
     },
     # This API append NCIT description to the existing data
     "ncit": {
         "client": {"configuration": None, "endpoint": "ncit", "instance": None},
+        "elasticsearch": {"index": "ncit", "instance": None},
         "fields": ["def"],
         "scopes": ["_id"],
     },
     # This API captures the extra information that is not available in the main biothings API
     "extra": {
         "client": {"configuration": None, "endpoint": "annotator_extra", "instance": None},
+        "elasticsearch": {"index": "annotator_extra", "instance": None},
         "scopes": ["_id"],
     },
 }

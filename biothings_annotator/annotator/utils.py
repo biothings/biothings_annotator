@@ -2,8 +2,9 @@
 Collection of miscellaenous utility methods for the biothings_annotator package
 """
 
+import asyncio
 import logging
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 try:
     from itertools import batched  # new in Python 3.12
@@ -21,10 +22,28 @@ except ImportError:
 
 import biothings_client
 
+from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient
 from biothings_annotator.annotator.exceptions import InvalidCurieError
-from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
+from biothings_annotator.annotator.settings import (
+    ANNOTATOR_CLIENTS,
+    BIOLINK_PREFIX_to_BioThings,
+    ELASTICSEARCH_CONNECTIONS,
+    ELASTICSEARCH_QUERY_BATCH_SIZE,
+    ELASTICSEARCH_QUERY_SIZE,
+    ELASTICSEARCH_REQUEST_TIMEOUT,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _current_event_loop_id() -> Union[int, None]:
+    """
+    Return a stable cache token for the running event loop, if one exists.
+    """
+    try:
+        return id(asyncio.get_running_loop())
+    except RuntimeError:
+        return None
 
 
 def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBiothingClient, None]:
@@ -59,7 +78,19 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBio
     client_configuration = client_parameters.get("configuration")
     client_endpoint = client_parameters.get("endpoint")
     client_instance = client_parameters.get("instance")
-    if client_instance is not None and isinstance(client_instance, biothings_client.AsyncBiothingClient):
+    current_loop_id = _current_event_loop_id()
+    if client_configuration is not None and isinstance(client_configuration, dict):
+        cache_key = ("configuration", tuple(sorted(client_configuration.items())), current_loop_id)
+    elif client_endpoint is not None and isinstance(client_endpoint, str):
+        cache_key = ("endpoint", f"{api_host}/{client_endpoint}", current_loop_id)
+    else:
+        cache_key = None
+
+    if (
+        client_instance is not None
+        and isinstance(client_instance, biothings_client.AsyncBiothingClient)
+        and client_parameters.get("instance_cache_key") == cache_key
+    ):
         client = client_instance
 
     elif client_configuration is not None and isinstance(client_configuration, dict):
@@ -85,8 +116,83 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBio
     # cache the client
     if isinstance(client, biothings_client.AsyncBiothingClient):
         ANNOTATOR_CLIENTS[node_type]["client"]["instance"] = client
+        ANNOTATOR_CLIENTS[node_type]["client"]["instance_cache_key"] = cache_key
 
     return client
+
+
+def get_elasticsearch_connection(elasticsearch_connection: str) -> Dict:
+    """
+    Return a normalized Elasticsearch connection config by name.
+    """
+    connection = ELASTICSEARCH_CONNECTIONS.get(elasticsearch_connection)
+    if connection is None:
+        raise ValueError(f"Unknown Elasticsearch connection: {elasticsearch_connection}")
+
+    host = connection.get("host")
+    if not host:
+        raise ValueError(f"Missing host for Elasticsearch connection: {elasticsearch_connection}")
+
+    return {
+        "host": host,
+        "headers": dict(connection.get("headers", {})),
+    }
+
+
+def get_elasticsearch_client(node_type: str, elasticsearch_connection: str) -> ElasticsearchAnnotatorClient:
+    """
+    Lazily build an Elasticsearch-backed client for annotator queries.
+    """
+    annotator_node = ANNOTATOR_CLIENTS.get(node_type, None)
+    if annotator_node is None:
+        raise ValueError(f"Unable to get annotator client with `node_type`: {node_type}")
+
+    elasticsearch_parameters = annotator_node.get("elasticsearch", {})
+    elasticsearch_index = elasticsearch_parameters.get("index")
+    if not elasticsearch_index:
+        raise ValueError(f"Missing Elasticsearch index configuration for `node_type`: {node_type}")
+
+    connection = get_elasticsearch_connection(elasticsearch_connection)
+    elasticsearch_host = connection["host"]
+    elasticsearch_headers = connection["headers"]
+
+    client_instance = elasticsearch_parameters.get("instance")
+    if (
+        isinstance(client_instance, ElasticsearchAnnotatorClient)
+        and client_instance.host == elasticsearch_host.rstrip("/")
+        and client_instance.headers == elasticsearch_headers
+    ):
+        return client_instance
+
+    client = ElasticsearchAnnotatorClient(
+        host=elasticsearch_host,
+        index=elasticsearch_index,
+        query_size=ELASTICSEARCH_QUERY_SIZE,
+        query_batch_size=ELASTICSEARCH_QUERY_BATCH_SIZE,
+        timeout=ELASTICSEARCH_REQUEST_TIMEOUT,
+        headers=elasticsearch_headers,
+    )
+    ANNOTATOR_CLIENTS[node_type]["elasticsearch"]["instance"] = client
+    return client
+
+
+def get_query_client(
+    node_type: str,
+    query_backend: str,
+    api_host: str,
+    elasticsearch_connection: Optional[str] = None,
+) -> Union[biothings_client.AsyncBiothingClient, ElasticsearchAnnotatorClient, None]:
+    """
+    Return the configured annotator query client.
+    """
+    if query_backend == "biothings":
+        return get_client(node_type, api_host)
+    if query_backend == "elasticsearch":
+        if not elasticsearch_connection:
+            raise ValueError("Missing Elasticsearch connection for Elasticsearch query backend")
+        return get_elasticsearch_client(node_type, elasticsearch_connection)
+
+    raise ValueError(f"Unsupported annotator query backend: {query_backend}")
 
 
 def parse_curie(curie: str, return_type: bool = True, return_id: bool = True):

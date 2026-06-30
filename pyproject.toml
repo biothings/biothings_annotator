@@ -44,6 +44,7 @@ classifiers = [
 ]
 dependencies = [
     "biothings_client >= 0.4.0",
+    "httpx >= 0.28.0",
     "sanic[ext] == 24.12.0",
     "sentry-sdk[sanic] >= 2.19.0",
 ]

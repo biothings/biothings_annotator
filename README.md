@@ -147,6 +147,11 @@ python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12
 python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12 --debug
 ```
 
+##### Runtime configuration
+
+The annotator query backend is controlled with `ANNOTATOR_QUERY_BACKEND`. Supported values are
+`biothings` and `elasticsearch`; when unset, the service uses `biothings`.
+
 
 ### Builds
 

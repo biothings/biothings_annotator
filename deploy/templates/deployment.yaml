@@ -29,6 +29,8 @@ spec:
           env:
             - name: ES_HOST
               value: {{ .Values.containers.es_host }}
+            - name: ANNOTATOR_QUERY_BACKEND
+              value: {{ .Values.containers.query_backend | quote }}
             - name: OPENTELEMETRY_ENABLED
               value: "{{ .Values.containers.OPENTELEMETRY_ENABLED_VALUE }}"  
             - name: OPENTELEMETRY_JAEGER_HOST
