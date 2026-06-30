@@ -19,13 +19,14 @@ async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint GET when the response is HTTP 200
     """
-    with patch.object(
-        Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"query": "1017", "_id": "1017"}]}
-    ) as mock_annotate_curie:
+    with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}) as mock_annotate:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-        mock_annotate_curie.assert_awaited_once_with(
-            "NCBIGene:1017", fields="_id", raw=True, include_extra=False
+        mock_annotate.assert_awaited_once_with(
+            "NCBIGene:1017",
+            fields="_id",
+            raw=True,
+            include_extra=False,
         )
 
         assert request.method == "GET"
@@ -52,13 +53,14 @@ async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint HEAD when the response is HTTP 200
     """
-    with patch.object(
-        Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"query": "1017", "_id": "1017"}]}
-    ) as mock_annotate_curie:
+    with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}) as mock_annotate:
         request, response = await test_annotator.asgi_client.request(method="head", url=endpoint)
 
-        mock_annotate_curie.assert_awaited_once_with(
-            "NCBIGene:1017", fields="_id", raw=True, include_extra=False
+        mock_annotate.assert_awaited_once_with(
+            "NCBIGene:1017",
+            fields="_id",
+            raw=True,
+            include_extra=False,
         )
 
         assert request.method == "HEAD"
