@@ -18,23 +18,30 @@ async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint GET when the response is HTTP 200
     """
-    request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+    with patch.object(
+        Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"query": "1017", "_id": "1017"}]}
+    ) as mock_annotate_curie:
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-    assert request.method == "GET"
-    assert request.query_string == ""
-    assert request.scheme == "http"
-    assert request.server_path == endpoint
+        mock_annotate_curie.assert_awaited_once_with(
+            "NCBIGene:1017", fields="_id", raw=True, include_extra=False
+        )
 
-    expected_response_body = {"success": True}
-    assert isinstance(response.json, dict)
-    assert response.http_version == "HTTP/1.1"
-    assert response.content_type == "application/json"
-    assert response.is_success
-    assert not response.is_error
-    assert response.is_closed
-    assert response.status_code == 200
-    assert response.encoding == "utf-8"
-    assert response.json == expected_response_body
+        assert request.method == "GET"
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        expected_response_body = {"success": True}
+        assert isinstance(response.json, dict)
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
 
 
 @pytest.mark.unit
@@ -44,21 +51,28 @@ async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint HEAD when the response is HTTP 200
     """
-    request, response = await test_annotator.asgi_client.request(method="head", url=endpoint)
+    with patch.object(
+        Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"query": "1017", "_id": "1017"}]}
+    ) as mock_annotate_curie:
+        request, response = await test_annotator.asgi_client.request(method="head", url=endpoint)
 
-    assert request.method == "HEAD"
-    assert request.query_string == ""
-    assert request.scheme == "http"
-    assert request.server_path == endpoint
+        mock_annotate_curie.assert_awaited_once_with(
+            "NCBIGene:1017", fields="_id", raw=True, include_extra=False
+        )
 
-    assert response.json is None
-    assert response.http_version == "HTTP/1.1"
-    assert response.content_type == "application/json"
-    assert response.is_success
-    assert not response.is_error
-    assert response.is_closed
-    assert response.status_code == 200
-    assert response.encoding == "utf-8"
+        assert request.method == "HEAD"
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        assert response.json is None
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
 
 
 @pytest.mark.unit

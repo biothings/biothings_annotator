@@ -2,6 +2,7 @@
 Exercises the query methods within the biothings_annotator package
 """
 
+import json
 import logging
 import random
 from typing import Dict, List
@@ -17,7 +18,7 @@ logger.setLevel(logging.DEBUG)
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("node_type", ["gene", "chem", "disease", "phenotype", "NULL"])
+@pytest.mark.parametrize("node_type", ["gene", "chem", "disease", "NULL"])
 def test_annotation_client(node_type: str):
     """
     Tests accessing different flavors of the biothings client from within the scope of the annotator
@@ -35,6 +36,77 @@ def test_annotation_client(node_type: str):
     else:
         with pytest.raises(ValueError):
             utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
+
+
+@pytest.mark.unit
+def test_endpoint_annotation_client_uses_configured_url(monkeypatch):
+    """
+    Endpoint-backed clients should be built from SERVICE_PROVIDER_API_HOST without
+    requiring the live metadata endpoint in this unit test.
+    """
+    client_parameters = ANNOTATOR_CLIENTS["phenotype"]["client"]
+    original_instance = client_parameters.get("instance")
+    original_cache_key = client_parameters.get("instance_cache_key")
+    had_cache_key = "instance_cache_key" in client_parameters
+    fake_client = object()
+    calls = []
+
+    def fake_get_async_client(**kwargs):
+        calls.append(kwargs)
+        return fake_client
+
+    try:
+        client_parameters["instance"] = None
+        client_parameters.pop("instance_cache_key", None)
+        monkeypatch.setattr(biothings_client, "get_async_client", fake_get_async_client)
+
+        client = utils.get_client("phenotype", SERVICE_PROVIDER_API_HOST)
+    finally:
+        client_parameters["instance"] = original_instance
+        if had_cache_key:
+            client_parameters["instance_cache_key"] = original_cache_key
+        else:
+            client_parameters.pop("instance_cache_key", None)
+
+    assert client is fake_client
+    assert calls == [
+        {
+            "biothing_type": None,
+            "instance": True,
+            "url": f"{SERVICE_PROVIDER_API_HOST}/hpo",
+        }
+    ]
+
+
+@pytest.mark.unit
+def test_endpoint_annotation_client_returns_none_on_metadata_failure(monkeypatch):
+    """
+    BioThings endpoint client construction reads remote metadata. If that remote
+    service is down or returns non-JSON, the caller should get None instead of a
+    leaked metadata parsing exception.
+    """
+    client_parameters = ANNOTATOR_CLIENTS["phenotype"]["client"]
+    original_instance = client_parameters.get("instance")
+    original_cache_key = client_parameters.get("instance_cache_key")
+    had_cache_key = "instance_cache_key" in client_parameters
+
+    def fail_get_async_client(**kwargs):
+        raise json.JSONDecodeError("Expecting value", "", 0)
+
+    try:
+        client_parameters["instance"] = None
+        client_parameters.pop("instance_cache_key", None)
+        monkeypatch.setattr(biothings_client, "get_async_client", fail_get_async_client)
+
+        client = utils.get_client("phenotype", SERVICE_PROVIDER_API_HOST)
+    finally:
+        client_parameters["instance"] = original_instance
+        if had_cache_key:
+            client_parameters["instance_cache_key"] = original_cache_key
+        else:
+            client_parameters.pop("instance_cache_key", None)
+
+    assert client is None
 
 
 @pytest.mark.unit

@@ -96,16 +96,16 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBio
     elif client_configuration is not None and isinstance(client_configuration, dict):
         try:
             client = biothings_client.get_async_client(**client_configuration)
-        except RuntimeError as runtime_error:
-            logger.error("%s [%s]", runtime_error, client_configuration)
+        except Exception:
+            logger.exception("Unable to create annotator client [%s]", client_configuration)
             client = None
 
     elif client_endpoint is not None and isinstance(client_endpoint, str):
         client_url = f"{api_host}/{client_endpoint}"
         try:
             client = biothings_client.get_async_client(biothing_type=None, instance=True, url=client_url)
-        except RuntimeError as runtime_error:
-            logger.error("%s [%s]", runtime_error, client_url)
+        except Exception:
+            logger.exception("Unable to create endpoint-backed annotator client [%s]", client_url)
             client = None
 
     else:

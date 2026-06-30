@@ -453,6 +453,7 @@ async def test_query_annotations_keeps_biothings_default(monkeypatch):
     assert result == {"1017": [{"query": "1017", "_id": "1017"}]}
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_append_extra_annotations_skips_missing_query_client(monkeypatch):
     annotator = Annotator()
@@ -461,6 +462,45 @@ async def test_append_extra_annotations_skips_missing_query_client(monkeypatch):
     monkeypatch.setattr(
         "biothings_annotator.annotator.annotator.get_query_client",
         lambda node_type, query_backend, api_host, elasticsearch_connection: None,
+    )
+
+    await annotator.append_extra_annotations(node_d)
+
+    assert node_d == {"CHEMBL.COMPOUND:CHEMBL123": [{"query": "CHEMBL123", "_id": "CHEMBL123"}]}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_append_extra_annotations_skips_empty_subset(monkeypatch):
+    annotator = Annotator()
+    node_d = {"NCBIGene:1017": [{"query": "1017", "_id": "1017"}]}
+
+    def fail_get_query_client(node_type, query_backend, api_host, elasticsearch_connection):
+        raise AssertionError("empty extra subset should not request a query client")
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        fail_get_query_client,
+    )
+
+    await annotator.append_extra_annotations(node_d, node_id_subset=[])
+
+    assert node_d == {"NCBIGene:1017": [{"query": "1017", "_id": "1017"}]}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_append_extra_annotations_skips_querymany_failure(monkeypatch):
+    annotator = Annotator()
+    node_d = {"CHEMBL.COMPOUND:CHEMBL123": [{"query": "CHEMBL123", "_id": "CHEMBL123"}]}
+
+    class FailingExtraClient:
+        async def querymany(self, query_list, scopes, fields):
+            raise RuntimeError("extra annotations unavailable")
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: FailingExtraClient(),
     )
 
     await annotator.append_extra_annotations(node_d)

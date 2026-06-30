@@ -92,13 +92,21 @@ class Annotator:
         res_by_id is the output of query_annotations, node_type is the same passed to query_annotations
         """
         logger.info("Transforming output annotations for %s %ss...", len(res_by_id), node_type)
-        atc_client = get_query_client(
-            node_type="extra",
-            query_backend=self.query_backend,
-            api_host=self.api_host,
-            elasticsearch_connection=self.elasticsearch_connection,
-        )
-        atc_cache = await load_atc_cache(self.api_host, atc_client=atc_client, cache_key=self.atc_cache_key)
+        atc_cache = {}
+        if node_type == "chem":
+            try:
+                atc_client = get_query_client(
+                    node_type="extra",
+                    query_backend=self.query_backend,
+                    api_host=self.api_host,
+                    elasticsearch_connection=self.elasticsearch_connection,
+                )
+                if atc_client is None or not hasattr(atc_client, "query"):
+                    logger.warning("Failed to get the extra annotation query client. ATC enrichment is skipped.")
+                else:
+                    atc_cache = await load_atc_cache(self.api_host, atc_client=atc_client, cache_key=self.atc_cache_key)
+            except Exception as exc:
+                logger.warning("Unable to load WHO ATC code-to-name mapping. ATC enrichment is skipped: %r", exc)
         transformer = ResponseTransformer(res_by_id, node_type, self.api_host, atc_cache)
         transformer.transform()
         logger.info("Done.")
@@ -110,21 +118,33 @@ class Annotator:
         """
         Append extra annotations to the existing node_d
         """
-        node_id_list = node_d.keys() if node_id_subset is None else node_id_subset
+        node_id_list = list(node_d.keys() if node_id_subset is None else node_id_subset)
+        if not node_id_list:
+            logger.info("No extra annotations requested.")
+            return
+
         cnt = 0
         logger.info("Retrieving extra annotations...")
-        extra_api = get_query_client(
-            node_type="extra",
-            query_backend=self.query_backend,
-            api_host=self.api_host,
-            elasticsearch_connection=self.elasticsearch_connection,
-        )
+        try:
+            extra_api = get_query_client(
+                node_type="extra",
+                query_backend=self.query_backend,
+                api_host=self.api_host,
+                elasticsearch_connection=self.elasticsearch_connection,
+            )
+        except Exception as exc:
+            logger.warning("Unable to get the extra annotation query client. Extra annotations are skipped: %r", exc)
+            return
         if extra_api is None or not hasattr(extra_api, "querymany"):
-            logger.error("Failed to get the extra annotation query client. Extra annotations are skipped.")
+            logger.warning("Failed to get the extra annotation query client. Extra annotations are skipped.")
             return
 
         for node_id_batch in batched(node_id_list, batch_n):
-            extra_res = await extra_api.querymany(node_id_batch, scopes="_id", fields="all")
+            try:
+                extra_res = await extra_api.querymany(node_id_batch, scopes="_id", fields="all")
+            except Exception as exc:
+                logger.warning("Unable to retrieve extra annotations. Extra annotations are skipped: %r", exc)
+                return
             for hit in extra_res:
                 if hit.get("notfound", False):
                     continue
@@ -161,7 +181,7 @@ class Annotator:
         if not raw:
             res = await self.transform(res, node_type)
 
-        if res and include_extra:
+        if res and include_extra and node_type == "chem":
             await self.append_extra_annotations(res)
 
         curie_annotation = {curie: res.get(_id, {})}
@@ -278,7 +298,7 @@ class Annotator:
 
         if include_extra:
             # currently, we only need to append extra annotations for chem nodes
-            await self.append_extra_annotations(_node_d, node_id_subset=node_list_by_type["chem"])
+            await self.append_extra_annotations(_node_d, node_id_subset=node_list_by_type.get("chem", []))
 
         # place the annotation objects back to the original node_d as TRAPI attributes
         for node_id, res in _node_d.items():

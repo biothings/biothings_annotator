@@ -22,7 +22,8 @@ image:
 containers:
   name: biothingsannotator
   es_host: ES_HOST_VALUE
-  query_backend: biothings
+  query_backend: elasticsearch
+  elasticsearch_connection: ci_forward
   port: 9000
 
 env:

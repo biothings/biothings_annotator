@@ -12,5 +12,5 @@ sed -i.bak \
 rm values.yaml.bak
 
 helm -n ${namespace} upgrade --install ${projectName} \
-    --set containers.query_backend="${ANNOTATOR_QUERY_BACKEND:-biothings}" \
+    --set containers.query_backend="${ANNOTATOR_QUERY_BACKEND:-elasticsearch}" \
     -f values-ncats.yaml ./

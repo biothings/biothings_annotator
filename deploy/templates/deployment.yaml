@@ -31,6 +31,10 @@ spec:
               value: {{ .Values.containers.es_host }}
             - name: ANNOTATOR_QUERY_BACKEND
               value: {{ .Values.containers.query_backend | quote }}
+            {{- with .Values.containers.elasticsearch_connection }}
+            - name: ELASTICSEARCH_CONNECTION
+              value: {{ . | quote }}
+            {{- end }}
             - name: OPENTELEMETRY_ENABLED
               value: "{{ .Values.containers.OPENTELEMETRY_ENABLED_VALUE }}"  
             - name: OPENTELEMETRY_JAEGER_HOST
