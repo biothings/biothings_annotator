@@ -9,6 +9,8 @@ from sanic import json
 from sanic.views import HTTPMethodView
 from sanic.request import Request
 
+from biothings_annotator.annotator import Annotator
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +26,16 @@ class VersionView(HTTPMethodView):
             version = version_file.read().strip()
             return version
 
+    def build_response_body(self, version: str):
+        annotator = Annotator()
+        result = {
+            "version": version,
+            "query_backend": annotator.query_backend,
+        }
+        if annotator.query_backend == "elasticsearch":
+            result["elasticsearch_connection"] = annotator.elasticsearch_connection
+        return result
+
     async def get(self, _: Request) -> json:
         """
         API versioning endpoint
@@ -32,7 +44,7 @@ class VersionView(HTTPMethodView):
         repository as the version to check the commit HEAD.
         Allows for verifying what the latest commit is on the live instance
 
-        Will return {"version": "Unknown"} is unable to generate a hash
+        Will return {"version": "Unknown", "query_backend": "..."} if unable to read the version file.
         """
         try:
             version = "Unknown"
@@ -44,10 +56,10 @@ class VersionView(HTTPMethodView):
             except Exception as exc:
                 logger.error(f"Error getting GitHub commit hash from version.txt file: {exc}")
 
-            result = {"version": version}
+            result = self.build_response_body(version)
             return sanic.json(result, headers=self.default_headers)
 
         except Exception as exc:
             logger.error(f"Error getting GitHub commit hash: {exc}")
-            result = {"version": "Unknown"}
-            return sanic.json(result)
+            result = self.build_response_body("Unknown")
+            return sanic.json(result, headers=self.default_headers)
