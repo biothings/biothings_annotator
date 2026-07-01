@@ -122,10 +122,12 @@ async def test_elasticsearch_client_supports_configured_headers():
 
 
 def test_elasticsearch_connection_config_supports_local_forwarded_ci_host():
-    assert get_elasticsearch_connection("ci_local_forward") == {
+    expected_connection = {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.ci.transltr.io"},
     }
+    assert get_elasticsearch_connection("ci_local_forward") == expected_connection
+    assert get_elasticsearch_connection("ci_forward") == expected_connection
 
 
 def test_elasticsearch_client_uses_named_connection_config():

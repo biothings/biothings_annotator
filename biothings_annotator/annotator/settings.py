@@ -21,6 +21,11 @@ ELASTICSEARCH_CONNECTIONS = {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.ci.transltr.io"},
     },
+    # Deprecated alias for compatibility with existing local-forward overrides.
+    "ci_forward": {
+        "host": "http://localhost:9200",
+        "headers": {"Host": "core-components-es.ci.transltr.io"},
+    },
 }
 ELASTICSEARCH_REQUEST_TIMEOUT = 30
 ELASTICSEARCH_QUERY_SIZE = 10
