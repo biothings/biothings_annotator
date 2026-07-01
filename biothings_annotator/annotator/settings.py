@@ -7,7 +7,11 @@ SERVICE_PROVIDER_API_HOST = "https://biothings.ci.transltr.io"
 QUERY_BACKEND = "biothings"
 QUERY_BACKEND_ENV = "ANNOTATOR_QUERY_BACKEND"
 
-ELASTICSEARCH_CONNECTION = "ci_forward"
+ELASTICSEARCH_CONNECTION = "ci"
+CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION = {
+    "host": "http://localhost:9200",
+    "headers": {"Host": "core-components-es.ci.transltr.io"},
+}
 ELASTICSEARCH_CONNECTIONS = {
     "local": {
         "host": "http://localhost:9200",
@@ -17,10 +21,9 @@ ELASTICSEARCH_CONNECTIONS = {
         "host": "http://core-components-es.ci.transltr.io:9200",
         "headers": {},
     },
-    "ci_forward": {
-        "host": "http://localhost:9200",
-        "headers": {"Host": "core-components-es.ci.transltr.io"},
-    },
+    "ci_local_forward": CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION,
+    # Deprecated alias for compatibility with existing local-forward overrides.
+    "ci_forward": CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION,
 }
 ELASTICSEARCH_REQUEST_TIMEOUT = 30
 ELASTICSEARCH_QUERY_SIZE = 10

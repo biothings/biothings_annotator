@@ -173,7 +173,7 @@ async def test_version_get_reports_elasticsearch_backend(test_annotator: sanic.S
     Test the Version endpoint GET method includes runtime backend metadata.
     """
     monkeypatch.setenv(QUERY_BACKEND_ENV, "elasticsearch")
-    monkeypatch.setenv("ELASTICSEARCH_CONNECTION", "ci_forward")
+    monkeypatch.setenv("ELASTICSEARCH_CONNECTION", "ci")
 
     with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
@@ -189,7 +189,7 @@ async def test_version_get_reports_elasticsearch_backend(test_annotator: sanic.S
         expected_response_body = {
             "version": "GITHUB_HASH_VERSION_ABC123",
             "query_backend": "elasticsearch",
-            "elasticsearch_connection": "ci_forward",
+            "elasticsearch_connection": "ci",
         }
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
