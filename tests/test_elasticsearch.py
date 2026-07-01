@@ -9,7 +9,7 @@ import pytest
 
 from biothings_annotator.annotator.annotator import Annotator
 from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient
-from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, QUERY_BACKEND_ENV
+from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, ELASTICSEARCH_CONNECTIONS, QUERY_BACKEND_ENV
 from biothings_annotator.annotator.utils import get_elasticsearch_client, get_elasticsearch_connection
 
 
@@ -127,6 +127,7 @@ def test_elasticsearch_connection_config_supports_local_forwarded_ci_host():
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.ci.transltr.io"},
     }
+    assert ELASTICSEARCH_CONNECTIONS["ci_forward"] is ELASTICSEARCH_CONNECTIONS["ci_local_forward"]
     assert get_elasticsearch_connection("ci_local_forward") == expected_connection
     assert get_elasticsearch_connection("ci_forward") == expected_connection
 
