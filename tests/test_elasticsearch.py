@@ -15,6 +15,7 @@ from biothings_annotator.annotator.utils import get_elasticsearch_client, get_el
 
 def test_annotator_can_switch_query_backend_by_assignment(monkeypatch):
     monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
 
     annotator = Annotator()
     assert annotator.query_backend == "biothings"
