@@ -151,8 +151,12 @@ python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12 -
 
 The annotator query backend is controlled with `ANNOTATOR_QUERY_BACKEND`. Supported values are
 `biothings` and `elasticsearch`; when unset, the service uses `biothings`.
-The Helm/Jenkins deployment defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch`; set it to
-`biothings` during deployment to switch back.
+The Helm/Jenkins deployment defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch` and
+`ELASTICSEARCH_CONNECTION=ci`; set `ANNOTATOR_QUERY_BACKEND` to `biothings` during deployment
+to switch back.
+Set `ELASTICSEARCH_CONNECTION` to one of the named presets in
+`biothings_annotator/annotator/settings.py`. The `ci` preset points at
+`http://core-components-es.ci.transltr.io:9200`.
 The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
 the selected `elasticsearch_connection`.
 

@@ -81,7 +81,7 @@
                     },
                     "elasticsearch_connection": {
                       "type": "string",
-                      "description": "Selected Elasticsearch connection label, present when query_backend is elasticsearch."
+                      "description": "Selected Elasticsearch connection preset label, present when query_backend is elasticsearch."
                     }
                   }
                 }
