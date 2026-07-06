@@ -74,6 +74,14 @@
                   "properties": {
                     "version": {
                       "type": "string"
+                    },
+                    "query_backend": {
+                      "type": "string",
+                      "description": "Configured runtime query backend."
+                    },
+                    "elasticsearch_connection": {
+                      "type": "string",
+                      "description": "Selected Elasticsearch connection preset label, present when query_backend is elasticsearch."
                     }
                   }
                 }

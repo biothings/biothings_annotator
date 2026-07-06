@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Dict, List, Union
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 import json
 
 import pytest
@@ -8,18 +8,8 @@ import sanic
 
 from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
+from biothings_annotator.annotator.settings import QUERY_BACKEND_ENV
 from biothings_annotator.application.views import VersionView
-
-ELASTICSEARCH_PROBE_RESPONSE = {
-    "target": "http://elasticsearch.es-core-components.svc.cluster.local:9200/_cluster/health",
-    "reachable": True,
-    "tcp_connect": True,
-    "status_code": 200,
-    "cluster_status": "green",
-    "cluster_name": "elasticsearch",
-    "elapsed_ms": 12,
-    "error": None,
-}
 
 
 @pytest.mark.unit
@@ -29,23 +19,31 @@ async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint GET when the response is HTTP 200
     """
-    request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+    with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}) as mock_annotate:
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-    assert request.method == "GET"
-    assert request.query_string == ""
-    assert request.scheme == "http"
-    assert request.server_path == endpoint
+        mock_annotate.assert_awaited_once_with(
+            "NCBIGene:1017",
+            fields="_id",
+            raw=True,
+            include_extra=False,
+        )
 
-    expected_response_body = {"success": True}
-    assert isinstance(response.json, dict)
-    assert response.http_version == "HTTP/1.1"
-    assert response.content_type == "application/json"
-    assert response.is_success
-    assert not response.is_error
-    assert response.is_closed
-    assert response.status_code == 200
-    assert response.encoding == "utf-8"
-    assert response.json == expected_response_body
+        assert request.method == "GET"
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        expected_response_body = {"success": True}
+        assert isinstance(response.json, dict)
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
 
 
 @pytest.mark.unit
@@ -55,21 +53,29 @@ async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
     """
     Tests the Status endpoint HEAD when the response is HTTP 200
     """
-    request, response = await test_annotator.asgi_client.request(method="head", url=endpoint)
+    with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}) as mock_annotate:
+        request, response = await test_annotator.asgi_client.request(method="head", url=endpoint)
 
-    assert request.method == "HEAD"
-    assert request.query_string == ""
-    assert request.scheme == "http"
-    assert request.server_path == endpoint
+        mock_annotate.assert_awaited_once_with(
+            "NCBIGene:1017",
+            fields="_id",
+            raw=True,
+            include_extra=False,
+        )
 
-    assert response.json is None
-    assert response.http_version == "HTTP/1.1"
-    assert response.content_type == "application/json"
-    assert response.is_success
-    assert not response.is_error
-    assert response.is_closed
-    assert response.status_code == 200
-    assert response.encoding == "utf-8"
+        assert request.method == "HEAD"
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        assert response.json is None
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
 
 
 @pytest.mark.unit
@@ -132,100 +138,164 @@ async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoin
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
+async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str, monkeypatch):
     """
     Test the Version endpoint GET method with a successful file read
     """
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
+
     with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
-        with patch.object(VersionView, "probe_elasticsearch", new_callable=AsyncMock) as mock_probe:
-            mock_probe.return_value = ELASTICSEARCH_PROBE_RESPONSE
-            request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-            mock_file_read.assert_called_once()
-            mock_probe.assert_awaited_once()
+        mock_file_read.assert_called_once()
 
-            assert request.method == "GET"
-            assert response.status_code == 200
-            assert request.query_string == ""
-            assert request.scheme == "http"
-            assert request.server_path == endpoint
+        assert request.method == "GET"
+        assert response.status_code == 200
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
 
-            expected_response_body = {
-                "version": "GITHUB_HASH_VERSION_ABC123",
-                "elasticsearch_probe": ELASTICSEARCH_PROBE_RESPONSE,
-            }
-            assert response.http_version == "HTTP/1.1"
-            assert response.content_type == "application/json"
-            assert response.is_success
-            assert not response.is_error
-            assert response.is_closed
-            assert response.status_code == 200
-            assert response.encoding == "utf-8"
-            assert response.json == expected_response_body
+        expected_response_body = {"version": "GITHUB_HASH_VERSION_ABC123", "query_backend": "biothings"}
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint: str):
+async def test_version_get_reports_elasticsearch_backend(test_annotator: sanic.Sanic, endpoint: str, monkeypatch):
+    """
+    Test the Version endpoint GET method includes runtime backend metadata.
+    """
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "elasticsearch")
+    monkeypatch.setenv("ELASTICSEARCH_CONNECTION", "ci")
+
+    with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+
+        mock_file_read.assert_called_once()
+
+        assert request.method == "GET"
+        assert response.status_code == 200
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
+
+        expected_response_body = {
+            "version": "GITHUB_HASH_VERSION_ABC123",
+            "query_backend": "elasticsearch",
+            "elasticsearch_connection": "ci",
+        }
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("endpoint", ["/version/"])
+async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint: str, monkeypatch):
     """
     Test the Version endpoint GET method when version.txt is not found
     """
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
+
     with patch.object(VersionView, "open_version_file", side_effect=FileNotFoundError) as mock_file_read:
-        with patch.object(VersionView, "probe_elasticsearch", new_callable=AsyncMock) as mock_probe:
-            mock_probe.return_value = ELASTICSEARCH_PROBE_RESPONSE
-            request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-            mock_file_read.assert_called_once()
-            mock_probe.assert_awaited_once()
+        mock_file_read.assert_called_once()
 
-            assert request.method == "GET"
-            assert response.status_code == 200
-            assert request.query_string == ""
-            assert request.scheme == "http"
-            assert request.server_path == endpoint
+        assert request.method == "GET"
+        assert response.status_code == 200
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
 
-            expected_response_body = {"version": "Unknown", "elasticsearch_probe": ELASTICSEARCH_PROBE_RESPONSE}
-            assert response.http_version == "HTTP/1.1"
-            assert response.content_type == "application/json"
-            assert response.is_success
-            assert not response.is_error
-            assert response.is_closed
-            assert response.status_code == 200
-            assert response.encoding == "utf-8"
-            assert response.json == expected_response_body
+        expected_response_body = {"version": "Unknown", "query_backend": "biothings"}
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str):
+async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str, monkeypatch):
     """
     Test the Version endpoint GET method when an exception occurs
     """
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
+
     with patch.object(VersionView, "open_version_file", side_effect=Exception("Simulated error")) as mock_file_read:
-        with patch.object(VersionView, "probe_elasticsearch", new_callable=AsyncMock) as mock_probe:
-            mock_probe.return_value = ELASTICSEARCH_PROBE_RESPONSE
-            request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-            mock_file_read.assert_called_once()
-            mock_probe.assert_awaited_once()
+        mock_file_read.assert_called_once()
 
-            assert request.method == "GET"
-            assert response.status_code == 200
-            assert request.query_string == ""
-            assert request.scheme == "http"
-            assert request.server_path == endpoint
+        assert request.method == "GET"
+        assert response.status_code == 200
+        assert request.query_string == ""
+        assert request.scheme == "http"
+        assert request.server_path == endpoint
 
-            expected_response_body = {"version": "Unknown", "elasticsearch_probe": ELASTICSEARCH_PROBE_RESPONSE}
-            assert response.http_version == "HTTP/1.1"
-            assert response.content_type == "application/json"
-            assert response.is_success
-            assert not response.is_error
-            assert response.is_closed
-            assert response.status_code == 200
-            assert response.encoding == "utf-8"
-            assert response.json == expected_response_body
+        expected_response_body = {"version": "Unknown", "query_backend": "biothings"}
+        assert response.http_version == "HTTP/1.1"
+        assert response.content_type == "application/json"
+        assert response.is_success
+        assert not response.is_error
+        assert response.is_closed
+        assert response.status_code == 200
+        assert response.encoding == "utf-8"
+        assert response.json == expected_response_body
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("endpoint", ["/version/"])
+async def test_version_get_outer_exception_keeps_cache_header(
+    test_annotator: sanic.Sanic, endpoint: str, monkeypatch
+):
+    """
+    Test the Version endpoint preserves default headers on the outer fallback path.
+    """
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
+
+    with patch.object(
+        VersionView,
+        "build_response_body",
+        side_effect=[
+            Exception("Simulated response error"),
+            {"version": "Unknown", "query_backend": "biothings"},
+        ],
+    ) as mock_build_response_body:
+        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+
+        assert mock_build_response_body.call_count == 2
+
+        assert request.method == "GET"
+        assert response.status_code == 200
+        expected_cache_control = f"max-age={test_annotator.config.CACHE_MAX_AGE}, public"
+        assert response.headers["Cache-Control"] == expected_cache_control
+        assert response.json == {"version": "Unknown", "query_backend": "biothings"}
 
 
 @pytest.mark.unit

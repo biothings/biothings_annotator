@@ -5,7 +5,7 @@ recieve within the biothings annotator
 
 import inspect
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 from biothings_annotator.annotator.utils import get_client
 
@@ -18,23 +18,25 @@ def append_prefix(id, prefix):
     return f"{prefix}:{id}" if not id.startswith(prefix) else id
 
 
-atc_cache = {}  # The global atc_cache will be load once when Transformer is initialized for the first time
+atc_cache = {}  # Backend/source keyed WHO ATC code-to-name mappings.
 
 
-async def load_atc_cache(api_host: str) -> Dict:
+async def load_atc_cache(api_host: str, atc_client: Optional[object] = None, cache_key: Optional[str] = None) -> Dict:
     """
     Load WHO atc code-to-name mapping in a dictionary, which will be used in ResponseTransformer._transform_atc_classifications method
     """
     global atc_cache
-    if not atc_cache:
+    cache_key = cache_key or api_host
+    if cache_key not in atc_cache:
         logger.info("Loading WHO ATC code-to-name mapping...")
-        atc_client = get_client("extra", api_host)
+        atc_client = atc_client or get_client("extra", api_host)
         atc_li = await atc_client.query("_exists_:atc.code", fields="atc.code,atc.name", fetch_all=True)
-        atc_cache = {}
+        cache = {}
         async for atc in atc_li:
-            atc_cache[atc["atc"]["code"]] = atc["atc"]["name"]
-        logger.info(f"Loaded {len(atc_cache)} WHO ATC code-to-name mappings.")
-    return atc_cache
+            cache[atc["atc"]["code"]] = atc["atc"]["name"]
+        atc_cache[cache_key] = cache
+        logger.info(f"Loaded {len(atc_cache[cache_key])} WHO ATC code-to-name mappings.")
+    return atc_cache[cache_key]
 
 
 class ResponseTransformer:

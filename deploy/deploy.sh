@@ -11,4 +11,6 @@ sed -i.bak \
     values.yaml
 rm values.yaml.bak
 
-helm -n ${namespace} upgrade --install ${projectName} -f values-ncats.yaml ./
+helm -n ${namespace} upgrade --install ${projectName} \
+    --set containers.query_backend="${ANNOTATOR_QUERY_BACKEND:-elasticsearch}" \
+    -f values-ncats.yaml ./

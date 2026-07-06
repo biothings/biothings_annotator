@@ -147,6 +147,20 @@ python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12
 python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12 --debug
 ```
 
+##### Runtime configuration
+
+The annotator query backend is controlled with `ANNOTATOR_QUERY_BACKEND`. Supported values are
+`biothings` and `elasticsearch`; when unset, the service uses `biothings`.
+The Helm/Jenkins deployment defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch` and
+`ELASTICSEARCH_CONNECTION=ci`; set `ANNOTATOR_QUERY_BACKEND` to `biothings` during deployment
+to switch back.
+Set `ELASTICSEARCH_CONNECTION` to one of the named presets in
+`biothings_annotator/annotator/settings.py`. The `ci` preset points at
+`http://elasticsearch.es-core-components.svc.cluster.local:9200`. The `ci_local_forward` preset is
+for local port-forward use; `ci_forward` remains as a deprecated alias.
+The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
+the selected `elasticsearch_connection`.
+
 
 ### Builds
 
