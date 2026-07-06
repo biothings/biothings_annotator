@@ -156,8 +156,8 @@ The Helm/Jenkins deployment defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch`
 to switch back.
 Set `ELASTICSEARCH_CONNECTION` to one of the named presets in
 `biothings_annotator/annotator/settings.py`. The `ci` preset points at
-`http://core-components-es.ci.transltr.io:9200`. The `ci_local_forward` preset is for local
-port-forward use; `ci_forward` remains as a deprecated alias.
+`http://elasticsearch.es-core-components.svc.cluster.local:9200`. The `ci_local_forward` preset is
+for local port-forward use; `ci_forward` remains as a deprecated alias.
 The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
 the selected `elasticsearch_connection`.
 

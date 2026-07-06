@@ -18,7 +18,7 @@ ELASTICSEARCH_CONNECTIONS = {
         "headers": {},
     },
     "ci": {
-        "host": "http://core-components-es.ci.transltr.io:9200",
+        "host": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
         "headers": {},
     },
     "ci_local_forward": CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION,
