@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Dict, List, Union
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 import json
 
 import pytest
@@ -9,6 +9,17 @@ import sanic
 from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
 from biothings_annotator.application.views import VersionView
+
+ELASTICSEARCH_PROBE_RESPONSE = {
+    "target": "http://elasticsearch.es-core-components.svc.cluster.local:9200/_cluster/health",
+    "reachable": True,
+    "tcp_connect": True,
+    "status_code": 200,
+    "cluster_status": "green",
+    "cluster_name": "elasticsearch",
+    "elapsed_ms": 12,
+    "error": None,
+}
 
 
 @pytest.mark.unit
@@ -126,25 +137,31 @@ async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str):
     Test the Version endpoint GET method with a successful file read
     """
     with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
-        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+        with patch.object(VersionView, "probe_elasticsearch", new_callable=AsyncMock) as mock_probe:
+            mock_probe.return_value = ELASTICSEARCH_PROBE_RESPONSE
+            request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-        mock_file_read.assert_called_once()
+            mock_file_read.assert_called_once()
+            mock_probe.assert_awaited_once()
 
-        assert request.method == "GET"
-        assert response.status_code == 200
-        assert request.query_string == ""
-        assert request.scheme == "http"
-        assert request.server_path == endpoint
+            assert request.method == "GET"
+            assert response.status_code == 200
+            assert request.query_string == ""
+            assert request.scheme == "http"
+            assert request.server_path == endpoint
 
-        expected_response_body = {"version": "GITHUB_HASH_VERSION_ABC123"}
-        assert response.http_version == "HTTP/1.1"
-        assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
-        assert response.is_closed
-        assert response.status_code == 200
-        assert response.encoding == "utf-8"
-        assert response.json == expected_response_body
+            expected_response_body = {
+                "version": "GITHUB_HASH_VERSION_ABC123",
+                "elasticsearch_probe": ELASTICSEARCH_PROBE_RESPONSE,
+            }
+            assert response.http_version == "HTTP/1.1"
+            assert response.content_type == "application/json"
+            assert response.is_success
+            assert not response.is_error
+            assert response.is_closed
+            assert response.status_code == 200
+            assert response.encoding == "utf-8"
+            assert response.json == expected_response_body
 
 
 @pytest.mark.unit
@@ -155,25 +172,28 @@ async def test_version_get_file_not_found(test_annotator: sanic.Sanic, endpoint:
     Test the Version endpoint GET method when version.txt is not found
     """
     with patch.object(VersionView, "open_version_file", side_effect=FileNotFoundError) as mock_file_read:
-        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+        with patch.object(VersionView, "probe_elasticsearch", new_callable=AsyncMock) as mock_probe:
+            mock_probe.return_value = ELASTICSEARCH_PROBE_RESPONSE
+            request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-        mock_file_read.assert_called_once()
+            mock_file_read.assert_called_once()
+            mock_probe.assert_awaited_once()
 
-        assert request.method == "GET"
-        assert response.status_code == 200
-        assert request.query_string == ""
-        assert request.scheme == "http"
-        assert request.server_path == endpoint
+            assert request.method == "GET"
+            assert response.status_code == 200
+            assert request.query_string == ""
+            assert request.scheme == "http"
+            assert request.server_path == endpoint
 
-        expected_response_body = {"version": "Unknown"}
-        assert response.http_version == "HTTP/1.1"
-        assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
-        assert response.is_closed
-        assert response.status_code == 200
-        assert response.encoding == "utf-8"
-        assert response.json == expected_response_body
+            expected_response_body = {"version": "Unknown", "elasticsearch_probe": ELASTICSEARCH_PROBE_RESPONSE}
+            assert response.http_version == "HTTP/1.1"
+            assert response.content_type == "application/json"
+            assert response.is_success
+            assert not response.is_error
+            assert response.is_closed
+            assert response.status_code == 200
+            assert response.encoding == "utf-8"
+            assert response.json == expected_response_body
 
 
 @pytest.mark.unit
@@ -184,25 +204,28 @@ async def test_version_get_exception(test_annotator: sanic.Sanic, endpoint: str)
     Test the Version endpoint GET method when an exception occurs
     """
     with patch.object(VersionView, "open_version_file", side_effect=Exception("Simulated error")) as mock_file_read:
-        request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
+        with patch.object(VersionView, "probe_elasticsearch", new_callable=AsyncMock) as mock_probe:
+            mock_probe.return_value = ELASTICSEARCH_PROBE_RESPONSE
+            request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-        mock_file_read.assert_called_once()
+            mock_file_read.assert_called_once()
+            mock_probe.assert_awaited_once()
 
-        assert request.method == "GET"
-        assert response.status_code == 200
-        assert request.query_string == ""
-        assert request.scheme == "http"
-        assert request.server_path == endpoint
+            assert request.method == "GET"
+            assert response.status_code == 200
+            assert request.query_string == ""
+            assert request.scheme == "http"
+            assert request.server_path == endpoint
 
-        expected_response_body = {"version": "Unknown"}
-        assert response.http_version == "HTTP/1.1"
-        assert response.content_type == "application/json"
-        assert response.is_success
-        assert not response.is_error
-        assert response.is_closed
-        assert response.status_code == 200
-        assert response.encoding == "utf-8"
-        assert response.json == expected_response_body
+            expected_response_body = {"version": "Unknown", "elasticsearch_probe": ELASTICSEARCH_PROBE_RESPONSE}
+            assert response.http_version == "HTTP/1.1"
+            assert response.content_type == "application/json"
+            assert response.is_success
+            assert not response.is_error
+            assert response.is_closed
+            assert response.status_code == 200
+            assert response.encoding == "utf-8"
+            assert response.json == expected_response_body
 
 
 @pytest.mark.unit
