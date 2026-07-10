@@ -149,6 +149,26 @@ python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12 -
 
 ##### Runtime configuration
 
+##### OpenTelemetry tracing
+
+The service can export Sanic request spans and downstream HTTPX spans to a
+Jaeger collector using OTLP over HTTP. Tracing is disabled by default and can
+be enabled without changing the configuration file:
+
+```shell
+export OPENTELEMETRY_ENABLED=true
+export OPENTELEMETRY_SERVICE_NAME=BioThingsAnnotator
+export OPENTELEMETRY_JAEGER_HOST=http://localhost
+export OPENTELEMETRY_JAEGER_PORT=4318
+python -m biothings_annotator
+```
+
+The exporter sends spans to
+`$OPENTELEMETRY_JAEGER_HOST:$OPENTELEMETRY_JAEGER_PORT/v1/traces`. Set
+`OPENTELEMETRY_EXCLUDED_URLS` to a comma-separated list of regular expressions
+to override the configured route exclusions. The Helm deployment enables
+tracing and targets `http://jaeger-otel-collector.sri:4318` by default.
+
 The annotator query backend is controlled with `ANNOTATOR_QUERY_BACKEND`. Supported values are
 `biothings` and `elasticsearch`; when unset, the service uses `biothings`.
 The Helm/Jenkins deployment defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch` and

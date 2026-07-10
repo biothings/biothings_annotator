@@ -10,6 +10,13 @@
         "sentry": {
             "SENTRY_CLIENT_KEY": ""
         },
+        "telemetry": {
+            "OPENTELEMETRY_ENABLED": false,
+            "OPENTELEMETRY_SERVICE_NAME": "BioThingsAnnotator",
+            "OPENTELEMETRY_JAEGER_HOST": "http://localhost",
+            "OPENTELEMETRY_JAEGER_PORT": 4318,
+            "OPENTELEMETRY_EXCLUDED_URLS": ["^/$", "^/status$", "^/version$", "^/webapp", "^/favicon\\.ico$"]
+        },
         "extension": {
             "cors": {
                 "CORS_ALLOW_HEADERS": "*",

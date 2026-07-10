@@ -7,6 +7,7 @@ from sanic import Sanic
 from biothings_annotator.application.exceptions import build_exception_handers
 from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.static import build_static_routes, build_static_content
+from biothings_annotator.application.telemetry import configure_telemetry
 from biothings_annotator.application.views import build_routes
 
 logging.basicConfig()
@@ -62,6 +63,7 @@ def build_application(configuration: Dict = None) -> Sanic:
 
     application = Sanic(name="biothings-annotator")
     application.update_config(configuration_settings)
+    configure_telemetry(application, configuration["application"].get("telemetry", {}))
 
     application_routes = build_routes()
     static_routes = build_static_routes()
