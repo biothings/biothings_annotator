@@ -4,9 +4,13 @@ services:
     build:
       context: .
       dockerfile: ./docker/Dockerfile
-      args:
-        - ARG ANNOTATOR_REPO=https://github.com/biothings/biothings_annotator.git
-        - ARG ANNOTATOR_BRANCH=main
     container_name: biothings-annotator
+    environment:
+      OPENTELEMETRY_ENABLED: "true"
+      OPENTELEMETRY_SERVICE_NAME: BioThingsAnnotator
+      OPENTELEMETRY_JAEGER_HOST: http://host.docker.internal
+      OPENTELEMETRY_JAEGER_PORT: "4318"
+    extra_hosts:
+      - host.docker.internal:host-gateway
     ports:
       - 9000:9000
