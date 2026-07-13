@@ -26,8 +26,6 @@ containers:
   elasticsearch_connection: ci
   port: 9000
   OPENTELEMETRY_ENABLED_VALUE: True
-  OPENTELEMETRY_JAEGER_HOST_VALUE: http://jaeger-otel-collector.sri
-  OPENTELEMETRY_JAEGER_PORT_VALUE: 4318
 
 service:
   type: ClusterIP

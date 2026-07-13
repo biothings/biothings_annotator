@@ -27,6 +27,9 @@ WORKDIR /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/biothings_annotator/application/configuration/default.json /home/annotator/configuration
 COPY --from=builder --chown=annotator:annotator /build/annotator/version.txt /home/annotator/configuration/version.txt
 
+# Override with corrected configuration
+COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/config.json /home/annotator/configuration/config.json
+
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
 COPY --from=builder --chown=annotator:annotator /build/annotator/docker/configuration/Caddyfile /etc/caddy/Caddyfile
 
