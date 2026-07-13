@@ -36,11 +36,7 @@ spec:
               value: {{ . | quote }}
             {{- end }}
             - name: OPENTELEMETRY_ENABLED
-              value: "{{ .Values.containers.OPENTELEMETRY_ENABLED_VALUE }}"  
-            - name: OPENTELEMETRY_JAEGER_HOST
-              value: "{{ .Values.containers.OPENTELEMETRY_JAEGER_HOST_VALUE }}"
-            - name: OPENTELEMETRY_JAEGER_PORT
-              value: "{{ .Values.containers.OPENTELEMETRY_JAEGER_PORT_VALUE }}"      
+              value: "{{ .Values.containers.OPENTELEMETRY_ENABLED_VALUE }}"
           ports:
             - name: http
               containerPort: {{ .Values.containers.port }}

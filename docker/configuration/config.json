@@ -1,0 +1,46 @@
+{
+    "application": {
+        "configuration": {
+            "FALLBACK_ERROR_FORMAT": "json",
+            "REQUEST_TIMEOUT": 300,
+            "RESPONSE_TIMEOUT":	300,
+            "REQUEST_MAX_SIZE": 100000000,
+            "CACHE_MAX_AGE": 604800
+        },
+        "sentry": {
+            "SENTRY_CLIENT_KEY": ""
+        },
+        "telemetry": {
+            "OPENTELEMETRY_ENABLED": true,
+            "OPENTELEMETRY_SERVICE_NAME": "BioThingsAnnotator",
+            "OPENTELEMETRY_JAEGER_HOST": "http://jaeger-otel-collector.sri",
+            "OPENTELEMETRY_JAEGER_PORT": 4318,
+            "OPENTELEMETRY_EXCLUDED_URLS": ["^/$", "^/status$", "^/version$", "^/webapp", "^/favicon\\.ico$"]
+        },
+        "extension": {
+            "cors": {
+                "CORS_ALLOW_HEADERS": "*",
+                "CORS_METHODS": "*",
+                "CORS_ORIGINS": "*",
+                "CORS_SUPPORS_CREDENTIALS": false,
+                "CORS_MAX_AGE": 60
+            }
+        },
+        "runtime": {
+            "access_log": true,
+            "auto_reload": false,
+            "auto_tls": false,
+            "coffee": false,
+            "debug": false,
+            "fast": false,
+            "host": "0.0.0.0",
+            "motd": true,
+            "noisy_exceptions": true,
+            "port": 9000,
+            "single_process": false,
+            "unix": "",
+            "verbosity": 2,
+            "workers": 8
+        }
+    }
+}
