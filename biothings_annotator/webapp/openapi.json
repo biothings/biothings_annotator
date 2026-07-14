@@ -161,6 +161,9 @@
             }
           },
           {
+            "$ref": "#/components/parameters/QueryBackend"
+          },
+          {
             "name": "raw",
             "in": "query",
             "description": "When true, return annotation fields in their original data structure before transformation. Useful for debugging",
@@ -182,107 +185,22 @@
               "gene": {
                 "value": "name,symbol,summary,type_of_gene",
                 "summary": "Example subset of gene-based annotation fields",
-                "description": "The example only uses a subset of the total [**gene**] fields available. The full list comprises the following fields:\n
-                - name\n
-                - symbol\n
-                - summary\n
-                - type_of_gene\n
-                - MIM\n
-                - HGNC\n
-                - MGI\n
-                - RGD\n
-                - alias\n
-                - go.BP\n
-                - go.MF\n
-                - interpro\n
-                - pharos\n
-                - taxid\n"
+                "description": "The example only uses a subset of the total [**gene**] fields available. The full list comprises the following fields:\n- name\n- symbol\n- summary\n- type_of_gene\n- MIM\n- HGNC\n- MGI\n- RGD\n- alias\n- go.BP\n- go.MF\n- interpro\n- pharos\n- taxid\n"
               },
               "chem": {
                 "value": "pubchem.cid,pubchem.inchikey,drugbank.id",
                 "summary": "Example subset of chem-based annotation fields",
-                "description": "The example only uses a subset of the total [**chem**] fields available. The full list comprises the following fields:\n\n
-                **identifiers**\n
-                - pubchem.cid\n
-                - pubchem.inchikey\n
-                - chembl.molecule_chembl_id\n
-                - drugbank.id\n
-                - chebi.id\n
-                - unii.unii\n\n
-                **names**\n
-                - chebi.name\n
-                - chembl.pref_name\n\n
-                **descriptions**\n
-                - chebi.definition\n
-                - unii.ncit\n
-                - unii.ncit_description\n\n
-                **structure**\n
-                - chebi.iupac\n
-                - chembl.smiles\n
-                - pubchem.inchi\n
-                - pubchem.molecular_formula\n
-                - pubchem.molecular_weight\n\n
-                **chemical types**\n
-                - chembl.molecule_type\n
-                - chembl.structure_type\n\n
-                **chebi roles**\n
-                - chebi.relationship\n\n
-                **drug info**\n
-                - unichem.rxnorm\n
-                - pharmgkb.trade_names\n
-                - chembl.drug_indications\n
-                - aeolus.indications\n
-                - chembl.drug_mechanisms\n
-                - chembl.atc_classifications\n
-                - chembl.max_phase\n
-                - chembl.first_approval\n
-                - drugcentral.approval\n
-                - chembl.first_in_class\n
-                - chembl.inorganic_flag\n
-                - chembl.prodrug\n
-                - chembl.therapeutic_flag\n
-                - chembl.withdrawn_flag\n
-                - chembl.availability_type\n
-                - drugcentral.drug_dosage\n
-                - ndc.routename\n
-                - ndc.producttypename\n
-                - ndc.pharm_classes\n
-                - ndc.proprietaryname\n
-                - ndc.nonproprietaryname\n"
+                "description": "The example only uses a subset of the total [**chem**] fields available. The full list comprises the following fields:\n\n**identifiers**\n- pubchem.cid\n- pubchem.inchikey\n- chembl.molecule_chembl_id\n- drugbank.id\n- chebi.id\n- unii.unii\n\n**names**\n- chebi.name\n- chembl.pref_name\n\n**descriptions**\n- chebi.definition\n- unii.ncit\n- unii.ncit_description\n\n**structure**\n- chebi.iupac\n- chembl.smiles\n- pubchem.inchi\n- pubchem.molecular_formula\n- pubchem.molecular_weight\n\n**chemical types**\n- chembl.molecule_type\n- chembl.structure_type\n\n**chebi roles**\n- chebi.relationship\n\n**drug info**\n- unichem.rxnorm\n- pharmgkb.trade_names\n- chembl.drug_indications\n- aeolus.indications\n- chembl.drug_mechanisms\n- chembl.atc_classifications\n- chembl.max_phase\n- chembl.first_approval\n- drugcentral.approval\n- chembl.first_in_class\n- chembl.inorganic_flag\n- chembl.prodrug\n- chembl.therapeutic_flag\n- chembl.withdrawn_flag\n- chembl.availability_type\n- drugcentral.drug_dosage\n- ndc.routename\n- ndc.producttypename\n- ndc.pharm_classes\n- ndc.proprietaryname\n- ndc.nonproprietaryname\n"
               },
               "disease": {
                 "value": "mondo.mondo,disease_ontology.name,mondo.xrefs",
                 "summary": "Example subset of disease-based annotation fields",
-                "description":"The example only uses a subset of the total [**disease**] fields available. The full list comprises the following fields:\n\n
-                **identifiers**\n
-                - disease_ontology.doid\n
-                - mondo.mondo\n
-                - umls.umls\n\n
-                **names**\n
-                - disease_ontology.name\n
-                - mondo.label\n\n
-                **description**\n
-                - mondo.definition\n
-                - disease_ontology.def\n\n
-                **xrefs**\n
-                - mondo.xrefs\n
-                - disease_ontology.xrefs\n\n
-                **synonyms**\n
-                - mondo.synonym\n
-                - disease_ontology.synonyms\n"
+                "description": "The example only uses a subset of the total [**disease**] fields available. The full list comprises the following fields:\n\n**identifiers**\n- disease_ontology.doid\n- mondo.mondo\n- umls.umls\n\n**names**\n- disease_ontology.name\n- mondo.label\n\n**description**\n- mondo.definition\n- disease_ontology.def\n\n**xrefs**\n- mondo.xrefs\n- disease_ontology.xrefs\n\n**synonyms**\n- mondo.synonym\n- disease_ontology.synonyms\n"
               },
               "phenotype": {
                 "value": "hp,name,annotations,synonym",
                 "summary": "Example subset of phenotype-based annotation fields",
-                "description": "The example only uses a subset of the total [**phenotype**] fields available. The full list comprises the following fields:\n
-                - hp\n
-                - name\n
-                - annotations\n
-                - comment\n
-                - def\n
-                - subset\n
-                - synonym\n
-                - xrefs"
+                "description": "The example only uses a subset of the total [**phenotype**] fields available. The full list comprises the following fields:\n- hp\n- name\n- annotations\n- comment\n- def\n- subset\n- synonym\n- xrefs"
               }
             }
           },
@@ -300,6 +218,11 @@
         "responses": {
           "200": {
             "description": "A matching annotation object",
+            "headers": {
+              "X-Query-Backend": {
+                "$ref": "#/components/headers/QueryBackend"
+              }
+            },
             "content": {
               "application/json": {
                 "example": {
@@ -432,6 +355,9 @@
         "tags": ["translator"],
         "parameters": [
           {
+            "$ref": "#/components/parameters/QueryBackend"
+          },
+          {
             "name": "raw",
             "in": "query",
             "description": "When true, return annotation fields in their original data structure before transformation. Useful for debugging",
@@ -453,107 +379,22 @@
               "gene": {
                 "value": "name,symbol,summary,type_of_gene",
                 "summary": "Example subset of gene-based annotation fields",
-                "description": "The example only uses a subset of the total [**gene**] fields available. The full list comprises the following fields:\n
-                - name\n
-                - symbol\n
-                - summary\n
-                - type_of_gene\n
-                - MIM\n
-                - HGNC\n
-                - MGI\n
-                - RGD\n
-                - alias\n
-                - go.BP\n
-                - go.MF\n
-                - interpro\n
-                - pharos\n
-                - taxid\n"
+                "description": "The example only uses a subset of the total [**gene**] fields available. The full list comprises the following fields:\n- name\n- symbol\n- summary\n- type_of_gene\n- MIM\n- HGNC\n- MGI\n- RGD\n- alias\n- go.BP\n- go.MF\n- interpro\n- pharos\n- taxid\n"
               },
               "chem": {
                 "value": "pubchem.cid,pubchem.inchikey,drugbank.id",
                 "summary": "Example subset of chem-based annotation fields",
-                "description": "The example only uses a subset of the total [**chem**] fields available. The full list comprises the following fields:\n\n
-                **identifiers**\n
-                - pubchem.cid\n
-                - pubchem.inchikey\n
-                - chembl.molecule_chembl_id\n
-                - drugbank.id\n
-                - chebi.id\n
-                - unii.unii\n\n
-                **names**\n
-                - chebi.name\n
-                - chembl.pref_name\n\n
-                **descriptions**\n
-                - chebi.definition\n
-                - unii.ncit\n
-                - unii.ncit_description\n\n
-                **structure**\n
-                - chebi.iupac\n
-                - chembl.smiles\n
-                - pubchem.inchi\n
-                - pubchem.molecular_formula\n
-                - pubchem.molecular_weight\n\n
-                **chemical types**\n
-                - chembl.molecule_type\n
-                - chembl.structure_type\n\n
-                **chebi roles**\n
-                - chebi.relationship\n\n
-                **drug info**\n
-                - unichem.rxnorm\n
-                - pharmgkb.trade_names\n
-                - chembl.drug_indications\n
-                - aeolus.indications\n
-                - chembl.drug_mechanisms\n
-                - chembl.atc_classifications\n
-                - chembl.max_phase\n
-                - chembl.first_approval\n
-                - drugcentral.approval\n
-                - chembl.first_in_class\n
-                - chembl.inorganic_flag\n
-                - chembl.prodrug\n
-                - chembl.therapeutic_flag\n
-                - chembl.withdrawn_flag\n
-                - chembl.availability_type\n
-                - drugcentral.drug_dosage\n
-                - ndc.routename\n
-                - ndc.producttypename\n
-                - ndc.pharm_classes\n
-                - ndc.proprietaryname\n
-                - ndc.nonproprietaryname\n"
+                "description": "The example only uses a subset of the total [**chem**] fields available. The full list comprises the following fields:\n\n**identifiers**\n- pubchem.cid\n- pubchem.inchikey\n- chembl.molecule_chembl_id\n- drugbank.id\n- chebi.id\n- unii.unii\n\n**names**\n- chebi.name\n- chembl.pref_name\n\n**descriptions**\n- chebi.definition\n- unii.ncit\n- unii.ncit_description\n\n**structure**\n- chebi.iupac\n- chembl.smiles\n- pubchem.inchi\n- pubchem.molecular_formula\n- pubchem.molecular_weight\n\n**chemical types**\n- chembl.molecule_type\n- chembl.structure_type\n\n**chebi roles**\n- chebi.relationship\n\n**drug info**\n- unichem.rxnorm\n- pharmgkb.trade_names\n- chembl.drug_indications\n- aeolus.indications\n- chembl.drug_mechanisms\n- chembl.atc_classifications\n- chembl.max_phase\n- chembl.first_approval\n- drugcentral.approval\n- chembl.first_in_class\n- chembl.inorganic_flag\n- chembl.prodrug\n- chembl.therapeutic_flag\n- chembl.withdrawn_flag\n- chembl.availability_type\n- drugcentral.drug_dosage\n- ndc.routename\n- ndc.producttypename\n- ndc.pharm_classes\n- ndc.proprietaryname\n- ndc.nonproprietaryname\n"
               },
               "disease": {
                 "value": "mondo.mondo,disease_ontology.name,mondo.xrefs",
                 "summary": "Example subset of disease-based annotation fields",
-                "description":"The example only uses a subset of the total [**disease**] fields available. The full list comprises the following fields:\n\n
-                **identifiers**\n
-                - disease_ontology.doid\n
-                - mondo.mondo\n
-                - umls.umls\n\n
-                **names**\n
-                - disease_ontology.name\n
-                - mondo.label\n\n
-                **description**\n
-                - mondo.definition\n
-                - disease_ontology.def\n\n
-                **xrefs**\n
-                - mondo.xrefs\n
-                - disease_ontology.xrefs\n\n
-                **synonyms**\n
-                - mondo.synonym\n
-                - disease_ontology.synonyms\n"
+                "description": "The example only uses a subset of the total [**disease**] fields available. The full list comprises the following fields:\n\n**identifiers**\n- disease_ontology.doid\n- mondo.mondo\n- umls.umls\n\n**names**\n- disease_ontology.name\n- mondo.label\n\n**description**\n- mondo.definition\n- disease_ontology.def\n\n**xrefs**\n- mondo.xrefs\n- disease_ontology.xrefs\n\n**synonyms**\n- mondo.synonym\n- disease_ontology.synonyms\n"
               },
               "phenotype": {
                 "value": "hp,name,annotations,synonym",
                 "summary": "Example subset of phenotype-based annotation fields",
-                "description": "The example only uses a subset of the total [**phenotype**] fields available. The full list comprises the following fields:\n
-                - hp\n
-                - name\n
-                - annotations\n
-                - comment\n
-                - def\n
-                - subset\n
-                - synonym\n
-                - xrefs"
+                "description": "The example only uses a subset of the total [**phenotype**] fields available. The full list comprises the following fields:\n- hp\n- name\n- annotations\n- comment\n- def\n- subset\n- synonym\n- xrefs"
               }
             }
           },
@@ -591,6 +432,11 @@
         "responses": {
           "200": {
             "description": "A list of matching annotation objects",
+            "headers": {
+              "X-Query-Backend": {
+                "$ref": "#/components/headers/QueryBackend"
+              }
+            },
             "content": {
               "application/json": {
                 "example": {
@@ -1343,6 +1189,9 @@
         "tags": ["translator"],
         "parameters": [
           {
+            "$ref": "#/components/parameters/QueryBackend"
+          },
+          {
             "name": "fields",
             "in": "query",
             "description": "Comma-separated fields to override the default set of annotation fields, or passing \"fields=all\" to return all available fields from the original annotation source",
@@ -1354,107 +1203,22 @@
               "gene": {
                 "value": "name,symbol,summary,type_of_gene",
                 "summary": "Example subset of gene-based annotation fields",
-                "description": "The example only uses a subset of the total [**gene**] fields available. The full list comprises the following fields:\n
-                - name\n
-                - symbol\n
-                - summary\n
-                - type_of_gene\n
-                - MIM\n
-                - HGNC\n
-                - MGI\n
-                - RGD\n
-                - alias\n
-                - go.BP\n
-                - go.MF\n
-                - interpro\n
-                - pharos\n
-                - taxid\n"
+                "description": "The example only uses a subset of the total [**gene**] fields available. The full list comprises the following fields:\n- name\n- symbol\n- summary\n- type_of_gene\n- MIM\n- HGNC\n- MGI\n- RGD\n- alias\n- go.BP\n- go.MF\n- interpro\n- pharos\n- taxid\n"
               },
               "chem": {
                 "value": "pubchem.cid,pubchem.inchikey,drugbank.id",
                 "summary": "Example subset of chem-based annotation fields",
-                "description": "The example only uses a subset of the total [**chem**] fields available. The full list comprises the following fields:\n\n
-                **identifiers**\n
-                - pubchem.cid\n
-                - pubchem.inchikey\n
-                - chembl.molecule_chembl_id\n
-                - drugbank.id\n
-                - chebi.id\n
-                - unii.unii\n\n
-                **names**\n
-                - chebi.name\n
-                - chembl.pref_name\n\n
-                **descriptions**\n
-                - chebi.definition\n
-                - unii.ncit\n
-                - unii.ncit_description\n\n
-                **structure**\n
-                - chebi.iupac\n
-                - chembl.smiles\n
-                - pubchem.inchi\n
-                - pubchem.molecular_formula\n
-                - pubchem.molecular_weight\n\n
-                **chemical types**\n
-                - chembl.molecule_type\n
-                - chembl.structure_type\n\n
-                **chebi roles**\n
-                - chebi.relationship\n\n
-                **drug info**\n
-                - unichem.rxnorm\n
-                - pharmgkb.trade_names\n
-                - chembl.drug_indications\n
-                - aeolus.indications\n
-                - chembl.drug_mechanisms\n
-                - chembl.atc_classifications\n
-                - chembl.max_phase\n
-                - chembl.first_approval\n
-                - drugcentral.approval\n
-                - chembl.first_in_class\n
-                - chembl.inorganic_flag\n
-                - chembl.prodrug\n
-                - chembl.therapeutic_flag\n
-                - chembl.withdrawn_flag\n
-                - chembl.availability_type\n
-                - drugcentral.drug_dosage\n
-                - ndc.routename\n
-                - ndc.producttypename\n
-                - ndc.pharm_classes\n
-                - ndc.proprietaryname\n
-                - ndc.nonproprietaryname\n"
+                "description": "The example only uses a subset of the total [**chem**] fields available. The full list comprises the following fields:\n\n**identifiers**\n- pubchem.cid\n- pubchem.inchikey\n- chembl.molecule_chembl_id\n- drugbank.id\n- chebi.id\n- unii.unii\n\n**names**\n- chebi.name\n- chembl.pref_name\n\n**descriptions**\n- chebi.definition\n- unii.ncit\n- unii.ncit_description\n\n**structure**\n- chebi.iupac\n- chembl.smiles\n- pubchem.inchi\n- pubchem.molecular_formula\n- pubchem.molecular_weight\n\n**chemical types**\n- chembl.molecule_type\n- chembl.structure_type\n\n**chebi roles**\n- chebi.relationship\n\n**drug info**\n- unichem.rxnorm\n- pharmgkb.trade_names\n- chembl.drug_indications\n- aeolus.indications\n- chembl.drug_mechanisms\n- chembl.atc_classifications\n- chembl.max_phase\n- chembl.first_approval\n- drugcentral.approval\n- chembl.first_in_class\n- chembl.inorganic_flag\n- chembl.prodrug\n- chembl.therapeutic_flag\n- chembl.withdrawn_flag\n- chembl.availability_type\n- drugcentral.drug_dosage\n- ndc.routename\n- ndc.producttypename\n- ndc.pharm_classes\n- ndc.proprietaryname\n- ndc.nonproprietaryname\n"
               },
               "disease": {
                 "value": "mondo.mondo,disease_ontology.name,mondo.xrefs",
                 "summary": "Example subset of disease-based annotation fields",
-                "description":"The example only uses a subset of the total [**disease**] fields available. The full list comprises the following fields:\n\n
-                **identifiers**\n
-                - disease_ontology.doid\n
-                - mondo.mondo\n
-                - umls.umls\n\n
-                **names**\n
-                - disease_ontology.name\n
-                - mondo.label\n\n
-                **description**\n
-                - mondo.definition\n
-                - disease_ontology.def\n\n
-                **xrefs**\n
-                - mondo.xrefs\n
-                - disease_ontology.xrefs\n\n
-                **synonyms**\n
-                - mondo.synonym\n
-                - disease_ontology.synonyms\n"
+                "description": "The example only uses a subset of the total [**disease**] fields available. The full list comprises the following fields:\n\n**identifiers**\n- disease_ontology.doid\n- mondo.mondo\n- umls.umls\n\n**names**\n- disease_ontology.name\n- mondo.label\n\n**description**\n- mondo.definition\n- disease_ontology.def\n\n**xrefs**\n- mondo.xrefs\n- disease_ontology.xrefs\n\n**synonyms**\n- mondo.synonym\n- disease_ontology.synonyms\n"
               },
               "phenotype": {
                 "value": "hp,name,annotations,synonym",
                 "summary": "Example subset of phenotype-based annotation fields",
-                "description": "The example only uses a subset of the total [**phenotype**] fields available. The full list comprises the following fields:\n
-                - hp\n
-                - name\n
-                - annotations\n
-                - comment\n
-                - def\n
-                - subset\n
-                - synonym\n
-                - xrefs"
+                "description": "The example only uses a subset of the total [**phenotype**] fields available. The full list comprises the following fields:\n- hp\n- name\n- annotations\n- comment\n- def\n- subset\n- synonym\n- xrefs"
               }
             }
           },
@@ -1542,6 +1306,11 @@
         "responses": {
           "200": {
             "description": "A list of matching annotation objects",
+            "headers": {
+              "X-Query-Backend": {
+                "$ref": "#/components/headers/QueryBackend"
+              }
+            },
             "content": {
               "application/json": {
                 "example": {
@@ -1927,6 +1696,43 @@
                 }
               }
             }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "headers": {
+      "QueryBackend": {
+        "description": "Canonical backend that handled the annotation query.",
+        "schema": {
+          "type": "string",
+          "enum": ["biothings", "elasticsearch"]
+        }
+      }
+    },
+    "parameters": {
+      "QueryBackend": {
+        "name": "query_backend",
+        "in": "query",
+        "required": false,
+        "allowEmptyValue": true,
+        "description": "Backend to use for this request. Omit the parameter to use the deployment default. The canonical values are `biothings` and `elasticsearch`; `es` is accepted as an alias for `elasticsearch`. Unsupported values are ignored and use the deployment default.",
+        "schema": {
+          "type": "string"
+        },
+        "examples": {
+          "biothings": {
+            "summary": "Use the BioThings client for this request",
+            "value": "biothings"
+          },
+          "elasticsearch": {
+            "summary": "Use Elasticsearch for this request",
+            "value": "elasticsearch"
+          },
+          "elasticsearchAlias": {
+            "summary": "Use the Elasticsearch alias",
+            "value": "es"
           }
         }
       }

@@ -1,7 +1,8 @@
+import asyncio
+import json
 from pathlib import Path
 from typing import Dict, List, Union
-from unittest.mock import patch
-import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import sanic
@@ -498,3 +499,276 @@ async def test_trapi_post(temporary_data_storage: Union[str, Path], test_annotat
                         assert identifier is not None
                         score = values.get("_score", None)
                         assert score is not None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize(
+    "method,url,json_body,annotator_patch,annotation_method,expected_args,expected_kwargs",
+    [
+        (
+            "get",
+            "/curie/NCBIGene:1017?query_backend=biothings",
+            None,
+            "biothings_annotator.application.views.curie.Annotator",
+            "annotate_curie",
+            ("NCBIGene:1017",),
+            {"fields": None, "raw": False, "include_extra": True},
+        ),
+        (
+            "post",
+            "/curie/?query_backend=biothings",
+            ["NCBIGene:1017"],
+            "biothings_annotator.application.views.curie.Annotator",
+            "annotate_curie_list",
+            (),
+            {
+                "curie_list": ["NCBIGene:1017"],
+                "fields": None,
+                "raw": False,
+                "include_extra": True,
+            },
+        ),
+        (
+            "post",
+            "/trapi/?query_backend=biothings",
+            {"message": {"knowledge_graph": {"nodes": {}}}},
+            "biothings_annotator.application.views.trapi.Annotator",
+            "annotate_trapi",
+            ({"message": {"knowledge_graph": {"nodes": {}}}},),
+            {"fields": None, "raw": False, "append": False, "limit": 0, "include_extra": True},
+        ),
+    ],
+)
+async def test_query_backend_override_is_forwarded(
+    test_annotator: sanic.Sanic,
+    method: str,
+    url: str,
+    json_body,
+    annotator_patch: str,
+    annotation_method: str,
+    expected_args: tuple,
+    expected_kwargs: dict,
+):
+    with patch(annotator_patch) as mock_annotator_class:
+        mock_annotator = mock_annotator_class.return_value
+        mock_annotator.query_backend = "biothings"
+        mock_annotation = AsyncMock(return_value={"result": "ok"})
+        setattr(mock_annotator, annotation_method, mock_annotation)
+
+        request_kwargs = {"method": method, "url": url}
+        if json_body is not None:
+            request_kwargs["json"] = json_body
+        _, response = await test_annotator.asgi_client.request(**request_kwargs)
+
+    mock_annotator_class.assert_called_once_with(query_backend="biothings")
+    mock_annotation.assert_awaited_once_with(*expected_args, **expected_kwargs)
+    assert response.status_code == 200
+    assert response.headers["X-Query-Backend"] == "biothings"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_query_backend_omission_uses_deployment_default(test_annotator: sanic.Sanic, monkeypatch):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "elasticsearch")
+    mock_annotation = AsyncMock(return_value={"result": "ok"})
+
+    with patch.object(Annotator, "annotate_curie", mock_annotation), patch(
+        "biothings_annotator.application.views.curie.Annotator", wraps=Annotator
+    ) as mock_annotator_class:
+        _, response = await test_annotator.asgi_client.request(method="get", url="/curie/NCBIGene:1017")
+
+    mock_annotator_class.assert_called_once_with(query_backend=None)
+    mock_annotation.assert_awaited_once()
+    assert response.status_code == 200
+    assert response.headers["X-Query-Backend"] == "elasticsearch"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("query_backend", ["elasticsearch", "es"])
+async def test_elasticsearch_query_backend_returns_canonical_header(test_annotator: sanic.Sanic, query_backend: str):
+    mock_annotation = AsyncMock(return_value={"result": "ok"})
+
+    with patch.object(Annotator, "annotate_curie", mock_annotation), patch(
+        "biothings_annotator.application.views.curie.Annotator", wraps=Annotator
+    ) as mock_annotator_class:
+        _, response = await test_annotator.asgi_client.request(
+            method="get", url=f"/curie/NCBIGene:1017?query_backend={query_backend}"
+        )
+
+    mock_annotator_class.assert_called_once_with(query_backend=query_backend)
+    mock_annotation.assert_awaited_once()
+    assert response.status_code == 200
+    assert response.headers["X-Query-Backend"] == "elasticsearch"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("deployment_backend", ["biothings", "elasticsearch"])
+@pytest.mark.parametrize(
+    "encoded_override,constructor_value",
+    [
+        ("unsupported", "unsupported"),
+        ("", None),
+        ("%20%20", "  "),
+    ],
+)
+@pytest.mark.parametrize(
+    "method,base_url,json_body,annotator_patch,annotation_method,expected_args,expected_kwargs",
+    [
+        (
+            "get",
+            "/curie/NCBIGene:1017",
+            None,
+            "biothings_annotator.application.views.curie.Annotator",
+            "annotate_curie",
+            ("NCBIGene:1017",),
+            {"fields": None, "raw": False, "include_extra": True},
+        ),
+        (
+            "post",
+            "/curie/",
+            ["NCBIGene:1017"],
+            "biothings_annotator.application.views.curie.Annotator",
+            "annotate_curie_list",
+            (),
+            {
+                "curie_list": ["NCBIGene:1017"],
+                "fields": None,
+                "raw": False,
+                "include_extra": True,
+            },
+        ),
+        (
+            "post",
+            "/trapi/",
+            {"message": {"knowledge_graph": {"nodes": {}}}},
+            "biothings_annotator.application.views.trapi.Annotator",
+            "annotate_trapi",
+            ({"message": {"knowledge_graph": {"nodes": {}}}},),
+            {"fields": None, "raw": False, "append": False, "limit": 0, "include_extra": True},
+        ),
+    ],
+)
+async def test_invalid_query_backend_uses_deployment_default(
+    test_annotator: sanic.Sanic,
+    monkeypatch,
+    deployment_backend: str,
+    encoded_override: str,
+    constructor_value,
+    method: str,
+    base_url: str,
+    json_body,
+    annotator_patch: str,
+    annotation_method: str,
+    expected_args: tuple,
+    expected_kwargs: dict,
+):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, deployment_backend)
+    mock_annotation = AsyncMock(return_value={"result": "ok"})
+    request_kwargs = {"method": method, "url": f"{base_url}?query_backend={encoded_override}"}
+    if json_body is not None:
+        request_kwargs["json"] = json_body
+
+    with patch.object(Annotator, annotation_method, mock_annotation), patch(
+        annotator_patch, wraps=Annotator
+    ) as mock_annotator_class:
+        _, response = await test_annotator.asgi_client.request(**request_kwargs)
+
+    mock_annotator_class.assert_called_once_with(query_backend=constructor_value)
+    mock_annotation.assert_awaited_once_with(*expected_args, **expected_kwargs)
+    assert response.status_code == 200
+    assert response.json == {"result": "ok"}
+    assert response.headers["X-Query-Backend"] == deployment_backend
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize(
+    "method,url,json_body,annotation_method,endpoint",
+    [
+        ("get", "/curie/NCBIGene:1017", None, "annotate_curie", "/curie/"),
+        ("post", "/curie/", ["NCBIGene:1017"], "annotate_curie_list", "/curie/"),
+        (
+            "post",
+            "/trapi/",
+            {"message": {"knowledge_graph": {"nodes": {}}}},
+            "annotate_trapi",
+            "/trapi/",
+        ),
+    ],
+)
+async def test_invalid_deployment_query_backend_returns_sanitized_500(
+    test_annotator: sanic.Sanic,
+    monkeypatch,
+    method: str,
+    url: str,
+    json_body,
+    annotation_method: str,
+    endpoint: str,
+):
+    invalid_deployment_value = "invalid-deployment-backend-do-not-expose"
+    monkeypatch.setenv(QUERY_BACKEND_ENV, invalid_deployment_value)
+    mock_annotation = AsyncMock()
+    request_kwargs = {"method": method, "url": url}
+    if json_body is not None:
+        request_kwargs["json"] = json_body
+
+    with patch.object(Annotator, annotation_method, mock_annotation):
+        _, response = await test_annotator.asgi_client.request(**request_kwargs)
+
+    assert response.status_code == 500
+    assert response.json == {
+        "endpoint": endpoint,
+        "message": "Server query backend configuration is invalid.",
+    }
+    assert invalid_deployment_value not in response.body.decode("utf-8")
+    assert "X-Query-Backend" not in response.headers
+    mock_annotation.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_query_backend_header_is_cors_exposed(test_annotator: sanic.Sanic):
+    mock_annotation = AsyncMock(return_value={"result": "ok"})
+
+    with patch.object(Annotator, "annotate_curie", mock_annotation):
+        _, response = await test_annotator.asgi_client.request(
+            method="get",
+            url="/curie/NCBIGene:1017?query_backend=biothings",
+            headers={"Origin": "https://frontend.example"},
+        )
+
+    exposed_headers = {
+        header.strip().lower() for header in response.headers["Access-Control-Expose-Headers"].split(",")
+    }
+    assert response.status_code == 200
+    assert response.headers["X-Query-Backend"] == "biothings"
+    assert "x-query-backend" in exposed_headers
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_concurrent_query_backend_overrides_are_request_local(test_annotator: sanic.Sanic, monkeypatch):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "biothings")
+
+    async def annotation_with_backend(annotator, *args, **kwargs):
+        selected_backend = annotator.query_backend
+        await asyncio.sleep(0)
+        return {"backend": selected_backend}
+
+    with patch.object(Annotator, "annotate_curie", new=annotation_with_backend):
+        biothings_result, elasticsearch_result = await asyncio.gather(
+            test_annotator.asgi_client.request(
+                method="get", url="/curie/NCBIGene:1017?query_backend=biothings"
+            ),
+            test_annotator.asgi_client.request(method="get", url="/curie/NCBIGene:1017?query_backend=es"),
+        )
+
+    _, biothings_response = biothings_result
+    _, elasticsearch_response = elasticsearch_result
+    assert biothings_response.json == {"backend": "biothings"}
+    assert biothings_response.headers["X-Query-Backend"] == "biothings"
+    assert elasticsearch_response.json == {"backend": "elasticsearch"}
+    assert elasticsearch_response.headers["X-Query-Backend"] == "elasticsearch"
