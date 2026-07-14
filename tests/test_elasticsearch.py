@@ -542,6 +542,64 @@ async def test_query_annotations_uses_configured_query_client(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_annotate_curie_scopes_uniprotkb_isoform_to_uniprot_fields_only(monkeypatch):
+    """
+    A UniProtKB isoform id (eg. Q86UK5-2) must not be scoped against the numeric
+    "retired" field, or Elasticsearch fails the whole query trying to coerce the
+    non-numeric id to a number.
+    """
+    annotator = Annotator()
+    annotator.query_backend = "elasticsearch"
+    calls = []
+
+    class FakeQueryClient:
+        async def querymany(self, query_list, scopes, fields):
+            calls.append({"query_list": query_list, "scopes": scopes})
+            return [{"query": "Q86UK5-2", "_id": "Q86UK5-2"}]
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: FakeQueryClient(),
+    )
+
+    result = await annotator.annotate_curie("UniProtKB:Q86UK5-2", raw=True, include_extra=False)
+
+    assert result == {"UniProtKB:Q86UK5-2": [{"query": "Q86UK5-2", "_id": "Q86UK5-2"}]}
+    assert calls == [{"query_list": ["Q86UK5-2"], "scopes": ["uniprot", "accession"]}]
+    assert "retired" not in calls[0]["scopes"]
+
+
+@pytest.mark.asyncio
+async def test_annotate_curie_list_splits_gene_prefixes_into_separate_scoped_batches(monkeypatch):
+    """
+    Mixed gene CURIE prefixes in one batch must not be merged into a single
+    querymany call using the full "gene" scopes list, since that would apply
+    the numeric "retired" scope to non-numeric ids from other prefixes.
+    """
+    annotator = Annotator()
+    annotator.query_backend = "elasticsearch"
+    calls = []
+
+    class FakeQueryClient:
+        async def querymany(self, query_list, scopes, fields):
+            calls.append({"query_list": list(query_list), "scopes": scopes})
+            return [{"query": query_id, "_id": query_id} for query_id in query_list]
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: FakeQueryClient(),
+    )
+
+    await annotator.annotate_curie_list(["NCBIGene:1017", "UniProtKB:Q86UK5-2"], raw=True, include_extra=False)
+
+    calls_by_scopes = {tuple(call["scopes"]): call["query_list"] for call in calls}
+    assert calls_by_scopes == {
+        ("entrezgene", "retired"): ["1017"],
+        ("uniprot", "accession"): ["Q86UK5-2"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_query_annotations_keeps_biothings_default(monkeypatch):
     annotator = Annotator()
     annotator.query_backend = "biothings"

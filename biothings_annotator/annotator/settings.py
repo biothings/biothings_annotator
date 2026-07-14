@@ -33,10 +33,15 @@ ELASTICSEARCH_QUERY_BATCH_SIZE = 1000
 
 
 BIOLINK_PREFIX_to_BioThings = {
-    "NCBIGene": {"type": "gene", "field": "entrezgene"},
+    # "scopes" narrows the ES/BioThings querymany lookup to the fields that are
+    # actually relevant for this prefix, instead of the full "gene" scopes list.
+    # This matters because "retired" is a numeric field: including it for
+    # non-numeric ids (eg. UniProtKB accessions/isoforms) makes Elasticsearch
+    # fail the whole query while trying to coerce the term to a number.
+    "NCBIGene": {"type": "gene", "scopes": ["entrezgene", "retired"]},
     # "HGNC": {"type": "gene", "field": "HGNC"},
-    "ENSEMBL": {"type": "gene", "field": "ensembl.gene"},
-    "UniProtKB": {"type": "gene", "field": "uniprot.Swiss-Prot"},
+    "ENSEMBL": {"type": "gene", "scopes": ["ensemblgene"]},
+    "UniProtKB": {"type": "gene", "scopes": ["uniprot", "accession"]},
     "INCHIKEY": {"type": "chem"},
     "CHEMBL.COMPOUND": {
         "type": "chem",
