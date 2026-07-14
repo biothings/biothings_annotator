@@ -181,6 +181,25 @@ for local port-forward use; `ci_forward` remains as a deprecated alias.
 The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
 the selected `elasticsearch_connection`.
 
+##### Per-request query backend override
+
+The `GET /curie/{curie}`, `POST /curie`, and `POST /trapi` endpoints accept an optional
+`query_backend` query parameter. Omit it to use the backend selected for the deployment by
+`ANNOTATOR_QUERY_BACKEND`. Use the canonical values `biothings` or `elasticsearch` to override the
+backend for only that request; `es` is accepted as an alias for `elasticsearch`.
+Unsupported values are ignored and the request uses the deployment default.
+Successful query responses include the canonical backend in the `X-Query-Backend` response header.
+
+```shell
+curl 'http://localhost:9000/curie/NCBIGene:1017?query_backend=biothings'
+curl -X POST 'http://localhost:9000/curie/?query_backend=elasticsearch' \
+  -H 'Content-Type: application/json' \
+  -d '{"ids":["NCBIGene:1017","CHEBI:100024"]}'
+curl -X POST 'http://localhost:9000/trapi/?query_backend=es' \
+  -H 'Content-Type: application/json' \
+  -d '{"message":{"knowledge_graph":{"nodes":{},"edges":{}}}}'
+```
+
 
 ### Builds
 

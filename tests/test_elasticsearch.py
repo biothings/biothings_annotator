@@ -3,13 +3,21 @@ Exercises the Elasticsearch annotator backend.
 """
 
 import json
+import os
 
 import httpx
 import pytest
 
 from biothings_annotator.annotator.annotator import Annotator
 from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient
-from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, ELASTICSEARCH_CONNECTIONS, QUERY_BACKEND_ENV
+from biothings_annotator.annotator.exceptions import InvalidQueryBackendError
+from biothings_annotator.annotator.settings import (
+    ANNOTATOR_CLIENTS,
+    ELASTICSEARCH_CONNECTIONS,
+    QUERY_BACKEND_ALIASES,
+    QUERY_BACKEND_ENV,
+    SUPPORTED_QUERY_BACKENDS,
+)
 from biothings_annotator.annotator.utils import get_elasticsearch_client, get_elasticsearch_connection
 
 
@@ -40,6 +48,97 @@ def test_annotator_uses_query_backend_environment(monkeypatch):
     annotator = Annotator()
 
     assert annotator.query_backend == "elasticsearch"
+
+
+@pytest.mark.parametrize(
+    "requested_backend, expected_backend",
+    [
+        ("biothings", "biothings"),
+        (" BioThings ", "biothings"),
+        ("elasticsearch", "elasticsearch"),
+        (" Elasticsearch ", "elasticsearch"),
+        ("es", "elasticsearch"),
+        (" ES ", "elasticsearch"),
+    ],
+)
+def test_annotator_normalizes_explicit_query_backend(monkeypatch, requested_backend, expected_backend):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "biothings")
+
+    annotator = Annotator(query_backend=requested_backend)
+
+    assert annotator.query_backend == expected_backend
+
+
+def test_none_query_backend_uses_normalized_environment_alias(monkeypatch):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, " ES ")
+
+    annotator = Annotator(query_backend=None)
+
+    assert annotator.query_backend == "elasticsearch"
+
+
+@pytest.mark.parametrize("requested_backend", ["", "   ", "solr", 42])
+def test_annotator_ignores_invalid_explicit_query_backend(monkeypatch, requested_backend):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "elasticsearch")
+
+    annotator = Annotator(query_backend=requested_backend)
+
+    assert annotator.query_backend == "elasticsearch"
+    assert os.environ[QUERY_BACKEND_ENV] == "elasticsearch"
+
+
+@pytest.mark.parametrize("requested_backend", ["", "   ", "solr", 42])
+def test_invalid_explicit_query_backend_falls_back_to_builtin_default(monkeypatch, requested_backend):
+    monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
+
+    annotator = Annotator(query_backend=requested_backend)
+
+    assert annotator.query_backend == "biothings"
+    assert QUERY_BACKEND_ENV not in os.environ
+
+
+@pytest.mark.parametrize("configured_backend", ["", "   ", "solr"])
+def test_annotator_rejects_invalid_query_backend_environment(monkeypatch, configured_backend):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, configured_backend)
+
+    with pytest.raises(InvalidQueryBackendError) as exc_info:
+        Annotator()
+
+    error = exc_info.value
+    assert error.requested_value == configured_backend
+    assert error.aliases == QUERY_BACKEND_ALIASES
+    assert error.supported_values == list(SUPPORTED_QUERY_BACKENDS) + list(QUERY_BACKEND_ALIASES)
+    assert str(error) == error.message
+
+
+def test_valid_explicit_backend_does_not_mask_invalid_deployment_backend(monkeypatch):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "solr")
+
+    with pytest.raises(InvalidQueryBackendError) as exc_info:
+        Annotator(query_backend="biothings")
+
+    assert exc_info.value.requested_value == "solr"
+
+
+def test_explicit_query_backend_does_not_change_deployment_default(monkeypatch):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "elasticsearch")
+
+    overridden_annotator = Annotator(query_backend="biothings")
+    default_annotator = Annotator()
+
+    assert overridden_annotator.query_backend == "biothings"
+    assert default_annotator.query_backend == "elasticsearch"
+    assert os.environ[QUERY_BACKEND_ENV] == "elasticsearch"
+
+
+def test_invalid_query_backend_message_does_not_reflect_requested_value(monkeypatch):
+    requested_backend = "sensitive-value"
+    monkeypatch.setenv(QUERY_BACKEND_ENV, requested_backend)
+
+    with pytest.raises(InvalidQueryBackendError) as exc_info:
+        Annotator()
+
+    assert requested_backend not in exc_info.value.message
 
 
 def test_annotator_strips_elasticsearch_connection_environment(monkeypatch):

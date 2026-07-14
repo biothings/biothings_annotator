@@ -11,9 +11,20 @@ from sanic.views import HTTPMethodView
 from sanic.request import Request
 
 from biothings_annotator.annotator import Annotator
-from biothings_annotator.annotator.exceptions import InvalidCurieError
+from biothings_annotator.annotator.exceptions import InvalidCurieError, InvalidQueryBackendError
 
 logger = logging.getLogger(__name__)
+
+
+def _query_backend_configuration_error_response():
+    logger.error("Invalid query backend deployment configuration")
+    return sanic.json(
+        {
+            "endpoint": "/curie/",
+            "message": "Server query backend configuration is invalid.",
+        },
+        status=500,
+    )
 
 
 class CurieView(HTTPMethodView):
@@ -27,8 +38,7 @@ class CurieView(HTTPMethodView):
         fields: list[str] = request.args.get("fields", None)
         raw: bool = request.args.get("raw", False)
         include_extra: bool = request.args.get("include_extra", True)
-
-        annotator = Annotator()
+        query_backend = request.args.get("query_backend", None)
 
         try:
             curie = urllib.parse.unquote(curie, encoding="utf-8", errors="strict")
@@ -43,8 +53,12 @@ class CurieView(HTTPMethodView):
             return unicode_curie_error_response
 
         try:
+            annotator = Annotator(query_backend=query_backend)
             annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
-            return sanic.json(annotated_node, headers=self.default_headers)
+            response_headers = {**self.default_headers, "X-Query-Backend": annotator.query_backend}
+            return sanic.json(annotated_node, headers=response_headers)
+        except InvalidQueryBackendError:
+            return _query_backend_configuration_error_response()
         except InvalidCurieError as curie_err:
             error_context = {
                 "input": curie,
@@ -67,8 +81,7 @@ class CurieView(HTTPMethodView):
         fields = request.args.get("fields", None)
         raw = request.args.get("raw", False)
         include_extra = request.args.get("include_extra", True)
-
-        annotator = Annotator()
+        query_backend = request.args.get("query_backend", None)
         batch_curie_body = request.json
 
         curie_list = []
@@ -109,10 +122,14 @@ class CurieView(HTTPMethodView):
             return unicode_curie_error_response
 
         try:
+            annotator = Annotator(query_backend=query_backend)
             annotated_node = await annotator.annotate_curie_list(
                 curie_list=parsed_curie_list, fields=fields, raw=raw, include_extra=include_extra
             )
-            return sanic.json(annotated_node, headers=self.default_headers)
+            response_headers = {**self.default_headers, "X-Query-Backend": annotator.query_backend}
+            return sanic.json(annotated_node, headers=response_headers)
+        except InvalidQueryBackendError:
+            return _query_backend_configuration_error_response()
         except InvalidCurieError as curie_err:
             error_context = {
                 "input": curie_list,

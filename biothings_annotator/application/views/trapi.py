@@ -6,7 +6,7 @@ from sanic.views import HTTPMethodView
 from sanic.request import Request
 
 from biothings_annotator.annotator import Annotator
-from biothings_annotator.annotator.exceptions import TRAPIInputError
+from biothings_annotator.annotator.exceptions import InvalidQueryBackendError, TRAPIInputError
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +24,25 @@ class TrapiView(HTTPMethodView):
         append: bool = request.args.get("append", False)
         limit: Optional[int] = int(request.args.get("limit", 0))
         include_extra: bool = request.args.get("include_extra", True)
+        query_backend: Optional[str] = request.args.get("query_backend", None)
 
-        annotator = Annotator()
         trapi_body = request.json
         try:
+            annotator = Annotator(query_backend=query_backend)
             annotated_node = await annotator.annotate_trapi(
                 trapi_body, fields=fields, raw=raw, append=append, limit=limit, include_extra=include_extra
             )
-            return sanic.json(annotated_node, headers=self.default_headers)
+            response_headers = {**self.default_headers, "X-Query-Backend": annotator.query_backend}
+            return sanic.json(annotated_node, headers=response_headers)
+        except InvalidQueryBackendError:
+            logger.error("Invalid query backend deployment configuration")
+            return sanic.json(
+                {
+                    "endpoint": "/trapi/",
+                    "message": "Server query backend configuration is invalid.",
+                },
+                status=500,
+            )
         except TRAPIInputError as trapi_input_error:
             error_context = {
                 "input": trapi_input_error.input_structure,

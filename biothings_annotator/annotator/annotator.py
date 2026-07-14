@@ -9,13 +9,15 @@ import os
 
 import biothings_client
 
-from biothings_annotator.annotator.exceptions import InvalidCurieError, TRAPIInputError
+from biothings_annotator.annotator.exceptions import InvalidCurieError, InvalidQueryBackendError, TRAPIInputError
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
     ELASTICSEARCH_CONNECTION,
     QUERY_BACKEND,
+    QUERY_BACKEND_ALIASES,
     QUERY_BACKEND_ENV,
     SERVICE_PROVIDER_API_HOST,
+    SUPPORTED_QUERY_BACKENDS,
 )
 from biothings_annotator.annotator.transformer import ResponseTransformer, load_atc_cache
 from biothings_annotator.annotator.utils import (
@@ -31,10 +33,29 @@ logger = logging.getLogger(__name__)
 
 
 class Annotator:
-    def __init__(self):
+    def __init__(self, query_backend: Optional[str] = None):
         self.api_host = os.environ.get("SERVICE_PROVIDER_API_HOST", SERVICE_PROVIDER_API_HOST)
-        self.query_backend = os.environ.get(QUERY_BACKEND_ENV, QUERY_BACKEND).strip().lower()
+        deployment_backend = self._normalize_query_backend(os.environ.get(QUERY_BACKEND_ENV, QUERY_BACKEND))
+        if query_backend is None:
+            self.query_backend = deployment_backend
+        else:
+            try:
+                self.query_backend = self._normalize_query_backend(query_backend)
+            except InvalidQueryBackendError:
+                self.query_backend = deployment_backend
         self.elasticsearch_connection = os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION).strip()
+
+    @staticmethod
+    def _normalize_query_backend(query_backend: str) -> str:
+        try:
+            normalized_backend = query_backend.strip().lower()
+        except AttributeError as exc:
+            raise InvalidQueryBackendError(query_backend) from exc
+
+        normalized_backend = QUERY_BACKEND_ALIASES.get(normalized_backend, normalized_backend)
+        if normalized_backend not in SUPPORTED_QUERY_BACKENDS:
+            raise InvalidQueryBackendError(query_backend)
+        return normalized_backend
 
     @property
     def atc_cache_key(self) -> str:

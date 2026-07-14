@@ -1,5 +1,19 @@
 from typing import Dict, List
-from biothings_annotator.annotator.settings import BIOLINK_PREFIX_to_BioThings
+
+from biothings_annotator.annotator.settings import (
+    BIOLINK_PREFIX_to_BioThings,
+    QUERY_BACKEND_ALIASES,
+    SUPPORTED_QUERY_BACKENDS,
+)
+
+
+class InvalidQueryBackendError(ValueError):
+    def __init__(self, requested_value):
+        self.requested_value = requested_value
+        self.aliases = dict(QUERY_BACKEND_ALIASES)
+        self.supported_values = list(SUPPORTED_QUERY_BACKENDS) + list(self.aliases)
+        self.message = "Unsupported query backend. Use one of the supported query backend values."
+        super().__init__(self.message)
 
 
 class TRAPIInputError(ValueError):
