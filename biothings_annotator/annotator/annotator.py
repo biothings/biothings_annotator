@@ -243,8 +243,8 @@ class Annotator:
         scopes. Prefix-specific groups prevent incompatible identifiers from being
         queried against fields such as the numeric Elasticsearch "retired" field.
         """
-        groups: "OrderedDict[Tuple, List[str]]" = OrderedDict()
-        scopes_by_key: Dict[Tuple, Union[str, List[str]]] = {}
+        groups: "OrderedDict[Union[str, Tuple[str, ...]], List[str]]" = OrderedDict()
+        scopes_by_key: Dict[Union[str, Tuple[str, ...]], Union[str, List[str]]] = {}
         for curie in node_list:
             prefix = curie.split(":", 1)[0]
             scopes = self._scopes_for_prefix(node_type, prefix)
