@@ -11,7 +11,7 @@ import pytest
 
 from biothings_annotator.annotator import transformer
 from biothings_annotator.annotator.annotator import Annotator
-from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS
+from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
 
 
 ATC_ROWS = [
@@ -214,11 +214,15 @@ async def test_query_annotations_backend_parity_for_raw_grouped_hits(monkeypatch
         "9999": [{"query": "9999", "notfound": True}],
     }
 
-    for backend in ("biothings", "elasticsearch"):
+    expected_scopes_by_backend = {
+        "biothings": ANNOTATOR_CLIENTS["gene"]["scopes"],
+        "elasticsearch": ANNOTATOR_CLIENTS["gene"]["elasticsearch_scopes"],
+    }
+    for backend, expected_scopes in expected_scopes_by_backend.items():
         assert registry[backend]["gene"].querymany_calls == [
             {
                 "query_list": ["1017", "9999"],
-                "scopes": ANNOTATOR_CLIENTS["gene"]["scopes"],
+                "scopes": expected_scopes,
                 "fields": fields,
             }
         ]
@@ -388,7 +392,7 @@ async def test_annotate_curie_list_backend_parity_for_duplicate_and_unsupported_
         assert registry[backend]["gene"].querymany_calls == [
             {
                 "query_list": ["1017", "1017"],
-                "scopes": ANNOTATOR_CLIENTS["gene"]["scopes"],
+                "scopes": BIOLINK_PREFIX_to_BioThings["NCBIGene"]["scopes"],
                 "fields": ANNOTATOR_CLIENTS["gene"]["fields"],
             }
         ]

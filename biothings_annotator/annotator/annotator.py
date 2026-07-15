@@ -64,6 +64,22 @@ class Annotator:
             return f"{self.query_backend}:{self.elasticsearch_connection}"
         return f"{self.query_backend}:{self.api_host}"
 
+    def _default_scopes(self, node_type: str) -> Union[str, List[str]]:
+        """Return the backend-appropriate default query scopes for a node type."""
+        client_settings = ANNOTATOR_CLIENTS[node_type]
+        if self.query_backend == "elasticsearch":
+            return client_settings.get("elasticsearch_scopes", client_settings["scopes"])
+        return client_settings["scopes"]
+
+    def _scopes_for_prefix(self, node_type: str, prefix: str) -> Union[str, List[str]]:
+        """Return prefix-specific scopes using exact ES fields when configured."""
+        prefix_settings = BIOLINK_PREFIX_to_BioThings.get(prefix, {})
+        if self.query_backend == "elasticsearch":
+            elasticsearch_scopes = prefix_settings.get("elasticsearch_scopes")
+            if elasticsearch_scopes:
+                return elasticsearch_scopes
+        return prefix_settings.get("scopes") or self._default_scopes(node_type)
+
     async def query_biothings(
         self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
     ) -> Dict:
@@ -93,9 +109,9 @@ class Annotator:
         """
         Query annotations through the configured backend.
 
-        scopes defaults to the full ANNOTATOR_CLIENTS[node_type]["scopes"] list, but
-        callers that know the originating BIOLINK prefix should pass its narrower
-        per-prefix scopes (see BIOLINK_PREFIX_to_BioThings) instead.
+        scopes defaults to the backend-appropriate full scope list, but callers that
+        know the originating BIOLINK prefix should pass its narrower per-prefix scopes
+        (see BIOLINK_PREFIX_to_BioThings) instead.
         """
         client = get_query_client(
             node_type=node_type,
@@ -109,7 +125,7 @@ class Annotator:
 
         query_list = list(query_list)
         fields = fields or ANNOTATOR_CLIENTS[node_type].get("fields", "all")
-        scopes = scopes or ANNOTATOR_CLIENTS[node_type]["scopes"]
+        scopes = scopes or self._default_scopes(node_type)
         logger.info("Querying %s annotations for %s %ss...", self.query_backend, len(query_list), node_type)
         res = await client.querymany(query_list, scopes=scopes, fields=fields)
         logger.info("Done. %s %s annotation objects returned.", len(res), self.query_backend)
@@ -207,7 +223,7 @@ class Annotator:
             raise InvalidCurieError(curie)
 
         prefix = curie.split(":", 1)[0]
-        scopes = BIOLINK_PREFIX_to_BioThings.get(prefix, {}).get("scopes")
+        scopes = self._scopes_for_prefix(node_type, prefix)
         res = await self.query_annotations(node_type, [_id], fields=fields, scopes=scopes)
 
         if not raw:
@@ -219,22 +235,19 @@ class Annotator:
         curie_annotation = {curie: res.get(_id, {})}
         return curie_annotation
 
-    @staticmethod
     def _group_curies_by_scopes(
-        node_type: str, node_list: List[str]
+        self, node_type: str, node_list: List[str]
     ) -> List[Tuple[Union[str, List[str]], List[str]]]:
         """
-        Group curies of the same node_type by the querymany scopes that should be used
-        for them: curies whose BIOLINK prefix declares its own narrower "scopes" (see
-        BIOLINK_PREFIX_to_BioThings) are grouped by that; everything else falls back to
-        ANNOTATOR_CLIENTS[node_type]["scopes"] and stays in a single group, same as before.
+        Group curies of the same node_type by their backend-appropriate querymany
+        scopes. Prefix-specific groups prevent incompatible identifiers from being
+        queried against fields such as the numeric Elasticsearch "retired" field.
         """
-        default_scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
         groups: "OrderedDict[Tuple, List[str]]" = OrderedDict()
         scopes_by_key: Dict[Tuple, Union[str, List[str]]] = {}
         for curie in node_list:
             prefix = curie.split(":", 1)[0]
-            scopes = BIOLINK_PREFIX_to_BioThings.get(prefix, {}).get("scopes") or default_scopes
+            scopes = self._scopes_for_prefix(node_type, prefix)
             key = tuple(scopes) if isinstance(scopes, list) else scopes
             groups.setdefault(key, []).append(curie)
             scopes_by_key[key] = scopes

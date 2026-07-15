@@ -190,6 +190,46 @@ async def test_elasticsearch_querymany_formats_biothings_style_hits():
 
 
 @pytest.mark.asyncio
+async def test_elasticsearch_querymany_uses_mapped_uniprot_leaf_fields():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        lines = [json.loads(line) for line in request.content.decode().splitlines()]
+        assert lines[1]["query"]["bool"]["should"] == [
+            {"term": {"uniprot.Swiss-Prot": "Q86UK5"}},
+            {"term": {"uniprot.Swiss-Prot.keyword": "Q86UK5"}},
+            {"term": {"uniprot.TrEMBL": "Q86UK5"}},
+            {"term": {"uniprot.TrEMBL.keyword": "Q86UK5"}},
+        ]
+        return httpx.Response(
+            200,
+            json={
+                "responses": [
+                    {
+                        "hits": {
+                            "hits": [
+                                {
+                                    "_id": "132884",
+                                    "_source": {"symbol": "EVC2"},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient("http://localhost:9200", "gene", http_client=http_client)
+        result = await client.querymany(
+            ["Q86UK5"],
+            scopes=["uniprot.Swiss-Prot", "uniprot.TrEMBL"],
+            fields=["symbol"],
+        )
+
+    assert result == [{"symbol": "EVC2", "_id": "132884", "query": "Q86UK5"}]
+
+
+@pytest.mark.asyncio
 async def test_elasticsearch_client_supports_configured_headers():
     requests = []
 
@@ -535,21 +575,38 @@ async def test_query_annotations_uses_configured_query_client(monkeypatch):
         },
         {
             "query_list": ["1017"],
-            "scopes": ["entrezgene", "ensemblgene", "uniprot", "accession", "retired"],
+            "scopes": [
+                "entrezgene",
+                "ensembl.gene",
+                "uniprot.Swiss-Prot",
+                "uniprot.TrEMBL",
+                "retired",
+            ],
             "fields": ["symbol"],
         }
     ]
 
 
+@pytest.mark.parametrize(
+    "query_backend, expected_scopes",
+    [
+        ("biothings", ["uniprot", "accession"]),
+        ("elasticsearch", ["uniprot.Swiss-Prot", "uniprot.TrEMBL"]),
+    ],
+)
 @pytest.mark.asyncio
-async def test_annotate_curie_scopes_uniprotkb_isoform_to_uniprot_fields_only(monkeypatch):
+async def test_annotate_curie_uses_backend_specific_uniprot_scopes(
+    monkeypatch,
+    query_backend,
+    expected_scopes,
+):
     """
     A UniProtKB isoform id (eg. Q86UK5-2) must not be scoped against the numeric
     "retired" field, or Elasticsearch fails the whole query trying to coerce the
     non-numeric id to a number.
     """
     annotator = Annotator()
-    annotator.query_backend = "elasticsearch"
+    annotator.query_backend = query_backend
     calls = []
 
     class FakeQueryClient:
@@ -565,8 +622,41 @@ async def test_annotate_curie_scopes_uniprotkb_isoform_to_uniprot_fields_only(mo
     result = await annotator.annotate_curie("UniProtKB:Q86UK5-2", raw=True, include_extra=False)
 
     assert result == {"UniProtKB:Q86UK5-2": [{"query": "Q86UK5-2", "_id": "Q86UK5-2"}]}
-    assert calls == [{"query_list": ["Q86UK5-2"], "scopes": ["uniprot", "accession"]}]
+    assert calls == [{"query_list": ["Q86UK5-2"], "scopes": expected_scopes}]
     assert "retired" not in calls[0]["scopes"]
+
+
+@pytest.mark.parametrize(
+    "query_backend, expected_scopes",
+    [
+        ("biothings", ["ensemblgene"]),
+        ("elasticsearch", ["ensembl.gene"]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_annotate_curie_uses_backend_specific_ensembl_scopes(
+    monkeypatch,
+    query_backend,
+    expected_scopes,
+):
+    annotator = Annotator()
+    annotator.query_backend = query_backend
+    calls = []
+
+    class FakeQueryClient:
+        async def querymany(self, query_list, scopes, fields):
+            calls.append({"query_list": query_list, "scopes": scopes})
+            return [{"query": "ENSG00000139618", "_id": "675"}]
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: FakeQueryClient(),
+    )
+
+    result = await annotator.annotate_curie("ENSEMBL:ENSG00000139618", raw=True, include_extra=False)
+
+    assert result == {"ENSEMBL:ENSG00000139618": [{"query": "ENSG00000139618", "_id": "675"}]}
+    assert calls == [{"query_list": ["ENSG00000139618"], "scopes": expected_scopes}]
 
 
 @pytest.mark.asyncio
@@ -590,12 +680,17 @@ async def test_annotate_curie_list_splits_gene_prefixes_into_separate_scoped_bat
         lambda node_type, query_backend, api_host, elasticsearch_connection: FakeQueryClient(),
     )
 
-    await annotator.annotate_curie_list(["NCBIGene:1017", "UniProtKB:Q86UK5-2"], raw=True, include_extra=False)
+    await annotator.annotate_curie_list(
+        ["NCBIGene:1017", "UniProtKB:Q86UK5-2", "ENSEMBL:ENSG00000139618"],
+        raw=True,
+        include_extra=False,
+    )
 
     calls_by_scopes = {tuple(call["scopes"]): call["query_list"] for call in calls}
     assert calls_by_scopes == {
         ("entrezgene", "retired"): ["1017"],
-        ("uniprot", "accession"): ["Q86UK5-2"],
+        ("uniprot.Swiss-Prot", "uniprot.TrEMBL"): ["Q86UK5-2"],
+        ("ensembl.gene",): ["ENSG00000139618"],
     }
 
 
@@ -604,9 +699,11 @@ async def test_query_annotations_keeps_biothings_default(monkeypatch):
     annotator = Annotator()
     annotator.query_backend = "biothings"
     annotator.api_host = "https://biothings.example.org"
+    calls = []
 
     class FakeQueryClient:
         async def querymany(self, query_list, scopes, fields):
+            calls.append({"query_list": query_list, "scopes": scopes, "fields": fields})
             return [{"query": "1017", "_id": "1017"}]
 
     monkeypatch.setattr(
@@ -617,6 +714,13 @@ async def test_query_annotations_keeps_biothings_default(monkeypatch):
     result = await annotator.query_annotations("gene", ["1017"])
 
     assert result == {"1017": [{"query": "1017", "_id": "1017"}]}
+    assert calls == [
+        {
+            "query_list": ["1017"],
+            "scopes": ["entrezgene", "ensemblgene", "uniprot", "accession", "retired"],
+            "fields": ANNOTATOR_CLIENTS["gene"]["fields"],
+        }
+    ]
 
 
 @pytest.mark.unit
