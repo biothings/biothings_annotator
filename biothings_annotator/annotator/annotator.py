@@ -3,7 +3,7 @@ Translator Node Annotator Service Handler
 """
 
 from collections import OrderedDict
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 import logging
 import os
 
@@ -12,6 +12,7 @@ import biothings_client
 from biothings_annotator.annotator.exceptions import InvalidCurieError, InvalidQueryBackendError, TRAPIInputError
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
+    BIOLINK_PREFIX_to_BioThings,
     ELASTICSEARCH_CONNECTION,
     QUERY_BACKEND,
     QUERY_BACKEND_ALIASES,
@@ -63,6 +64,22 @@ class Annotator:
             return f"{self.query_backend}:{self.elasticsearch_connection}"
         return f"{self.query_backend}:{self.api_host}"
 
+    def _default_scopes(self, node_type: str) -> Union[str, List[str]]:
+        """Return the backend-appropriate default query scopes for a node type."""
+        client_settings = ANNOTATOR_CLIENTS[node_type]
+        if self.query_backend == "elasticsearch":
+            return client_settings.get("elasticsearch_scopes", client_settings["scopes"])
+        return client_settings["scopes"]
+
+    def _scopes_for_prefix(self, node_type: str, prefix: str) -> Union[str, List[str]]:
+        """Return prefix-specific scopes using exact ES fields when configured."""
+        prefix_settings = BIOLINK_PREFIX_to_BioThings.get(prefix, {})
+        if self.query_backend == "elasticsearch":
+            elasticsearch_scopes = prefix_settings.get("elasticsearch_scopes")
+            if elasticsearch_scopes:
+                return elasticsearch_scopes
+        return prefix_settings.get("scopes") or self._default_scopes(node_type)
+
     async def query_biothings(
         self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
     ) -> Dict:
@@ -83,10 +100,18 @@ class Annotator:
         return grouped_response
 
     async def query_annotations(
-        self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
+        self,
+        node_type: str,
+        query_list: List[str],
+        fields: Optional[Union[str, List[str]]] = None,
+        scopes: Optional[Union[str, List[str]]] = None,
     ) -> Dict:
         """
         Query annotations through the configured backend.
+
+        scopes defaults to the backend-appropriate full scope list, but callers that
+        know the originating BIOLINK prefix should pass its narrower per-prefix scopes
+        (see BIOLINK_PREFIX_to_BioThings) instead.
         """
         client = get_query_client(
             node_type=node_type,
@@ -100,7 +125,7 @@ class Annotator:
 
         query_list = list(query_list)
         fields = fields or ANNOTATOR_CLIENTS[node_type].get("fields", "all")
-        scopes = ANNOTATOR_CLIENTS[node_type]["scopes"]
+        scopes = scopes or self._default_scopes(node_type)
         logger.info("Querying %s annotations for %s %ss...", self.query_backend, len(query_list), node_type)
         res = await client.querymany(query_list, scopes=scopes, fields=fields)
         logger.info("Done. %s %s annotation objects returned.", len(res), self.query_backend)
@@ -197,7 +222,9 @@ class Annotator:
         if not node_type:
             raise InvalidCurieError(curie)
 
-        res = await self.query_annotations(node_type, [_id], fields=fields)
+        prefix = curie.split(":", 1)[0]
+        scopes = self._scopes_for_prefix(node_type, prefix)
+        res = await self.query_annotations(node_type, [_id], fields=fields, scopes=scopes)
 
         if not raw:
             res = await self.transform(res, node_type)
@@ -207,6 +234,24 @@ class Annotator:
 
         curie_annotation = {curie: res.get(_id, {})}
         return curie_annotation
+
+    def _group_curies_by_scopes(
+        self, node_type: str, node_list: List[str]
+    ) -> List[Tuple[Union[str, List[str]], List[str]]]:
+        """
+        Group curies of the same node_type by their backend-appropriate querymany
+        scopes. Prefix-specific groups prevent incompatible identifiers from being
+        queried against fields such as the numeric Elasticsearch "retired" field.
+        """
+        groups: "OrderedDict[Union[str, Tuple[str, ...]], List[str]]" = OrderedDict()
+        scopes_by_key: Dict[Union[str, Tuple[str, ...]], Union[str, List[str]]] = {}
+        for curie in node_list:
+            prefix = curie.split(":", 1)[0]
+            scopes = self._scopes_for_prefix(node_type, prefix)
+            key = tuple(scopes) if isinstance(scopes, list) else scopes
+            groups.setdefault(key, []).append(curie)
+            scopes_by_key[key] = scopes
+        return [(scopes_by_key[key], curies) for key, curies in groups.items()]
 
     async def _annotate_node_list_by_type(
         self, node_list_by_type: Dict, raw: bool = False, fields: Optional[Union[str, List[str]]] = None
@@ -224,22 +269,23 @@ class Annotator:
             # this is the list of original node ids like NCBIGene:1017, should be a unique list
             node_list = node_list_by_type[node_type]
 
-            # this is the list of query ids like 1017
-            query_list = [parse_curie(_id, return_type=False, return_id=True) for _id in node_list_by_type[node_type]]
+            for scopes, scoped_node_list in self._group_curies_by_scopes(node_type, node_list):
+                # this is the list of query ids like 1017
+                query_list = [parse_curie(_id, return_type=False, return_id=True) for _id in scoped_node_list]
 
-            # query_id to original id mapping
-            node_id_d = dict(zip(query_list, node_list))
-            res_by_id = await self.query_annotations(node_type, query_list, fields=fields)
-            if not raw:
-                res_by_id = await self.transform(res_by_id, node_type)
+                # query_id to original id mapping
+                node_id_d = dict(zip(query_list, scoped_node_list))
+                res_by_id = await self.query_annotations(node_type, query_list, fields=fields, scopes=scopes)
+                if not raw:
+                    res_by_id = await self.transform(res_by_id, node_type)
 
-            # map back to original node ids
-            # NOTE: we don't want to use `for node_id in res_by_id:` here, since we will mofiify res_by_id in the loop
-            for node_id in list(res_by_id.keys()):
-                orig_node_id = node_id_d[node_id]
-                if node_id != orig_node_id:
-                    res_by_id[orig_node_id] = res_by_id.pop(node_id)
-                yield (orig_node_id, res_by_id[orig_node_id])
+                # map back to original node ids
+                # NOTE: we don't want to use `for node_id in res_by_id:` here, since we will mofiify res_by_id in the loop
+                for node_id in list(res_by_id.keys()):
+                    orig_node_id = node_id_d[node_id]
+                    if node_id != orig_node_id:
+                        res_by_id[orig_node_id] = res_by_id.pop(node_id)
+                    yield (orig_node_id, res_by_id[orig_node_id])
 
     async def annotate_curie_list(
         self,

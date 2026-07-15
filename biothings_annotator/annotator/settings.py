@@ -33,10 +33,23 @@ ELASTICSEARCH_QUERY_BATCH_SIZE = 1000
 
 
 BIOLINK_PREFIX_to_BioThings = {
-    "NCBIGene": {"type": "gene", "field": "entrezgene"},
+    # "scopes" contains BioThings query scopes. "elasticsearch_scopes" overrides
+    # those scopes with exact index field names when the two backends use different
+    # vocabularies. Keeping the mappings separate prevents numeric fields such as
+    # "retired" from being queried with non-numeric identifiers without losing hits
+    # stored in nested Elasticsearch leaf fields.
+    "NCBIGene": {"type": "gene", "scopes": ["entrezgene", "retired"]},
     # "HGNC": {"type": "gene", "field": "HGNC"},
-    "ENSEMBL": {"type": "gene", "field": "ensembl.gene"},
-    "UniProtKB": {"type": "gene", "field": "uniprot.Swiss-Prot"},
+    "ENSEMBL": {
+        "type": "gene",
+        "scopes": ["ensemblgene"],
+        "elasticsearch_scopes": ["ensembl.gene"],
+    },
+    "UniProtKB": {
+        "type": "gene",
+        "scopes": ["uniprot", "accession"],
+        "elasticsearch_scopes": ["uniprot.Swiss-Prot", "uniprot.TrEMBL"],
+    },
     "INCHIKEY": {"type": "chem"},
     "CHEMBL.COMPOUND": {
         "type": "chem",
@@ -80,6 +93,13 @@ ANNOTATOR_CLIENTS = {
             "taxid",
         ],
         "scopes": ["entrezgene", "ensemblgene", "uniprot", "accession", "retired"],
+        "elasticsearch_scopes": [
+            "entrezgene",
+            "ensembl.gene",
+            "uniprot.Swiss-Prot",
+            "uniprot.TrEMBL",
+            "retired",
+        ],
     },
     "chem": {
         "client": {
