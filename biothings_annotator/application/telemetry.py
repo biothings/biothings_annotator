@@ -66,6 +66,11 @@ def _initialize_worker_telemetry(settings):
 
 async def _start_request_span(request):
     settings = request.app.ctx.opentelemetry_settings
+    # Sanic resolves the route before request middleware runs. An unmatched URL
+    # has no route, so do not create telemetry for requests that will become a
+    # 404 (or otherwise never reach an application handler).
+    if getattr(request, "route", None) is None:
+        return
     if any(re.search(pattern, request.path) for pattern in settings["excluded_urls"]):
         return
     _initialize_worker_telemetry(settings)
