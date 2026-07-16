@@ -23,6 +23,15 @@ DEFAULT_TELEMETRY_SETTINGS = {
 }
 
 
+def _suppress_request_instrumentation(request):
+    """Prevent excluded requests from producing orphaned child spans."""
+    from opentelemetry.instrumentation.utils import suppress_instrumentation
+
+    suppression = suppress_instrumentation()
+    suppression.__enter__()
+    request.ctx.opentelemetry_suppression = suppression
+
+
 def _environment_value(name: str, default: Any) -> Any:
     """Return an OpenTelemetry environment override, preserving useful types."""
     value = os.getenv(name)
@@ -66,7 +75,14 @@ def _initialize_worker_telemetry(settings):
 
 async def _start_request_span(request):
     settings = request.app.ctx.opentelemetry_settings
+    # Sanic resolves the route before request middleware runs. An unmatched URL
+    # has no route, so do not create telemetry for requests that will become a
+    # 404 (or otherwise never reach an application handler).
+    if getattr(request, "route", None) is None:
+        _suppress_request_instrumentation(request)
+        return
     if any(re.search(pattern, request.path) for pattern in settings["excluded_urls"]):
+        _suppress_request_instrumentation(request)
         return
     _initialize_worker_telemetry(settings)
     from opentelemetry import propagate, trace
@@ -87,6 +103,11 @@ async def _start_request_span(request):
 
 
 async def _finish_request_span(request, response):
+    suppression = getattr(request.ctx, "opentelemetry_suppression", None)
+    if suppression is not None:
+        suppression.__exit__(None, None, None)
+        return
+
     span_context = getattr(request.ctx, "opentelemetry_span_context", None)
     if span_context is None:
         return
