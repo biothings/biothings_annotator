@@ -23,7 +23,7 @@
                 "CORS_EXPOSE_HEADERS": "X-Query-Backend",
                 "CORS_METHODS": "*",
                 "CORS_ORIGINS": "*",
-                "CORS_SUPPORS_CREDENTIALS": false,
+                "CORS_SUPPORTS_CREDENTIALS": false,
                 "CORS_MAX_AGE": 60
             }
         },

@@ -174,7 +174,7 @@ ANNOTATOR_CLIENTS = {
             "umls.umls",
             # Names
             "disease_ontology.name",
-            "mondo.label"
+            "mondo.label",
             # Description
             "mondo.definition",
             "disease_ontology.def",
