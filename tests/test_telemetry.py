@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
+from opentelemetry.instrumentation.utils import is_instrumentation_enabled
 
 from biothings_annotator.application import telemetry
 from biothings_annotator.application.telemetry import telemetry_settings
@@ -47,7 +48,12 @@ async def test_start_request_span_ignores_unmatched_routes(monkeypatch):
     initialize = lambda settings: pytest.fail("telemetry should not be initialized")
     monkeypatch.setattr(telemetry, "_initialize_worker_telemetry", initialize)
 
-    await telemetry._start_request_span(_request("/does-not-exist", None))
+    request = _request("/does-not-exist", None)
+    await telemetry._start_request_span(request)
+
+    assert not is_instrumentation_enabled()
+    await telemetry._finish_request_span(request, SimpleNamespace(status=404))
+    assert is_instrumentation_enabled()
 
 
 @pytest.mark.asyncio
@@ -55,4 +61,9 @@ async def test_start_request_span_applies_exclusions_after_route_match(monkeypat
     initialize = lambda settings: pytest.fail("telemetry should not be initialized")
     monkeypatch.setattr(telemetry, "_initialize_worker_telemetry", initialize)
 
-    await telemetry._start_request_span(_request("/status", object()))
+    request = _request("/status", object())
+    await telemetry._start_request_span(request)
+
+    assert not is_instrumentation_enabled()
+    await telemetry._finish_request_span(request, SimpleNamespace(status=200))
+    assert is_instrumentation_enabled()
