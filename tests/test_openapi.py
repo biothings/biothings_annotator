@@ -43,9 +43,11 @@ def test_query_backend_override_is_documented_for_all_query_operations():
 
 @pytest.mark.unit
 @pytest.mark.parametrize("config_path", [DEFAULT_CONFIG_PATH, DEPLOY_CONFIG_PATH])
-def test_query_backend_response_header_is_exposed_by_cors(config_path):
+def test_cors_configuration_uses_supported_keys(config_path):
     with config_path.open(encoding="utf-8") as config_file:
         configuration = json.load(config_file)
 
     cors = configuration["application"]["extension"]["cors"]
     assert cors["CORS_EXPOSE_HEADERS"] == "X-Query-Backend"
+    assert cors["CORS_SUPPORTS_CREDENTIALS"] is False
+    assert "CORS_SUPPORS_CREDENTIALS" not in cors
