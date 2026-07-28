@@ -11,6 +11,7 @@ from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
 from biothings_annotator.annotator.settings import QUERY_BACKEND_ENV
 from biothings_annotator.application.views import VersionView
+from biothings_annotator.application.views.headers import SKIPPED_CURIE_PREFIXES_HEADER
 
 
 @pytest.mark.unit
@@ -601,6 +602,66 @@ async def test_elasticsearch_query_backend_returns_canonical_header(test_annotat
     mock_annotation.assert_awaited_once()
     assert response.status_code == 200
     assert response.headers["X-Query-Backend"] == "elasticsearch"
+    assert SKIPPED_CURIE_PREFIXES_HEADER not in response.headers
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize(
+    "method,url,json_body",
+    [
+        ("get", "/curie/PMID:31763219?query_backend=biothings", None),
+        ("post", "/curie/?query_backend=biothings", {"ids": ["PMID:31763219"]}),
+        (
+            "post",
+            "/trapi/?query_backend=biothings",
+            {
+                "message": {
+                    "knowledge_graph": {
+                        "nodes": {
+                            "PMID:31763219": {},
+                        }
+                    }
+                }
+            },
+        ),
+    ],
+)
+async def test_backend_unavailable_prefix_is_reported_in_response_header(
+    test_annotator: sanic.Sanic,
+    method: str,
+    url: str,
+    json_body: dict,
+):
+    request_kwargs = {"method": method, "url": url}
+    if json_body is not None:
+        request_kwargs["json"] = json_body
+
+    _, response = await test_annotator.asgi_client.request(**request_kwargs)
+
+    assert response.status_code == 200
+    assert response.headers["X-Query-Backend"] == "biothings"
+    assert response.headers[SKIPPED_CURIE_PREFIXES_HEADER] == "PMID"
+    skipped_result = {
+        "query": "PMID:31763219",
+        "skipped": True,
+        "reason": "source_unavailable_for_backend",
+        "source": "pubmed",
+        "query_backend": "biothings",
+    }
+    if url.startswith("/trapi/"):
+        assert response.json == {
+            "PMID:31763219": {
+                "attributes": [
+                    {
+                        "attribute_type_id": "biothings_query_status",
+                        "value": skipped_result,
+                    }
+                ]
+            }
+        }
+    else:
+        assert response.json == {"PMID:31763219": skipped_result}
 
 
 @pytest.mark.unit
@@ -746,6 +807,7 @@ async def test_query_backend_header_is_cors_exposed(test_annotator: sanic.Sanic)
     assert response.status_code == 200
     assert response.headers["X-Query-Backend"] == "biothings"
     assert "x-query-backend" in exposed_headers
+    assert SKIPPED_CURIE_PREFIXES_HEADER.lower() in exposed_headers
 
 
 @pytest.mark.unit

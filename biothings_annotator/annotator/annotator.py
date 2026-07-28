@@ -45,6 +45,7 @@ class Annotator:
             except InvalidQueryBackendError:
                 self.query_backend = deployment_backend
         self.elasticsearch_connection = os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION).strip()
+        self.skipped_curie_prefixes: List[str] = []
 
     @staticmethod
     def _normalize_query_backend(query_backend: str) -> str:
@@ -79,6 +80,35 @@ class Annotator:
             if elasticsearch_scopes:
                 return elasticsearch_scopes
         return prefix_settings.get("scopes") or self._default_scopes(node_type)
+
+    def _query_backend_supports_prefix(self, prefix: str) -> bool:
+        """Return whether a CURIE prefix is available through the active backend."""
+        supported_backends = BIOLINK_PREFIX_to_BioThings.get(prefix, {}).get("query_backends")
+        return supported_backends is None or self.query_backend in supported_backends
+
+    def _reset_skipped_curie_prefixes(self) -> None:
+        """Reset backend-unavailable prefixes tracked for one annotation request."""
+        self.skipped_curie_prefixes = []
+
+    def _record_skipped_curie_prefix(self, prefix: str) -> None:
+        """Track and log a known CURIE prefix unavailable through the active backend."""
+        if prefix not in self.skipped_curie_prefixes:
+            self.skipped_curie_prefixes.append(prefix)
+        logger.warning(
+            "CURIE prefix %s is not available through the %s backend. Skipped!",
+            prefix,
+            self.query_backend,
+        )
+
+    def _backend_skip_result(self, curie: str, node_type: str) -> Dict:
+        """Return a structured result for a known source skipped by this backend."""
+        return {
+            "query": curie,
+            "skipped": True,
+            "reason": "source_unavailable_for_backend",
+            "source": node_type,
+            "query_backend": self.query_backend,
+        }
 
     async def query_biothings(
         self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
@@ -218,11 +248,16 @@ class Annotator:
         """
         Annotate a single curie id
         """
+        self._reset_skipped_curie_prefixes()
         node_type, _id = parse_curie(curie)
         if not node_type:
             raise InvalidCurieError(curie)
 
         prefix = curie.split(":", 1)[0]
+        if not self._query_backend_supports_prefix(prefix):
+            self._record_skipped_curie_prefix(prefix)
+            return {curie: self._backend_skip_result(curie, node_type)}
+
         scopes = self._scopes_for_prefix(node_type, prefix)
         res = await self.query_annotations(node_type, [_id], fields=fields, scopes=scopes)
 
@@ -297,16 +332,21 @@ class Annotator:
         """
         Annotate a list of curie ids
         """
+        self._reset_skipped_curie_prefixes()
         node_list_by_type = {}
         node_d = OrderedDict()  # a dictionary to hold all annotations by each curie id
         for node_id in curie_list:
             node_d[node_id] = {}  # create a placeholder for each curie id
             node_type = parse_curie(node_id, return_type=True, return_id=False)
-            if node_type:
+            prefix = node_id.split(":", 1)[0]
+            if node_type and self._query_backend_supports_prefix(prefix):
                 if node_type not in node_list_by_type:
                     node_list_by_type[node_type] = [node_id]
                 else:
                     node_list_by_type[node_type].append(node_id)
+            elif node_type:
+                self._record_skipped_curie_prefix(prefix)
+                node_d[node_id] = self._backend_skip_result(node_id, node_type)
             else:
                 logger.warning("Unsupported Curie prefix: %s. Skipped!", node_id)
 
@@ -330,6 +370,7 @@ class Annotator:
         """
         Annotate a TRAPI input message with node annotator annotations
         """
+        self._reset_skipped_curie_prefixes()
         try:
             node_d = get_dotfield_value("message.knowledge_graph.nodes", trapi_input)
             assert isinstance(node_d, dict)
@@ -349,17 +390,23 @@ class Annotator:
             del i, _node_d
 
         node_list_by_type = {}
+        _node_d = {}
+        skipped_node_ids = set()
         for node_id in node_d:
             node_type = parse_curie(node_id, return_type=True, return_id=False)
-            if node_type:
+            prefix = node_id.split(":", 1)[0]
+            if node_type and self._query_backend_supports_prefix(prefix):
                 if node_type not in node_list_by_type:
                     node_list_by_type[node_type] = [node_id]
                 else:
                     node_list_by_type[node_type].append(node_id)
+            elif node_type:
+                self._record_skipped_curie_prefix(prefix)
+                _node_d[node_id] = self._backend_skip_result(node_id, node_type)
+                skipped_node_ids.add(node_id)
             else:
                 logger.warning("Unsupported Curie prefix: %s. Skipped!", node_id)
 
-        _node_d = {}
         async for node_id, res in self._annotate_node_list_by_type(node_list_by_type, raw=raw, fields=fields):
             _node_d[node_id] = res
 
@@ -370,7 +417,9 @@ class Annotator:
         # place the annotation objects back to the original node_d as TRAPI attributes
         for node_id, res in _node_d.items():
             res = {
-                "attribute_type_id": "biothings_annotations",
+                "attribute_type_id": (
+                    "biothings_query_status" if node_id in skipped_node_ids else "biothings_annotations"
+                ),
                 "value": res,
             }
 

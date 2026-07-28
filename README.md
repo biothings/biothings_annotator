@@ -189,6 +189,10 @@ The `GET /curie/{curie}`, `POST /curie`, and `POST /trapi` endpoints accept an o
 backend for only that request; `es` is accepted as an alias for `elasticsearch`.
 Unsupported values are ignored and the request uses the deployment default.
 Successful query responses include the canonical backend in the `X-Query-Backend` response header.
+When a recognized CURIE prefix is unavailable through that backend, its result contains a structured
+`skipped` status with the source, selected backend, and `source_unavailable_for_backend` reason.
+`X-Skipped-Curie-Prefixes` also summarizes the affected prefixes as comma-separated values. Unknown
+CURIE prefixes are not included in this header.
 
 ```shell
 curl 'http://localhost:9000/curie/NCBIGene:1017?query_backend=biothings'
@@ -198,6 +202,41 @@ curl -X POST 'http://localhost:9000/curie/?query_backend=elasticsearch' \
 curl -X POST 'http://localhost:9000/trapi/?query_backend=es' \
   -H 'Content-Type: application/json' \
   -d '{"message":{"knowledge_graph":{"nodes":{},"edges":{}}}}'
+```
+
+##### PubMed metadata
+
+`PMID` CURIEs are routed unchanged to the standalone `annotator-pubmed` Elasticsearch alias. When the
+annotation-hub [`pubmed_metadata`](https://github.com/biothings/annotation-hub/tree/add-pubmed-metadata)
+source is built and indexed there, the default annotation response includes its `pubmed` object
+(journal, title, volume, issue, publication date, and abstract). Like the other first-class
+biomedical sources, PubMed has its own annotator client configuration rather than being merged into
+`annotator_extra`. It is not currently available through the `biothings` query backend, which
+returns a structured skipped result for `PMID` CURIEs without making a downstream request and sets
+`X-Skipped-Curie-Prefixes: PMID`:
+
+```json
+{
+  "PMID:31763219": {
+    "query": "PMID:31763219",
+    "skipped": true,
+    "reason": "source_unavailable_for_backend",
+    "source": "pubmed",
+    "query_backend": "biothings"
+  }
+}
+```
+
+```shell
+curl 'http://localhost:9000/curie/PMID:12345678?query_backend=elasticsearch'
+```
+
+With the CI Elasticsearch service forwarded to `localhost:9200`, run the opt-in live check with:
+
+```shell
+RUN_PUBMED_ES_INTEGRATION=1 \
+PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION=ci_local_forward \
+python -m pytest -q tests/test_pubmed.py -m integration
 ```
 
 

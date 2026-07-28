@@ -18,7 +18,14 @@ logger.setLevel(logging.DEBUG)
 
 
 @pytest.mark.asyncio(loop_scope="module")
-@pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
+@pytest.mark.parametrize(
+    "curie_prefix",
+    [
+        prefix
+        for prefix, prefix_settings in BIOLINK_PREFIX_to_BioThings.items()
+        if "biothings" in prefix_settings.get("query_backends", ("biothings", "elasticsearch"))
+    ],
+)
 async def test_annotation_transform(curie_prefix: str):
     annotation_instance = Annotator()
 

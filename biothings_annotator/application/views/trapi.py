@@ -7,6 +7,7 @@ from sanic.request import Request
 
 from biothings_annotator.annotator import Annotator
 from biothings_annotator.annotator.exceptions import InvalidQueryBackendError, TRAPIInputError
+from biothings_annotator.application.views.headers import annotation_response_headers
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class TrapiView(HTTPMethodView):
             annotated_node = await annotator.annotate_trapi(
                 trapi_body, fields=fields, raw=raw, append=append, limit=limit, include_extra=include_extra
             )
-            response_headers = {**self.default_headers, "X-Query-Backend": annotator.query_backend}
+            response_headers = annotation_response_headers(self.default_headers, annotator)
             return sanic.json(annotated_node, headers=response_headers)
         except InvalidQueryBackendError:
             logger.error("Invalid query backend deployment configuration")

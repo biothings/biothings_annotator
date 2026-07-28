@@ -63,6 +63,14 @@ BIOLINK_PREFIX_to_BioThings = {
     "MONDO": {"type": "disease", "field": "mondo.mondo", "keep_prefix": True},
     "DOID": {"type": "disease", "field": "disease_ontology.doid", "keep_prefix": True},
     "HP": {"type": "phenotype", "field": "hp", "keep_prefix": True},
+    # PubMed is a standalone source whose Elasticsearch documents use the full
+    # CURIE as _id. It is not currently available through biothings_client.
+    "PMID": {
+        "type": "pubmed",
+        "scopes": ["_id"],
+        "keep_prefix": True,
+        "query_backends": ("elasticsearch",),
+    },
 }
 
 
@@ -192,6 +200,21 @@ ANNOTATOR_CLIENTS = {
         "elasticsearch": {"index": "hpo", "instance": None},
         "fields": ["hp", "name", "annotations", "comment", "def", "subset", "synonym", "xrefs"],
         "scopes": ["hp"],
+    },
+    "pubmed": {
+        # There is no biothings_client/API path for this standalone source yet.
+        "client": {"configuration": None, "endpoint": None, "instance": None},
+        "elasticsearch": {"index": "annotator-pubmed", "instance": None},
+        "fields": [
+            "pubmed.journal.name",
+            "pubmed.journal.abbr",
+            "pubmed.title",
+            "pubmed.vol",
+            "pubmed.iss",
+            "pubmed.pub_date",
+            "pubmed.abstract",
+        ],
+        "scopes": ["_id"],
     },
     # This API append NCIT description to the existing data
     "ncit": {

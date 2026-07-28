@@ -12,6 +12,7 @@ from sanic.request import Request
 
 from biothings_annotator.annotator import Annotator
 from biothings_annotator.annotator.exceptions import InvalidCurieError, InvalidQueryBackendError
+from biothings_annotator.application.views.headers import annotation_response_headers
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class CurieView(HTTPMethodView):
         try:
             annotator = Annotator(query_backend=query_backend)
             annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=raw, include_extra=include_extra)
-            response_headers = {**self.default_headers, "X-Query-Backend": annotator.query_backend}
+            response_headers = annotation_response_headers(self.default_headers, annotator)
             return sanic.json(annotated_node, headers=response_headers)
         except InvalidQueryBackendError:
             return _query_backend_configuration_error_response()
@@ -126,7 +127,7 @@ class CurieView(HTTPMethodView):
             annotated_node = await annotator.annotate_curie_list(
                 curie_list=parsed_curie_list, fields=fields, raw=raw, include_extra=include_extra
             )
-            response_headers = {**self.default_headers, "X-Query-Backend": annotator.query_backend}
+            response_headers = annotation_response_headers(self.default_headers, annotator)
             return sanic.json(annotated_node, headers=response_headers)
         except InvalidQueryBackendError:
             return _query_backend_configuration_error_response()

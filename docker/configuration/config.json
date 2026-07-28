@@ -20,7 +20,7 @@
         "extension": {
             "cors": {
                 "CORS_ALLOW_HEADERS": "*",
-                "CORS_EXPOSE_HEADERS": "X-Query-Backend",
+                "CORS_EXPOSE_HEADERS": "X-Query-Backend, X-Skipped-Curie-Prefixes",
                 "CORS_METHODS": "*",
                 "CORS_ORIGINS": "*",
                 "CORS_SUPPORTS_CREDENTIALS": false,

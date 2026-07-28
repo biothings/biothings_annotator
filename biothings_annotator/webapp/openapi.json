@@ -157,6 +157,10 @@
               "phenotype0": {
                 "value": "HP:0001336",
                 "summary": "Example <HP> CURIE prefix"
+              },
+              "publication0": {
+                "value": "PMID:12345678",
+                "summary": "Example <PMID> CURIE prefix (Elasticsearch backend only)"
               }
             }
           },
@@ -217,10 +221,13 @@
         ],
         "responses": {
           "200": {
-            "description": "A matching annotation object",
+            "description": "A matching annotation object, or a structured BackendSkipResult when the CURIE source is unavailable through the selected backend.",
             "headers": {
               "X-Query-Backend": {
                 "$ref": "#/components/headers/QueryBackend"
+              },
+              "X-Skipped-Curie-Prefixes": {
+                "$ref": "#/components/headers/SkippedCuriePrefixes"
               }
             },
             "content": {
@@ -339,7 +346,8 @@
                     "DRUGBANK",
                     "MONDO",
                     "DOID",
-                    "HP"
+                    "HP",
+                    "PMID"
                   ]
                 }
               }
@@ -431,10 +439,13 @@
         },
         "responses": {
           "200": {
-            "description": "A list of matching annotation objects",
+            "description": "A list of matching annotation objects. Backend-unavailable CURIEs contain a structured BackendSkipResult.",
             "headers": {
               "X-Query-Backend": {
                 "$ref": "#/components/headers/QueryBackend"
+              },
+              "X-Skipped-Curie-Prefixes": {
+                "$ref": "#/components/headers/SkippedCuriePrefixes"
               }
             },
             "content": {
@@ -1173,7 +1184,8 @@
                     "DRUGBANK",
                     "MONDO",
                     "DOID",
-                    "HP"
+                    "HP",
+                    "PMID"
                   ]
                 }
               }
@@ -1305,10 +1317,13 @@
         },
         "responses": {
           "200": {
-            "description": "A list of matching annotation objects",
+            "description": "A list of matching annotation objects. Backend-unavailable CURIEs receive a biothings_query_status attribute containing a structured BackendSkipResult.",
             "headers": {
               "X-Query-Backend": {
                 "$ref": "#/components/headers/QueryBackend"
+              },
+              "X-Skipped-Curie-Prefixes": {
+                "$ref": "#/components/headers/SkippedCuriePrefixes"
               }
             },
             "content": {
@@ -1708,6 +1723,42 @@
         "schema": {
           "type": "string",
           "enum": ["biothings", "elasticsearch"]
+        }
+      },
+      "SkippedCuriePrefixes": {
+        "description": "Comma-separated recognized CURIE prefixes skipped because they are unavailable through the selected query backend. This header is omitted when no known prefixes were skipped.",
+        "schema": {
+          "type": "string",
+          "example": "PMID"
+        }
+      }
+    },
+    "schemas": {
+      "BackendSkipResult": {
+        "type": "object",
+        "description": "Per-CURIE status returned when a recognized annotation source is intentionally not queried because it is unavailable through the selected backend.",
+        "required": ["query", "skipped", "reason", "source", "query_backend"],
+        "properties": {
+          "query": {
+            "type": "string",
+            "example": "PMID:31763219"
+          },
+          "skipped": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "reason": {
+            "type": "string",
+            "enum": ["source_unavailable_for_backend"]
+          },
+          "source": {
+            "type": "string",
+            "example": "pubmed"
+          },
+          "query_backend": {
+            "type": "string",
+            "enum": ["biothings", "elasticsearch"]
+          }
         }
       }
     },

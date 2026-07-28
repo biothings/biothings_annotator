@@ -180,7 +180,14 @@ def test_query_post_processing(search_keyword: str, collection: List[Dict], hist
 
 
 @pytest.mark.asyncio(scope="session")
-@pytest.mark.parametrize("curie_prefix", list(BIOLINK_PREFIX_to_BioThings.keys()))
+@pytest.mark.parametrize(
+    "curie_prefix",
+    [
+        prefix
+        for prefix, prefix_settings in BIOLINK_PREFIX_to_BioThings.items()
+        if "biothings" in prefix_settings.get("query_backends", ("biothings", "elasticsearch"))
+    ],
+)
 async def test_biothings_query(curie_prefix: str):
     random_index = random.randint(0, 10000)
     curie_query = f"{curie_prefix}:{str(random_index)}"

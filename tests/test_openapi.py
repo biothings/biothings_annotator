@@ -37,6 +37,18 @@ def test_query_backend_override_is_documented_for_all_query_operations():
         assert operation["responses"]["200"]["headers"]["X-Query-Backend"] == {
             "$ref": "#/components/headers/QueryBackend"
         }
+        assert operation["responses"]["200"]["headers"]["X-Skipped-Curie-Prefixes"] == {
+            "$ref": "#/components/headers/SkippedCuriePrefixes"
+        }
+
+    skipped_prefixes_header = specification["components"]["headers"]["SkippedCuriePrefixes"]
+    assert skipped_prefixes_header["schema"] == {"type": "string", "example": "PMID"}
+    assert "unavailable through the selected query backend" in skipped_prefixes_header["description"]
+
+    skipped_result = specification["components"]["schemas"]["BackendSkipResult"]
+    assert skipped_result["required"] == ["query", "skipped", "reason", "source", "query_backend"]
+    assert skipped_result["properties"]["skipped"] == {"type": "boolean", "enum": [True]}
+    assert skipped_result["properties"]["reason"]["enum"] == ["source_unavailable_for_backend"]
 
     assert "InvalidQueryBackendError" not in json.dumps(specification)
 
@@ -48,6 +60,7 @@ def test_cors_configuration_uses_supported_keys(config_path):
         configuration = json.load(config_file)
 
     cors = configuration["application"]["extension"]["cors"]
-    assert cors["CORS_EXPOSE_HEADERS"] == "X-Query-Backend"
+    exposed_headers = {header.strip() for header in cors["CORS_EXPOSE_HEADERS"].split(",")}
+    assert exposed_headers == {"X-Query-Backend", "X-Skipped-Curie-Prefixes"}
     assert cors["CORS_SUPPORTS_CREDENTIALS"] is False
     assert "CORS_SUPPORS_CREDENTIALS" not in cors
