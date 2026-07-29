@@ -212,18 +212,22 @@ source is built and indexed there, the default annotation response includes its 
 (journal, title, volume, issue, publication date, and abstract). Like the other first-class
 biomedical sources, PubMed has its own annotator client configuration rather than being merged into
 `annotator_extra`. It is not currently available through the `biothings` query backend, which
-returns a structured skipped result for `PMID` CURIEs without making a downstream request and sets
-`X-Skipped-Curie-Prefixes: PMID`:
+returns a one-item, not-found-shaped skipped result for `PMID` CURIEs without making a downstream
+request and sets `X-Skipped-Curie-Prefixes: PMID`. The `notfound` field preserves the normal result
+shape, while `skipped` indicates that the selected backend was not queried:
 
 ```json
 {
-  "PMID:31763219": {
-    "query": "PMID:31763219",
-    "skipped": true,
-    "reason": "source_unavailable_for_backend",
-    "source": "pubmed",
-    "query_backend": "biothings"
-  }
+  "PMID:31763219": [
+    {
+      "query": "PMID:31763219",
+      "notfound": true,
+      "skipped": true,
+      "reason": "source_unavailable_for_backend",
+      "source": "pubmed",
+      "query_backend": "biothings"
+    }
+  ]
 }
 ```
 

@@ -46,9 +46,20 @@ def test_query_backend_override_is_documented_for_all_query_operations():
     assert "unavailable through the selected query backend" in skipped_prefixes_header["description"]
 
     skipped_result = specification["components"]["schemas"]["BackendSkipResult"]
-    assert skipped_result["required"] == ["query", "skipped", "reason", "source", "query_backend"]
-    assert skipped_result["properties"]["skipped"] == {"type": "boolean", "enum": [True]}
-    assert skipped_result["properties"]["reason"]["enum"] == ["source_unavailable_for_backend"]
+    assert skipped_result["type"] == "array"
+    assert skipped_result["minItems"] == 1
+    skipped_hit = skipped_result["items"]
+    assert skipped_hit["required"] == [
+        "query",
+        "notfound",
+        "skipped",
+        "reason",
+        "source",
+        "query_backend",
+    ]
+    assert skipped_hit["properties"]["notfound"] == {"type": "boolean", "enum": [True]}
+    assert skipped_hit["properties"]["skipped"] == {"type": "boolean", "enum": [True]}
+    assert skipped_hit["properties"]["reason"]["enum"] == ["source_unavailable_for_backend"]
 
     assert "InvalidQueryBackendError" not in json.dumps(specification)
 

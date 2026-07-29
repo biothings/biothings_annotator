@@ -12,6 +12,7 @@ from biothings_annotator.annotator.utils import parse_curie
 
 PMID = "PMID:12345678"
 LIVE_PMID = "PMID:31763219"
+INVALID_PMID = "PMID:3176321900"
 PUBMED_METADATA = {
     "journal": {"name": "Example Journal", "abbr": "Example J"},
     "title": "Example title",
@@ -20,17 +21,21 @@ PUBMED_METADATA = {
     "pub_date": "2026-06-30",
     "abstract": "Example abstract",
 }
-SKIPPED_PUBMED_RESULT = {
-    "query": PMID,
-    "skipped": True,
-    "reason": "source_unavailable_for_backend",
-    "source": "pubmed",
-    "query_backend": "biothings",
-}
+SKIPPED_PUBMED_RESULT = [
+    {
+        "query": PMID,
+        "notfound": True,
+        "skipped": True,
+        "reason": "source_unavailable_for_backend",
+        "source": "pubmed",
+        "query_backend": "biothings",
+    }
+]
 
 
 class FakePubMedClient:
-    def __init__(self):
+    def __init__(self, notfound=False):
+        self.notfound = notfound
         self.querymany_calls = []
 
     async def querymany(self, query_list, scopes, fields):
@@ -42,6 +47,8 @@ class FakePubMedClient:
                 "fields": deepcopy(fields),
             }
         )
+        if self.notfound:
+            return [{"query": query, "notfound": True} for query in query_list]
         return [
             {
                 "query": query,
@@ -104,6 +111,48 @@ async def test_annotate_pmid_routes_to_elasticsearch_client(monkeypatch):
     assert client.querymany_calls == [
         {
             "query_list": [PMID],
+            "scopes": ["_id"],
+            "fields": ANNOTATOR_CLIENTS["pubmed"]["fields"],
+        }
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_biothings_skip_matches_elasticsearch_notfound_result_shape(monkeypatch):
+    client = FakePubMedClient(notfound=True)
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: client,
+    )
+
+    elasticsearch_result = await Annotator(query_backend="elasticsearch").annotate_curie(INVALID_PMID)
+    biothings_result = await Annotator(query_backend="biothings").annotate_curie(INVALID_PMID)
+
+    assert elasticsearch_result == {
+        INVALID_PMID: [
+            {
+                "query": INVALID_PMID,
+                "notfound": True,
+            }
+        ]
+    }
+    assert isinstance(biothings_result[INVALID_PMID], list)
+    assert len(biothings_result[INVALID_PMID]) == 1
+    elasticsearch_hit = elasticsearch_result[INVALID_PMID][0]
+    skipped_hit = biothings_result[INVALID_PMID][0]
+    assert {key: skipped_hit[key] for key in elasticsearch_hit} == elasticsearch_hit
+    assert skipped_hit == {
+        "query": INVALID_PMID,
+        "notfound": True,
+        "skipped": True,
+        "reason": "source_unavailable_for_backend",
+        "source": "pubmed",
+        "query_backend": "biothings",
+    }
+    assert client.querymany_calls == [
+        {
+            "query_list": [INVALID_PMID],
             "scopes": ["_id"],
             "fields": ANNOTATOR_CLIENTS["pubmed"]["fields"],
         }

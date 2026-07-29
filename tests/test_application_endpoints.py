@@ -642,13 +642,16 @@ async def test_backend_unavailable_prefix_is_reported_in_response_header(
     assert response.status_code == 200
     assert response.headers["X-Query-Backend"] == "biothings"
     assert response.headers[SKIPPED_CURIE_PREFIXES_HEADER] == "PMID"
-    skipped_result = {
-        "query": "PMID:31763219",
-        "skipped": True,
-        "reason": "source_unavailable_for_backend",
-        "source": "pubmed",
-        "query_backend": "biothings",
-    }
+    skipped_result = [
+        {
+            "query": "PMID:31763219",
+            "notfound": True,
+            "skipped": True,
+            "reason": "source_unavailable_for_backend",
+            "source": "pubmed",
+            "query_backend": "biothings",
+        }
+    ]
     if url.startswith("/trapi/"):
         assert response.json == {
             "PMID:31763219": {

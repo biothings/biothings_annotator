@@ -100,15 +100,18 @@ class Annotator:
             self.query_backend,
         )
 
-    def _backend_skip_result(self, curie: str, node_type: str) -> Dict:
-        """Return a structured result for a known source skipped by this backend."""
-        return {
-            "query": curie,
-            "skipped": True,
-            "reason": "source_unavailable_for_backend",
-            "source": node_type,
-            "query_backend": self.query_backend,
-        }
+    def _backend_skip_result(self, curie: str, node_type: str) -> List[Dict]:
+        """Return a not-found-shaped result for a source skipped by this backend."""
+        return [
+            {
+                "query": curie,
+                "notfound": True,
+                "skipped": True,
+                "reason": "source_unavailable_for_backend",
+                "source": node_type,
+                "query_backend": self.query_backend,
+            }
+        ]
 
     async def query_biothings(
         self, node_type: str, query_list: List[str], fields: Optional[Union[str, List[str]]] = None
