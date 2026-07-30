@@ -157,6 +157,10 @@
               "phenotype0": {
                 "value": "HP:0001336",
                 "summary": "Example <HP> CURIE prefix"
+              },
+              "publication0": {
+                "value": "PMID:12345678",
+                "summary": "Example <PMID> CURIE prefix"
               }
             }
           },
@@ -217,10 +221,16 @@
         ],
         "responses": {
           "200": {
-            "description": "A matching annotation object",
+            "description": "A CURIE-keyed annotation object, or a not-found-shaped BackendSkipResult when source discovery confirms that the CURIE source is unavailable through the selected backend.",
             "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/AnnotationCacheControl"
+              },
               "X-Query-Backend": {
                 "$ref": "#/components/headers/QueryBackend"
+              },
+              "X-Skipped-Curie-Prefixes": {
+                "$ref": "#/components/headers/SkippedCuriePrefixes"
               }
             },
             "content": {
@@ -300,6 +310,21 @@
               }
             }
           },
+          "503": {
+            "description": "BioThings source availability could not be determined. This is retryable and is not reported as a skipped source.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/TransientErrorCacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDiscoveryError"
+                }
+              }
+            }
+          },
           "400": {
             "description": "A response indicating an unknown or unsupported curie ID",
             "content": {
@@ -339,7 +364,8 @@
                     "DRUGBANK",
                     "MONDO",
                     "DOID",
-                    "HP"
+                    "HP",
+                    "PMID"
                   ]
                 }
               }
@@ -431,10 +457,16 @@
         },
         "responses": {
           "200": {
-            "description": "A list of matching annotation objects",
+            "description": "A CURIE-keyed annotation object. CURIEs whose source is confirmed absent from the selected backend contain a not-found-shaped BackendSkipResult.",
             "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/AnnotationCacheControl"
+              },
               "X-Query-Backend": {
                 "$ref": "#/components/headers/QueryBackend"
+              },
+              "X-Skipped-Curie-Prefixes": {
+                "$ref": "#/components/headers/SkippedCuriePrefixes"
               }
             },
             "content": {
@@ -1124,6 +1156,21 @@
               }
             }
           },
+          "503": {
+            "description": "BioThings source availability could not be determined. This is retryable and is not reported as a skipped source.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/TransientErrorCacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDiscoveryError"
+                }
+              }
+            }
+          },
           "400": {
             "description": "A response indicating an improperly formatted query",
             "content": {
@@ -1173,7 +1220,8 @@
                     "DRUGBANK",
                     "MONDO",
                     "DOID",
-                    "HP"
+                    "HP",
+                    "PMID"
                   ]
                 }
               }
@@ -1305,10 +1353,16 @@
         },
         "responses": {
           "200": {
-            "description": "A list of matching annotation objects",
+            "description": "A node-keyed annotation object. CURIEs whose source is confirmed absent from the selected backend receive a biothings_query_status attribute containing a not-found-shaped BackendSkipResult.",
             "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/AnnotationCacheControl"
+              },
               "X-Query-Backend": {
                 "$ref": "#/components/headers/QueryBackend"
+              },
+              "X-Skipped-Curie-Prefixes": {
+                "$ref": "#/components/headers/SkippedCuriePrefixes"
               }
             },
             "content": {
@@ -1610,6 +1664,21 @@
               }
             }
           },
+          "503": {
+            "description": "BioThings source availability could not be determined. This is retryable and is not reported as a skipped source.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/TransientErrorCacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDiscoveryError"
+                }
+              }
+            }
+          },
           "400": {
             "description": "A response indicating an improperly formatted query",
             "content": {
@@ -1703,11 +1772,88 @@
   },
   "components": {
     "headers": {
+      "AnnotationCacheControl": {
+        "description": "Normal annotation responses use the configured public cache lifetime. A response containing a BackendSkipResult uses no-store so newly deployed sources can activate promptly.",
+        "schema": {
+          "type": "string",
+          "example": "no-store"
+        }
+      },
+      "TransientErrorCacheControl": {
+        "description": "Source-discovery errors are transient and must not be cached.",
+        "schema": {
+          "type": "string",
+          "enum": ["no-store"]
+        }
+      },
       "QueryBackend": {
         "description": "Canonical backend that handled the annotation query.",
         "schema": {
           "type": "string",
           "enum": ["biothings", "elasticsearch"]
+        }
+      },
+      "SkippedCuriePrefixes": {
+        "description": "Comma-separated recognized CURIE prefixes skipped because source discovery confirmed they are unavailable through the selected query backend. This header is omitted when no known prefixes were skipped.",
+        "schema": {
+          "type": "string",
+          "example": "PMID"
+        }
+      }
+    },
+    "schemas": {
+      "BackendSkipResult": {
+        "type": "array",
+        "description": "Per-CURIE status returned in the same list shape as a not-found annotation result when source discovery confirms that a recognized source is unavailable through the selected backend. The skipped flag distinguishes this status from a completed query with no match.",
+        "minItems": 1,
+        "maxItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["query", "notfound", "skipped", "reason", "source", "query_backend"],
+          "properties": {
+            "query": {
+              "type": "string",
+              "example": "PMID:31763219"
+            },
+            "notfound": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "skipped": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "reason": {
+              "type": "string",
+              "enum": ["source_unavailable_for_backend"]
+            },
+            "source": {
+              "type": "string",
+              "example": "pubmed"
+            },
+            "query_backend": {
+              "type": "string",
+              "enum": ["biothings", "elasticsearch"]
+            }
+          }
+        }
+      },
+      "SourceDiscoveryError": {
+        "type": "object",
+        "required": ["input", "endpoint", "message", "source"],
+        "properties": {
+          "input": {},
+          "endpoint": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "enum": ["Unable to determine BioThings source availability."]
+          },
+          "source": {
+            "type": "string",
+            "example": "pubmed"
+          }
         }
       }
     },

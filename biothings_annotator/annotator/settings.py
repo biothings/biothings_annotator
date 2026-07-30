@@ -9,6 +9,11 @@ QUERY_BACKEND_ENV = "ANNOTATOR_QUERY_BACKEND"
 SUPPORTED_QUERY_BACKENDS = ("biothings", "elasticsearch")
 QUERY_BACKEND_ALIASES = {"es": "elasticsearch"}
 
+BIOTHINGS_SOURCE_LIST_PATH = "api/list"
+BIOTHINGS_SOURCE_DISCOVERY_TIMEOUT = 5
+BIOTHINGS_SOURCE_DISCOVERY_TTL = 60
+BIOTHINGS_SOURCE_DISCOVERY_ERROR_TTL = 5
+
 ELASTICSEARCH_CONNECTION = "ci"
 CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION = {
     "host": "http://localhost:9200",
@@ -63,6 +68,13 @@ BIOLINK_PREFIX_to_BioThings = {
     "MONDO": {"type": "disease", "field": "mondo.mondo", "keep_prefix": True},
     "DOID": {"type": "disease", "field": "disease_ontology.doid", "keep_prefix": True},
     "HP": {"type": "phenotype", "field": "hp", "keep_prefix": True},
+    # PubMed is a standalone source whose documents use the full CURIE as _id.
+    # BioThings availability is discovered dynamically from its API source list.
+    "PMID": {
+        "type": "pubmed",
+        "scopes": ["_id"],
+        "keep_prefix": True,
+    },
 }
 
 
@@ -192,6 +204,27 @@ ANNOTATOR_CLIENTS = {
         "elasticsearch": {"index": "hpo", "instance": None},
         "fields": ["hp", "name", "annotations", "comment", "def", "subset", "synonym", "xrefs"],
         "scopes": ["hp"],
+    },
+    "pubmed": {
+        # The endpoint is declared before deployment so API source discovery can
+        # activate it without another annotator release.
+        "client": {
+            "configuration": None,
+            "endpoint": "pubmed",
+            "source": "pubmed",
+            "instance": None,
+        },
+        "elasticsearch": {"index": "annotator-pubmed", "instance": None},
+        "fields": [
+            "pubmed.journal.name",
+            "pubmed.journal.abbr",
+            "pubmed.title",
+            "pubmed.vol",
+            "pubmed.iss",
+            "pubmed.pub_date",
+            "pubmed.abstract",
+        ],
+        "scopes": ["_id"],
     },
     # This API append NCIT description to the existing data
     "ncit": {

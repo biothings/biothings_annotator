@@ -4,7 +4,8 @@ Collection of miscellaenous utility methods for the biothings_annotator package
 
 import asyncio
 import logging
-from typing import Dict, List, Optional, Union
+import time
+from typing import Dict, FrozenSet, List, Optional, Tuple, Union
 
 try:
     from itertools import batched  # new in Python 3.12
@@ -21,11 +22,16 @@ except ImportError:
 
 
 import biothings_client
+import httpx
 
 from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient
-from biothings_annotator.annotator.exceptions import InvalidCurieError
+from biothings_annotator.annotator.exceptions import InvalidCurieError, SourceDiscoveryError
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
+    BIOTHINGS_SOURCE_DISCOVERY_ERROR_TTL,
+    BIOTHINGS_SOURCE_DISCOVERY_TIMEOUT,
+    BIOTHINGS_SOURCE_DISCOVERY_TTL,
+    BIOTHINGS_SOURCE_LIST_PATH,
     BIOLINK_PREFIX_to_BioThings,
     ELASTICSEARCH_CONNECTIONS,
     ELASTICSEARCH_QUERY_BATCH_SIZE,
@@ -34,6 +40,110 @@ from biothings_annotator.annotator.settings import (
 )
 
 logger = logging.getLogger(__name__)
+
+_biothings_source_cache: Dict[str, Tuple[float, FrozenSet[str]]] = {}
+_biothings_source_error_cache: Dict[str, Tuple[float, SourceDiscoveryError]] = {}
+_biothings_source_refreshes: Dict[Tuple[int, str], asyncio.Task] = {}
+_biothings_source_cache_generation = 0
+
+
+async def fetch_biothings_sources(
+    api_host: str,
+    http_client: Optional[httpx.AsyncClient] = None,
+) -> FrozenSet[str]:
+    """Fetch and validate the API's authoritative list of deployed sources."""
+    source_list_url = f"{api_host.rstrip('/')}/{BIOTHINGS_SOURCE_LIST_PATH}"
+    owns_client = http_client is None
+    client = http_client or httpx.AsyncClient(timeout=BIOTHINGS_SOURCE_DISCOVERY_TIMEOUT)
+    try:
+        response = await client.get(source_list_url, headers={"Cache-Control": "no-cache"})
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list) or any(not isinstance(source, str) or not source for source in payload):
+            raise ValueError("BioThings source list must be a list of non-empty strings")
+        return frozenset(payload)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Unable to discover BioThings sources from %s: %r", source_list_url, exc)
+        raise SourceDiscoveryError() from exc
+    finally:
+        if owns_client:
+            await client.aclose()
+
+
+async def _refresh_biothings_sources(api_host: str, cache_generation: int) -> FrozenSet[str]:
+    """Fetch and cache one host's source list."""
+    try:
+        sources = await fetch_biothings_sources(api_host)
+    except SourceDiscoveryError as exc:
+        if cache_generation == _biothings_source_cache_generation:
+            _biothings_source_error_cache[api_host] = (
+                time.monotonic() + BIOTHINGS_SOURCE_DISCOVERY_ERROR_TTL,
+                exc,
+            )
+        raise
+
+    if cache_generation == _biothings_source_cache_generation:
+        _biothings_source_error_cache.pop(api_host, None)
+        _biothings_source_cache[api_host] = (
+            time.monotonic() + BIOTHINGS_SOURCE_DISCOVERY_TTL,
+            sources,
+        )
+    return sources
+
+
+async def get_biothings_sources(api_host: str) -> FrozenSet[str]:
+    """Return deployed sources, sharing one in-flight refresh per host and event loop."""
+    normalized_host = api_host.strip().rstrip("/")
+    current_time = time.monotonic()
+    cached = _biothings_source_cache.get(normalized_host)
+    if cached is not None:
+        expires_at, sources = cached
+        if current_time < expires_at:
+            return sources
+
+    cached_error = _biothings_source_error_cache.get(normalized_host)
+    if cached_error is not None:
+        expires_at, error = cached_error
+        if current_time < expires_at:
+            raise SourceDiscoveryError() from error
+        _biothings_source_error_cache.pop(normalized_host, None)
+
+    refresh_key = (id(asyncio.get_running_loop()), normalized_host)
+    refresh_task = _biothings_source_refreshes.get(refresh_key)
+    if refresh_task is not None and refresh_task.done():
+        _biothings_source_refreshes.pop(refresh_key, None)
+        refresh_task = None
+    if refresh_task is None:
+        refresh_task = asyncio.create_task(
+            _refresh_biothings_sources(
+                normalized_host,
+                _biothings_source_cache_generation,
+            )
+        )
+        _biothings_source_refreshes[refresh_key] = refresh_task
+
+        def discard_completed_refresh(completed_task):
+            if not completed_task.cancelled():
+                completed_task.exception()
+            if _biothings_source_refreshes.get(refresh_key) is completed_task:
+                _biothings_source_refreshes.pop(refresh_key, None)
+
+        refresh_task.add_done_callback(discard_completed_refresh)
+
+    return await asyncio.shield(refresh_task)
+
+
+def clear_biothings_source_cache() -> None:
+    """Clear runtime source discovery state and cancel any in-flight refreshes."""
+    global _biothings_source_cache_generation
+    _biothings_source_cache_generation += 1
+    refresh_tasks = list(_biothings_source_refreshes.values())
+    _biothings_source_refreshes.clear()
+    _biothings_source_cache.clear()
+    _biothings_source_error_cache.clear()
+    for refresh_task in refresh_tasks:
+        if not refresh_task.done() and not refresh_task.get_loop().is_closed():
+            refresh_task.cancel()
 
 
 def _current_event_loop_id() -> Union[int, None]:
@@ -77,12 +187,14 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBio
     client_parameters = annotator_node["client"]
     client_configuration = client_parameters.get("configuration")
     client_endpoint = client_parameters.get("endpoint")
+    client_source = client_parameters.get("source")
     client_instance = client_parameters.get("instance")
+    normalized_api_host = api_host.strip().rstrip("/")
     current_loop_id = _current_event_loop_id()
     if client_configuration is not None and isinstance(client_configuration, dict):
         cache_key = ("configuration", tuple(sorted(client_configuration.items())), current_loop_id)
     elif client_endpoint is not None and isinstance(client_endpoint, str):
-        cache_key = ("endpoint", f"{api_host}/{client_endpoint}", current_loop_id)
+        cache_key = ("endpoint", f"{normalized_api_host}/{client_endpoint}", client_source, current_loop_id)
     else:
         cache_key = None
 
@@ -101,9 +213,13 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBio
             client = None
 
     elif client_endpoint is not None and isinstance(client_endpoint, str):
-        client_url = f"{api_host}/{client_endpoint}"
+        client_url = f"{normalized_api_host}/{client_endpoint}"
         try:
-            client = biothings_client.get_async_client(biothing_type=None, instance=True, url=client_url)
+            client = biothings_client.get_async_client(
+                biothing_type=client_source,
+                instance=True,
+                url=client_url,
+            )
         except Exception:
             logger.exception("Unable to create endpoint-backed annotator client [%s]", client_url)
             client = None

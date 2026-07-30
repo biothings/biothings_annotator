@@ -37,6 +37,48 @@ def test_query_backend_override_is_documented_for_all_query_operations():
         assert operation["responses"]["200"]["headers"]["X-Query-Backend"] == {
             "$ref": "#/components/headers/QueryBackend"
         }
+        assert operation["responses"]["200"]["headers"]["X-Skipped-Curie-Prefixes"] == {
+            "$ref": "#/components/headers/SkippedCuriePrefixes"
+        }
+        assert operation["responses"]["200"]["headers"]["Cache-Control"] == {
+            "$ref": "#/components/headers/AnnotationCacheControl"
+        }
+        assert operation["responses"]["503"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/SourceDiscoveryError"
+        }
+        assert operation["responses"]["503"]["headers"]["Cache-Control"] == {
+            "$ref": "#/components/headers/TransientErrorCacheControl"
+        }
+
+    skipped_prefixes_header = specification["components"]["headers"]["SkippedCuriePrefixes"]
+    assert skipped_prefixes_header["schema"] == {"type": "string", "example": "PMID"}
+    assert "source discovery confirmed" in skipped_prefixes_header["description"]
+    assert specification["components"]["headers"]["TransientErrorCacheControl"]["schema"] == {
+        "type": "string",
+        "enum": ["no-store"],
+    }
+
+    skipped_result = specification["components"]["schemas"]["BackendSkipResult"]
+    assert skipped_result["type"] == "array"
+    assert skipped_result["minItems"] == 1
+    skipped_hit = skipped_result["items"]
+    assert skipped_hit["required"] == [
+        "query",
+        "notfound",
+        "skipped",
+        "reason",
+        "source",
+        "query_backend",
+    ]
+    assert skipped_hit["properties"]["notfound"] == {"type": "boolean", "enum": [True]}
+    assert skipped_hit["properties"]["skipped"] == {"type": "boolean", "enum": [True]}
+    assert skipped_hit["properties"]["reason"]["enum"] == ["source_unavailable_for_backend"]
+
+    discovery_error = specification["components"]["schemas"]["SourceDiscoveryError"]
+    assert discovery_error["required"] == ["input", "endpoint", "message", "source"]
+    assert discovery_error["properties"]["message"]["enum"] == [
+        "Unable to determine BioThings source availability."
+    ]
 
     assert "InvalidQueryBackendError" not in json.dumps(specification)
 
@@ -48,6 +90,7 @@ def test_cors_configuration_uses_supported_keys(config_path):
         configuration = json.load(config_file)
 
     cors = configuration["application"]["extension"]["cors"]
-    assert cors["CORS_EXPOSE_HEADERS"] == "X-Query-Backend"
+    exposed_headers = {header.strip() for header in cors["CORS_EXPOSE_HEADERS"].split(",")}
+    assert exposed_headers == {"X-Query-Backend", "X-Skipped-Curie-Prefixes"}
     assert cors["CORS_SUPPORTS_CREDENTIALS"] is False
     assert "CORS_SUPPORS_CREDENTIALS" not in cors

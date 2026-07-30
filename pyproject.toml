@@ -126,6 +126,7 @@ testpaths = ["test"]
 # Markers
 markers = [
     "unit",
+    "integration",
     "performance"
 ]
 
