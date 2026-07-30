@@ -152,7 +152,7 @@ def test_source_named_endpoint_client_avoids_metadata_probe_and_normalizes_host(
 @pytest.mark.asyncio
 async def test_fetch_biothings_sources_validates_authoritative_source_list():
     async def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url == f"{SERVICE_PROVIDER_API_HOST}/api/list"
+        assert str(request.url) == f"{SERVICE_PROVIDER_API_HOST}/api/list"
         assert request.headers["Cache-Control"] == "no-cache"
         return httpx.Response(200, json=["gene", "pubmed"], request=request)
 
@@ -279,6 +279,77 @@ async def test_biothings_source_cache_shares_concurrent_refresh(monkeypatch):
     finally:
         release_refresh.set()
         utils.clear_biothings_source_cache()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_clear_biothings_source_cache_cancels_inflight_refresh(monkeypatch):
+    first_refresh_started = asyncio.Event()
+    first_refresh_cancelled = asyncio.Event()
+    first_refresh_release = asyncio.Event()
+    second_refresh_started = asyncio.Event()
+    second_refresh_release = asyncio.Event()
+    fetch_calls = []
+
+    async def fake_fetch(api_host):
+        fetch_calls.append(api_host)
+        if len(fetch_calls) == 1:
+            first_refresh_started.set()
+            try:
+                await first_refresh_release.wait()
+            except asyncio.CancelledError:
+                first_refresh_cancelled.set()
+                await first_refresh_release.wait()
+            return frozenset({"stale"})
+
+        second_refresh_started.set()
+        await second_refresh_release.wait()
+        return frozenset({"pubmed"})
+
+    monkeypatch.setattr(utils, "fetch_biothings_sources", fake_fetch)
+    utils.clear_biothings_source_cache()
+    requests = []
+    try:
+        stale_request = asyncio.create_task(utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST))
+        requests.append(stale_request)
+        await first_refresh_started.wait()
+        utils.clear_biothings_source_cache()
+        await first_refresh_cancelled.wait()
+
+        fresh_request = asyncio.create_task(utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST))
+        requests.append(fresh_request)
+        await second_refresh_started.wait()
+        normalized_host = SERVICE_PROVIDER_API_HOST.rstrip("/")
+        refresh_key = (id(asyncio.get_running_loop()), normalized_host)
+        second_refresh_task = utils._biothings_source_refreshes[refresh_key]
+
+        joined_request = asyncio.create_task(utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST))
+        requests.append(joined_request)
+        await asyncio.sleep(0)
+        assert fetch_calls == [
+            SERVICE_PROVIDER_API_HOST,
+            SERVICE_PROVIDER_API_HOST,
+        ]
+
+        first_refresh_release.set()
+        assert await stale_request == frozenset({"stale"})
+        assert utils._biothings_source_cache == {}
+        assert utils._biothings_source_refreshes[refresh_key] is second_refresh_task
+
+        second_refresh_release.set()
+        assert await asyncio.gather(fresh_request, joined_request) == [
+            frozenset({"pubmed"}),
+            frozenset({"pubmed"}),
+        ]
+    finally:
+        first_refresh_release.set()
+        second_refresh_release.set()
+        for request in requests:
+            if not request.done():
+                request.cancel()
+        await asyncio.gather(*requests, return_exceptions=True)
+        utils.clear_biothings_source_cache()
+        await asyncio.sleep(0)
 
 
 @pytest.mark.unit

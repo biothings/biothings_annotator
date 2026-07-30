@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 _biothings_source_cache: Dict[str, Tuple[float, FrozenSet[str]]] = {}
 _biothings_source_error_cache: Dict[str, Tuple[float, SourceDiscoveryError]] = {}
 _biothings_source_refreshes: Dict[Tuple[int, str], asyncio.Task] = {}
+_biothings_source_cache_generation = 0
 
 
 async def fetch_biothings_sources(
@@ -69,22 +70,24 @@ async def fetch_biothings_sources(
             await client.aclose()
 
 
-async def _refresh_biothings_sources(api_host: str) -> FrozenSet[str]:
+async def _refresh_biothings_sources(api_host: str, cache_generation: int) -> FrozenSet[str]:
     """Fetch and cache one host's source list."""
     try:
         sources = await fetch_biothings_sources(api_host)
     except SourceDiscoveryError as exc:
-        _biothings_source_error_cache[api_host] = (
-            time.monotonic() + BIOTHINGS_SOURCE_DISCOVERY_ERROR_TTL,
-            exc,
-        )
+        if cache_generation == _biothings_source_cache_generation:
+            _biothings_source_error_cache[api_host] = (
+                time.monotonic() + BIOTHINGS_SOURCE_DISCOVERY_ERROR_TTL,
+                exc,
+            )
         raise
 
-    _biothings_source_error_cache.pop(api_host, None)
-    _biothings_source_cache[api_host] = (
-        time.monotonic() + BIOTHINGS_SOURCE_DISCOVERY_TTL,
-        sources,
-    )
+    if cache_generation == _biothings_source_cache_generation:
+        _biothings_source_error_cache.pop(api_host, None)
+        _biothings_source_cache[api_host] = (
+            time.monotonic() + BIOTHINGS_SOURCE_DISCOVERY_TTL,
+            sources,
+        )
     return sources
 
 
@@ -111,7 +114,12 @@ async def get_biothings_sources(api_host: str) -> FrozenSet[str]:
         _biothings_source_refreshes.pop(refresh_key, None)
         refresh_task = None
     if refresh_task is None:
-        refresh_task = asyncio.create_task(_refresh_biothings_sources(normalized_host))
+        refresh_task = asyncio.create_task(
+            _refresh_biothings_sources(
+                normalized_host,
+                _biothings_source_cache_generation,
+            )
+        )
         _biothings_source_refreshes[refresh_key] = refresh_task
 
         def discard_completed_refresh(completed_task):
@@ -126,10 +134,16 @@ async def get_biothings_sources(api_host: str) -> FrozenSet[str]:
 
 
 def clear_biothings_source_cache() -> None:
-    """Clear runtime source discovery state (primarily for deterministic tests)."""
+    """Clear runtime source discovery state and cancel any in-flight refreshes."""
+    global _biothings_source_cache_generation
+    _biothings_source_cache_generation += 1
+    refresh_tasks = list(_biothings_source_refreshes.values())
+    _biothings_source_refreshes.clear()
     _biothings_source_cache.clear()
     _biothings_source_error_cache.clear()
-    _biothings_source_refreshes.clear()
+    for refresh_task in refresh_tasks:
+        if not refresh_task.done() and not refresh_task.get_loop().is_closed():
+            refresh_task.cancel()
 
 
 def _current_event_loop_id() -> Union[int, None]:

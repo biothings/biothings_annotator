@@ -160,7 +160,7 @@
               },
               "publication0": {
                 "value": "PMID:12345678",
-                "summary": "Example <PMID> CURIE prefix (Elasticsearch backend only)"
+                "summary": "Example <PMID> CURIE prefix"
               }
             }
           },
