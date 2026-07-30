@@ -5,8 +5,14 @@ from copy import deepcopy
 
 import pytest
 
+from biothings_annotator.annotator import utils as annotator_utils
 from biothings_annotator.annotator.annotator import Annotator
-from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings
+from biothings_annotator.annotator.exceptions import SourceDiscoveryError
+from biothings_annotator.annotator.settings import (
+    ANNOTATOR_CLIENTS,
+    BIOLINK_PREFIX_to_BioThings,
+    SERVICE_PROVIDER_API_HOST,
+)
 from biothings_annotator.annotator.utils import parse_curie
 
 
@@ -65,29 +71,37 @@ def test_pmid_routes_to_standalone_pubmed_alias_without_stripping_prefix():
         "type": "pubmed",
         "scopes": ["_id"],
         "keep_prefix": True,
-        "query_backends": ("elasticsearch",),
     }
     assert parse_curie(PMID) == ("pubmed", PMID)
-    assert ANNOTATOR_CLIENTS["pubmed"] == {
-        "client": {"configuration": None, "endpoint": None, "instance": None},
-        "elasticsearch": {"index": "annotator-pubmed", "instance": None},
-        "fields": [
-            "pubmed.journal.name",
-            "pubmed.journal.abbr",
-            "pubmed.title",
-            "pubmed.vol",
-            "pubmed.iss",
-            "pubmed.pub_date",
-            "pubmed.abstract",
-        ],
-        "scopes": ["_id"],
+    pubmed_settings = ANNOTATOR_CLIENTS["pubmed"]
+    assert {
+        key: pubmed_settings["client"].get(key)
+        for key in ("configuration", "endpoint", "source")
+    } == {
+        "configuration": None,
+        "endpoint": "pubmed",
+        "source": "pubmed",
     }
+    assert pubmed_settings["elasticsearch"]["index"] == "annotator-pubmed"
+    assert pubmed_settings["fields"] == [
+        "pubmed.journal.name",
+        "pubmed.journal.abbr",
+        "pubmed.title",
+        "pubmed.vol",
+        "pubmed.iss",
+        "pubmed.pub_date",
+        "pubmed.abstract",
+    ]
+    assert pubmed_settings["scopes"] == ["_id"]
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_annotate_pmid_routes_to_elasticsearch_client(monkeypatch):
     client = FakePubMedClient()
+
+    async def fail_source_discovery(*args, **kwargs):
+        raise AssertionError("Elasticsearch must not perform BioThings source discovery")
 
     def get_fake_client(node_type, query_backend, api_host, elasticsearch_connection):
         del api_host, elasticsearch_connection
@@ -96,6 +110,10 @@ async def test_annotate_pmid_routes_to_elasticsearch_client(monkeypatch):
         return client
 
     monkeypatch.setattr("biothings_annotator.annotator.annotator.get_query_client", get_fake_client)
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        fail_source_discovery,
+    )
 
     result = await Annotator(query_backend="elasticsearch").annotate_curie(PMID)
 
@@ -121,9 +139,18 @@ async def test_annotate_pmid_routes_to_elasticsearch_client(monkeypatch):
 @pytest.mark.asyncio
 async def test_biothings_skip_matches_elasticsearch_notfound_result_shape(monkeypatch):
     client = FakePubMedClient(notfound=True)
+
+    async def sources_without_pubmed(api_host):
+        del api_host
+        return frozenset()
+
     monkeypatch.setattr(
         "biothings_annotator.annotator.annotator.get_query_client",
         lambda node_type, query_backend, api_host, elasticsearch_connection: client,
+    )
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        sources_without_pubmed,
     )
 
     elasticsearch_result = await Annotator(query_backend="elasticsearch").annotate_curie(INVALID_PMID)
@@ -162,13 +189,25 @@ async def test_biothings_skip_matches_elasticsearch_notfound_result_shape(monkey
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_biothings_backend_skips_pmid_without_querying_a_client(monkeypatch):
+    async def sources_without_pubmed(api_host):
+        del api_host
+        return frozenset()
+
     def fail_get_query_client(*args, **kwargs):
         raise AssertionError("BioThings backend must not attempt a PMID query")
 
+    def fail_get_client(*args, **kwargs):
+        raise AssertionError("Absent BioThings source must not construct a PMID client")
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        sources_without_pubmed,
+    )
     monkeypatch.setattr(
         "biothings_annotator.annotator.annotator.get_query_client",
         fail_get_query_client,
     )
+    monkeypatch.setattr("biothings_annotator.annotator.annotator.get_client", fail_get_client)
     annotator = Annotator(query_backend="biothings")
 
     assert await annotator.annotate_curie(PMID) == {PMID: SKIPPED_PUBMED_RESULT}
@@ -199,6 +238,294 @@ async def test_biothings_backend_skips_pmid_without_querying_a_client(monkeypatc
 
     assert await annotator.annotate_curie_list(["UNKNOWN:1"]) == {"UNKNOWN:1": {}}
     assert annotator.skipped_curie_prefixes == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_biothings_backend_queries_pmid_when_source_becomes_available(monkeypatch):
+    client = FakePubMedClient()
+    discovery_calls = []
+
+    async def sources_with_pubmed(api_host):
+        discovery_calls.append(api_host)
+        return frozenset({"pubmed"})
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        sources_with_pubmed,
+    )
+    monkeypatch.setattr("biothings_annotator.annotator.annotator.get_client", lambda node_type, api_host: client)
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: client,
+    )
+    annotator = Annotator(query_backend="biothings")
+
+    result = await annotator.annotate_curie_list([PMID, LIVE_PMID])
+    trapi_result = await annotator.annotate_trapi(
+        {
+            "message": {
+                "knowledge_graph": {
+                    "nodes": {
+                        PMID: {},
+                    }
+                }
+            }
+        }
+    )
+
+    expected_hits = {
+        query: [
+            {
+                "query": query,
+                "_id": query,
+                "pubmed": PUBMED_METADATA,
+            }
+        ]
+        for query in (PMID, LIVE_PMID)
+    }
+    assert result == expected_hits
+    assert trapi_result == {
+        PMID: {
+            "attributes": [
+                {
+                    "attribute_type_id": "biothings_annotations",
+                    "value": expected_hits[PMID],
+                }
+            ]
+        }
+    }
+    assert annotator.skipped_curie_prefixes == []
+    assert discovery_calls == [annotator.api_host, annotator.api_host]
+    assert client.querymany_calls == [
+        {
+            "query_list": [PMID, LIVE_PMID],
+            "scopes": ["_id"],
+            "fields": ANNOTATOR_CLIENTS["pubmed"]["fields"],
+        },
+        {
+            "query_list": [PMID],
+            "scopes": ["_id"],
+            "fields": ANNOTATOR_CLIENTS["pubmed"]["fields"],
+        },
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_biothings_pubmed_auto_activates_after_source_cache_refresh(monkeypatch):
+    client = FakePubMedClient()
+    clock = {"now": 100.0}
+    source_lists = [frozenset(), frozenset({"pubmed"})]
+    discovery_calls = []
+
+    async def fake_fetch_sources(api_host):
+        discovery_calls.append(api_host)
+        return source_lists.pop(0)
+
+    monkeypatch.setattr(annotator_utils, "fetch_biothings_sources", fake_fetch_sources)
+    monkeypatch.setattr(annotator_utils.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr("biothings_annotator.annotator.annotator.get_client", lambda node_type, api_host: client)
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: client,
+    )
+
+    annotator_utils.clear_biothings_source_cache()
+    try:
+        initial_result = await Annotator(query_backend="biothings").annotate_curie(PMID)
+        clock["now"] += annotator_utils.BIOTHINGS_SOURCE_DISCOVERY_TTL - 1
+        cached_result = await Annotator(query_backend="biothings").annotate_curie(PMID)
+        clock["now"] += 2
+        activated_result = await Annotator(query_backend="biothings").annotate_curie(PMID)
+    finally:
+        annotator_utils.clear_biothings_source_cache()
+
+    expected_annotation = [
+        {
+            "query": PMID,
+            "_id": PMID,
+            "pubmed": PUBMED_METADATA,
+        }
+    ]
+    assert initial_result == {PMID: SKIPPED_PUBMED_RESULT}
+    assert cached_result == {PMID: SKIPPED_PUBMED_RESULT}
+    assert activated_result == {PMID: expected_annotation}
+    assert discovery_calls == [
+        SERVICE_PROVIDER_API_HOST,
+        SERVICE_PROVIDER_API_HOST,
+    ]
+    assert client.querymany_calls == [
+        {
+            "query_list": [PMID],
+            "scopes": ["_id"],
+            "fields": ANNOTATOR_CLIENTS["pubmed"]["fields"],
+        }
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_available_biothings_pubmed_returns_normal_notfound_result(monkeypatch):
+    client = FakePubMedClient(notfound=True)
+
+    async def sources_with_pubmed(api_host):
+        del api_host
+        return frozenset({"pubmed"})
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        sources_with_pubmed,
+    )
+    monkeypatch.setattr("biothings_annotator.annotator.annotator.get_client", lambda node_type, api_host: client)
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: client,
+    )
+    annotator = Annotator(query_backend="biothings")
+
+    result = await annotator.annotate_curie(INVALID_PMID)
+
+    assert result == {INVALID_PMID: [{"query": INVALID_PMID, "notfound": True}]}
+    assert annotator.skipped_curie_prefixes == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("client_failure", ["returns_none", "raises"])
+async def test_listed_biothings_pubmed_with_unusable_client_is_not_reported_as_skipped(
+    monkeypatch,
+    client_failure,
+):
+    async def sources_with_pubmed(api_host):
+        del api_host
+        return frozenset({"pubmed"})
+
+    def fail_client_construction(node_type, api_host):
+        del node_type, api_host
+        if client_failure == "raises":
+            raise RuntimeError("client construction failed")
+        return None
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        sources_with_pubmed,
+    )
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_client",
+        fail_client_construction,
+    )
+    annotator = Annotator(query_backend="biothings")
+
+    with pytest.raises(SourceDiscoveryError) as exc_info:
+        await annotator.annotate_curie(PMID)
+
+    assert exc_info.value.source == "pubmed"
+    assert annotator.skipped_curie_prefixes == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_biothings_pubmed_discovery_failure_is_not_reported_as_skipped(monkeypatch):
+    async def fail_source_discovery(api_host):
+        del api_host
+        raise SourceDiscoveryError()
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        fail_source_discovery,
+    )
+    annotator = Annotator(query_backend="biothings")
+
+    with pytest.raises(SourceDiscoveryError) as exc_info:
+        await annotator.annotate_curie(PMID)
+
+    assert exc_info.value.source == "pubmed"
+    assert annotator.skipped_curie_prefixes == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_direct_biothings_query_skips_pubmed_only_while_source_is_absent(monkeypatch):
+    async def sources_without_pubmed(api_host):
+        assert api_host == SERVICE_PROVIDER_API_HOST
+        return frozenset({"gene", "chem", "disease", "phenotype"})
+
+    def fail_client_construction(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("An absent BioThings source must not be queried")
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        sources_without_pubmed,
+    )
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_client",
+        fail_client_construction,
+    )
+
+    result = await Annotator(query_backend="biothings").query_biothings(
+        node_type="pubmed",
+        query_list=[PMID],
+    )
+
+    assert result == {}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_direct_biothings_query_does_not_treat_discovery_failure_as_absence(monkeypatch):
+    async def fail_source_discovery(api_host):
+        del api_host
+        raise SourceDiscoveryError()
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        fail_source_discovery,
+    )
+
+    with pytest.raises(SourceDiscoveryError) as exc_info:
+        await Annotator(query_backend="biothings").query_biothings(
+            node_type="pubmed",
+            query_list=[PMID],
+        )
+
+    assert exc_info.value.source == "pubmed"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("client_failure", ["returns_none", "raises"])
+async def test_direct_biothings_query_does_not_skip_present_source_with_unusable_client(
+    monkeypatch,
+    client_failure,
+):
+    async def sources_with_pubmed(api_host):
+        del api_host
+        return frozenset({"pubmed"})
+
+    def fail_client_construction(node_type, api_host):
+        del node_type, api_host
+        if client_failure == "raises":
+            raise RuntimeError("client construction failed")
+        return None
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_biothings_sources",
+        sources_with_pubmed,
+    )
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_client",
+        fail_client_construction,
+    )
+
+    with pytest.raises(SourceDiscoveryError) as exc_info:
+        await Annotator(query_backend="biothings").query_biothings(
+            node_type="pubmed",
+            query_list=[PMID],
+        )
+
+    assert exc_info.value.source == "pubmed"
 
 
 @pytest.mark.unit

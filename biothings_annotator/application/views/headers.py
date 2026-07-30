@@ -12,4 +12,5 @@ def annotation_response_headers(default_headers: Dict[str, str], annotator: Any)
     skipped_prefixes = getattr(annotator, "skipped_curie_prefixes", ())
     if isinstance(skipped_prefixes, (list, tuple)) and skipped_prefixes:
         response_headers[SKIPPED_CURIE_PREFIXES_HEADER] = ", ".join(skipped_prefixes)
+        response_headers["Cache-Control"] = "no-store"
     return response_headers

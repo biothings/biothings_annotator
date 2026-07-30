@@ -11,7 +11,11 @@ from sanic.views import HTTPMethodView
 from sanic.request import Request
 
 from biothings_annotator.annotator import Annotator
-from biothings_annotator.annotator.exceptions import InvalidCurieError, InvalidQueryBackendError
+from biothings_annotator.annotator.exceptions import (
+    InvalidCurieError,
+    InvalidQueryBackendError,
+    SourceDiscoveryError,
+)
 from biothings_annotator.application.views.headers import annotation_response_headers
 
 logger = logging.getLogger(__name__)
@@ -60,6 +64,17 @@ class CurieView(HTTPMethodView):
             return sanic.json(annotated_node, headers=response_headers)
         except InvalidQueryBackendError:
             return _query_backend_configuration_error_response()
+        except SourceDiscoveryError as discovery_error:
+            return sanic.json(
+                {
+                    "input": curie,
+                    "endpoint": "/curie/",
+                    "message": discovery_error.message,
+                    "source": discovery_error.source,
+                },
+                status=503,
+                headers={"Cache-Control": "no-store"},
+            )
         except InvalidCurieError as curie_err:
             error_context = {
                 "input": curie,
@@ -131,6 +146,17 @@ class CurieView(HTTPMethodView):
             return sanic.json(annotated_node, headers=response_headers)
         except InvalidQueryBackendError:
             return _query_backend_configuration_error_response()
+        except SourceDiscoveryError as discovery_error:
+            return sanic.json(
+                {
+                    "input": curie_list,
+                    "endpoint": "/curie/",
+                    "message": discovery_error.message,
+                    "source": discovery_error.source,
+                },
+                status=503,
+                headers={"Cache-Control": "no-store"},
+            )
         except InvalidCurieError as curie_err:
             error_context = {
                 "input": curie_list,

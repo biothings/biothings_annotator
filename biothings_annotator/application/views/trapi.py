@@ -6,7 +6,11 @@ from sanic.views import HTTPMethodView
 from sanic.request import Request
 
 from biothings_annotator.annotator import Annotator
-from biothings_annotator.annotator.exceptions import InvalidQueryBackendError, TRAPIInputError
+from biothings_annotator.annotator.exceptions import (
+    InvalidQueryBackendError,
+    SourceDiscoveryError,
+    TRAPIInputError,
+)
 from biothings_annotator.application.views.headers import annotation_response_headers
 
 logger = logging.getLogger(__name__)
@@ -43,6 +47,17 @@ class TrapiView(HTTPMethodView):
                     "message": "Server query backend configuration is invalid.",
                 },
                 status=500,
+            )
+        except SourceDiscoveryError as discovery_error:
+            return sanic.json(
+                {
+                    "input": trapi_body,
+                    "endpoint": "/trapi/",
+                    "message": discovery_error.message,
+                    "source": discovery_error.source,
+                },
+                status=503,
+                headers={"Cache-Control": "no-store"},
             )
         except TRAPIInputError as trapi_input_error:
             error_context = {

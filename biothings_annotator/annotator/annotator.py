@@ -9,7 +9,12 @@ import os
 
 import biothings_client
 
-from biothings_annotator.annotator.exceptions import InvalidCurieError, InvalidQueryBackendError, TRAPIInputError
+from biothings_annotator.annotator.exceptions import (
+    InvalidCurieError,
+    InvalidQueryBackendError,
+    SourceDiscoveryError,
+    TRAPIInputError,
+)
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
     BIOLINK_PREFIX_to_BioThings,
@@ -24,6 +29,7 @@ from biothings_annotator.annotator.transformer import ResponseTransformer, load_
 from biothings_annotator.annotator.utils import (
     batched,
     get_client,
+    get_biothings_sources,
     get_dotfield_value,
     get_query_client,
     group_by_subfield,
@@ -46,6 +52,7 @@ class Annotator:
                 self.query_backend = deployment_backend
         self.elasticsearch_connection = os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION).strip()
         self.skipped_curie_prefixes: List[str] = []
+        self._source_availability: Dict[Tuple[str, str], bool] = {}
 
     @staticmethod
     def _normalize_query_backend(query_backend: str) -> str:
@@ -81,14 +88,44 @@ class Annotator:
                 return elasticsearch_scopes
         return prefix_settings.get("scopes") or self._default_scopes(node_type)
 
-    def _query_backend_supports_prefix(self, prefix: str) -> bool:
-        """Return whether a CURIE prefix is available through the active backend."""
+    async def _query_backend_supports_prefix(self, prefix: str) -> bool:
+        """Discover whether a CURIE prefix is available through the active backend."""
         supported_backends = BIOLINK_PREFIX_to_BioThings.get(prefix, {}).get("query_backends")
-        return supported_backends is None or self.query_backend in supported_backends
+        if supported_backends is not None and self.query_backend not in supported_backends:
+            return False
+        if self.query_backend != "biothings":
+            return True
+
+        node_type = BIOLINK_PREFIX_to_BioThings.get(prefix, {}).get("type")
+        client_settings = ANNOTATOR_CLIENTS.get(node_type, {}).get("client", {})
+        source = client_settings.get("source")
+        if not source:
+            return True
+
+        cache_key = (self.api_host.strip().rstrip("/"), source)
+        if cache_key not in self._source_availability:
+            try:
+                sources = await get_biothings_sources(self.api_host)
+            except SourceDiscoveryError as exc:
+                raise SourceDiscoveryError(source) from exc
+
+            if source not in sources:
+                self._source_availability[cache_key] = False
+            else:
+                try:
+                    client = get_client(node_type, self.api_host)
+                except Exception as exc:
+                    raise SourceDiscoveryError(source) from exc
+                if client is None:
+                    raise SourceDiscoveryError(source)
+                self._source_availability[cache_key] = True
+
+        return self._source_availability[cache_key]
 
     def _reset_skipped_curie_prefixes(self) -> None:
         """Reset backend-unavailable prefixes tracked for one annotation request."""
         self.skipped_curie_prefixes = []
+        self._source_availability = {}
 
     def _record_skipped_curie_prefix(self, prefix: str) -> None:
         """Track and log a known CURIE prefix unavailable through the active backend."""
@@ -119,8 +156,30 @@ class Annotator:
         """
         Query biothings client based on node_type for a list of ids
         """
-        client = get_client(node_type, self.api_host)
+        client_settings = ANNOTATOR_CLIENTS.get(node_type, {}).get("client", {})
+        source = client_settings.get("source")
+        if source:
+            try:
+                sources = await get_biothings_sources(self.api_host)
+            except SourceDiscoveryError as exc:
+                raise SourceDiscoveryError(source) from exc
+            if source not in sources:
+                logger.warning(
+                    "BioThings source %s is not currently available. %s annotations are skipped.",
+                    source,
+                    node_type,
+                )
+                return {}
+
+        try:
+            client = get_client(node_type, self.api_host)
+        except Exception as exc:
+            if source:
+                raise SourceDiscoveryError(source) from exc
+            raise
         if not isinstance(client, biothings_client.AsyncBiothingClient):
+            if source:
+                raise SourceDiscoveryError(source)
             logger.error("Failed to get the biothings client for %s type. This type is skipped.", node_type)
             return {}
 
@@ -257,7 +316,7 @@ class Annotator:
             raise InvalidCurieError(curie)
 
         prefix = curie.split(":", 1)[0]
-        if not self._query_backend_supports_prefix(prefix):
+        if not await self._query_backend_supports_prefix(prefix):
             self._record_skipped_curie_prefix(prefix)
             return {curie: self._backend_skip_result(curie, node_type)}
 
@@ -342,7 +401,7 @@ class Annotator:
             node_d[node_id] = {}  # create a placeholder for each curie id
             node_type = parse_curie(node_id, return_type=True, return_id=False)
             prefix = node_id.split(":", 1)[0]
-            if node_type and self._query_backend_supports_prefix(prefix):
+            if node_type and await self._query_backend_supports_prefix(prefix):
                 if node_type not in node_list_by_type:
                     node_list_by_type[node_type] = [node_id]
                 else:
@@ -398,7 +457,7 @@ class Annotator:
         for node_id in node_d:
             node_type = parse_curie(node_id, return_type=True, return_id=False)
             prefix = node_id.split(":", 1)[0]
-            if node_type and self._query_backend_supports_prefix(prefix):
+            if node_type and await self._query_backend_supports_prefix(prefix):
                 if node_type not in node_list_by_type:
                     node_list_by_type[node_type] = [node_id]
                 else:

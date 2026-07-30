@@ -211,10 +211,16 @@ annotation-hub [`pubmed_metadata`](https://github.com/biothings/annotation-hub/t
 source is built and indexed there, the default annotation response includes its `pubmed` object
 (journal, title, volume, issue, publication date, and abstract). Like the other first-class
 biomedical sources, PubMed has its own annotator client configuration rather than being merged into
-`annotator_extra`. It is not currently available through the `biothings` query backend, which
-returns a one-item, not-found-shaped skipped result for `PMID` CURIEs without making a downstream
-request and sets `X-Skipped-Curie-Prefixes: PMID`. The `notfound` field preserves the normal result
-shape, while `skipped` indicates that the selected backend was not queried:
+`annotator_extra`.
+
+For the `biothings` query backend, the annotator discovers available sources from the API's
+`/api/list` endpoint using a short-lived, per-host cache. Discovery requests revalidate intermediary
+caches, concurrent refreshes share one request, and discovery failures use a brief retry backoff.
+While `pubmed` is absent from that authoritative list, PMID requests return a one-item,
+not-found-shaped skipped result without making a downstream PubMed annotation query and set
+`X-Skipped-Curie-Prefixes: PMID`. Skipped responses use `Cache-Control: no-store`. The `notfound`
+field preserves the normal result shape, while `skipped` indicates that the PubMed annotation lookup
+was not made:
 
 ```json
 {
@@ -230,6 +236,12 @@ shape, while `skipped` indicates that the selected backend was not queried:
   ]
 }
 ```
+
+The future BioThings endpoint is already configured as `/pubmed`. Once `pubmed` appears in the
+source list and its metadata is available, the annotator automatically constructs that client and
+queries it without another code or configuration change. A source-discovery timeout, invalid
+response, or server error returns HTTP 503 with `Cache-Control: no-store` rather than incorrectly
+reporting a skip.
 
 ```shell
 curl 'http://localhost:9000/curie/PMID:12345678?query_backend=elasticsearch'
