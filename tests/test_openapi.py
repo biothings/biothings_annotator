@@ -84,6 +84,77 @@ def test_query_backend_override_is_documented_for_all_query_operations():
 
 
 @pytest.mark.unit
+def test_all_document_metadata_fast_paths_are_documented():
+    with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
+        specification = json.load(openapi_file)
+
+    publication_paths = specification["paths"]
+    assert set(publication_paths["/publications"]) == {"get", "post"}
+    assert set(publication_paths["/publications/{publication_id}"]) == {"get"}
+
+    legacy_get = publication_paths["/publications"]["get"]
+    publication_get = publication_paths["/publications/{publication_id}"]["get"]
+    publication_post = publication_paths["/publications"]["post"]
+
+    assert legacy_get["operationId"] == "get~legacy_document_metadata_endpoint"
+    pubids_parameter = next(parameter for parameter in legacy_get["parameters"] if parameter.get("name") == "pubids")
+    assert pubids_parameter["in"] == "query"
+    assert pubids_parameter["required"] is True
+    assert pubids_parameter["style"] == "form"
+    assert pubids_parameter["explode"] is False
+    assert pubids_parameter["schema"] == {"$ref": "#/components/schemas/PublicationIdList"}
+
+    assert publication_get["operationId"] == "get~document_metadata_endpoint"
+    publication_id_parameter = next(
+        parameter for parameter in publication_get["parameters"] if parameter.get("name") == "publication_id"
+    )
+    assert publication_id_parameter["in"] == "path"
+    assert publication_id_parameter["required"] is True
+    assert publication_id_parameter["schema"] == {"$ref": "#/components/schemas/PublicationId"}
+
+    assert publication_post["operationId"] == "post~batch_document_metadata_endpoint"
+    assert publication_post["requestBody"]["required"] is True
+    post_json = publication_post["requestBody"]["content"]["application/json"]
+    assert post_json["schema"] == {"$ref": "#/components/schemas/DocumentMetadataRequest"}
+    assert set(post_json["examples"]) == {"object", "array"}
+
+    request_id_reference = {"$ref": "#/components/parameters/DocumentMetadataRequestId"}
+    for operation in (legacy_get, publication_get, publication_post):
+        assert "multi-get" in operation["description"]
+        assert request_id_reference in operation["parameters"]
+        assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/DocumentMetadataResponse"
+        }
+        assert set(operation["responses"]) == {"200", "400", "500"}
+
+    publication_id_schema = specification["components"]["schemas"]["PublicationId"]
+    assert publication_id_schema["pattern"] == "^PMID:[1-9][0-9]*$"
+
+    publication_id_list = specification["components"]["schemas"]["PublicationIdList"]
+    assert publication_id_list["minItems"] == 1
+    assert publication_id_list["maxItems"] == 100
+    assert publication_id_list["items"] == {"$ref": "#/components/schemas/PublicationId"}
+
+    request_schema = specification["components"]["schemas"]["DocumentMetadataRequest"]
+    assert request_schema["oneOf"][0] == {"$ref": "#/components/schemas/PublicationIdList"}
+    object_request = request_schema["oneOf"][1]
+    assert object_request["required"] == ["ids"]
+    assert object_request["properties"]["ids"] == {"$ref": "#/components/schemas/PublicationIdList"}
+    assert object_request["properties"]["request_id"]["type"] == "string"
+
+    request_id_parameter = specification["components"]["parameters"]["DocumentMetadataRequestId"]
+    assert request_id_parameter["name"] == "request_id"
+    assert request_id_parameter["in"] == "query"
+    assert request_id_parameter["required"] is False
+
+    response_schema = specification["components"]["schemas"]["DocumentMetadataResponse"]
+    assert response_schema["required"] == ["_meta", "results", "not_found"]
+    assert response_schema["properties"]["results"]["additionalProperties"] == {
+        "$ref": "#/components/schemas/PublicationMetadata"
+    }
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("config_path", [DEFAULT_CONFIG_PATH, DEPLOY_CONFIG_PATH])
 def test_cors_configuration_uses_supported_keys(config_path):
     with config_path.open(encoding="utf-8") as config_file:

@@ -247,6 +247,46 @@ reporting a skip.
 curl 'http://localhost:9000/curie/PMID:12345678?query_backend=elasticsearch'
 ```
 
+##### Dedicated document metadata endpoint
+
+The dedicated publications API is the PubMed-only fast path requested by the
+[Core Components Working Group](https://github.com/NCATSTranslator/Core-Components-Working-Group/issues/15).
+It supports the legacy batch query contract, a path-based single-publication lookup, and a JSON batch
+contract:
+
+```shell
+# Legacy-compatible batch lookup
+curl 'http://localhost:9000/publications?pubids=PMID:30690000,PMID:82374&request_id=request-123'
+
+# Single-publication lookup
+curl 'http://localhost:9000/publications/PMID:30690000?request_id=request-123'
+
+# JSON batch lookup
+curl -X POST 'http://localhost:9000/publications' \
+  -H 'Content-Type: application/json' \
+  -d '{"ids":["PMID:30690000","PMID:82374"],"request_id":"request-123"}'
+```
+
+Both batch forms accept at most 100 identifiers; the path form looks up one identifier. An optional
+`request_id` is round-tripped in the response metadata. For `POST`, it can be supplied in the JSON
+object as shown above.
+
+The response contains legacy-compatible `_meta`, `results`, and `not_found` sections. Missing source
+values are returned as empty strings, and the indexed ISO publication date is split into year, month,
+and day fields.
+
+These routes are deliberately separate from the generic annotation pipeline. They always read the
+`annotator-pubmed` Elasticsearch alias, retrieve only the `pubmed` source object, and use one exact-ID
+Elasticsearch `_mget` per request, including a complete batch of up to 100 identifiers. They do not
+perform BioThings source discovery, CURIE grouping, extra annotation lookup, or per-request backend
+selection. The request has a two-second total backend deadline by default (configurable with
+`DOCUMENT_METADATA_REQUEST_TIMEOUT`) so a degraded Elasticsearch service fails quickly. The behavioral
+performance test verifies that a 100-ID request remains one backend request; the deployment still needs
+a mixed-load benchmark to verify the 150 ms p90 service objective.
+
+The current PubMed index contains only `PMID:<digits>` document IDs. PMCID and DOI queries require an
+ingestion/index update that stores alternate identifiers before they can use this exact-ID fast path.
+
 With the CI Elasticsearch service forwarded to `localhost:9200`, run the opt-in live check with:
 
 ```shell
