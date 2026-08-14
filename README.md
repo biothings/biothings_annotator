@@ -261,31 +261,49 @@ curl 'http://localhost:9000/publications?pubids=PMID:30690000,PMID:82374&request
 # Single-publication lookup
 curl 'http://localhost:9000/publications/PMID:30690000?request_id=request-123'
 
-# JSON batch lookup
+# JSON batch lookup, mixing identifier types
 curl -X POST 'http://localhost:9000/publications' \
   -H 'Content-Type: application/json' \
-  -d '{"ids":["PMID:30690000","PMID:82374"],"request_id":"request-123"}'
+  -d '{"ids":["PMID:30690000","PMC:PMC1904490","doi:10.1242/jcs.03153"],"request_id":"request-123"}'
 ```
 
 Both batch forms accept at most 100 identifiers; the path form looks up one identifier. An optional
 `request_id` is round-tripped in the response metadata. For `POST`, it can be supplied in the JSON
 object as shown above.
 
-The response contains legacy-compatible `_meta`, `results`, and `not_found` sections. Missing source
-values are returned as empty strings, and the indexed ISO publication date is split into year, month,
-and day fields.
+The response contains legacy-compatible `_meta`, `results`, and `not_found` sections, keyed by the
+identifier as submitted. Missing source values are returned as empty strings. The publication date is
+projected from PubMed's verbatim `pubdate_raw` when the index carries it, so month ranges survive as
+CCWG#15 specifies (`"pub_month": "Sep-Dec"` for `PMID:8000234`); otherwise it falls back to splitting
+the indexed ISO `pub_date` into year, month, and day.
+
+##### Accepted identifier types
+
+`PMID`, `PMC`, and `doi` are accepted. Prefix casing is matched case-insensitively, and a PMCID keeps
+PubMed's doubled form — `PMC:PMC1904490`, not `PMC:1904490`. Two shape constraints follow from the
+transport rather than the service:
+
+- A DOI suffix contains slashes, so the path form relies on a `path` route converter to avoid
+  truncating at the first segment.
+- A DOI suffix may itself contain a comma, which the legacy comma-separated `pubids` form cannot
+  express. Use the JSON body for those identifiers.
 
 These routes are deliberately separate from the generic annotation pipeline. They always read the
-`annotator-pubmed` Elasticsearch alias, retrieve only the `pubmed` source object, and use one exact-ID
-Elasticsearch `_mget` per request, including a complete batch of up to 100 identifiers. They do not
+`annotator-pubmed` Elasticsearch alias and retrieve only the `pubmed` source object. They do not
 perform BioThings source discovery, CURIE grouping, extra annotation lookup, or per-request backend
 selection. The request has a two-second total backend deadline by default (configurable with
-`DOCUMENT_METADATA_REQUEST_TIMEOUT`) so a degraded Elasticsearch service fails quickly. The behavioral
-performance test verifies that a 100-ID request remains one backend request; the deployment still needs
-a mixed-load benchmark to verify the 150 ms p90 service objective.
+`DOCUMENT_METADATA_REQUEST_TIMEOUT`) so a degraded Elasticsearch service fails quickly.
 
-The current PubMed index contains only `PMID:<digits>` document IDs. PMCID and DOI queries require an
-ingestion/index update that stores alternate identifiers before they can use this exact-ID fast path.
+PMIDs are the document `_id`, so they resolve through one exact-ID Elasticsearch `_mget` for the whole
+batch, including a complete batch of 100. PMCID and DOI resolve against `pubmed.identifiers` instead,
+which costs one `_msearch` entry per identifier, so a PMID-only request stays on the single-request fast
+path and only mixed requests pay for the scoped lookup. The behavioral performance test verifies that a
+100-PMID request remains one backend request; the deployment still needs a mixed-load benchmark to
+verify the 150 ms p90 service objective.
+
+The current PubMed index contains only `PMID:<digits>` document IDs and no `pubmed.identifiers` field,
+so PMCID and DOI lookups return `not_found` until the index is rebuilt. That is the response CCWG#15
+specifies for an identifier the service does not have.
 
 With the CI Elasticsearch service forwarded to `localhost:9200`, run the opt-in live check with:
 

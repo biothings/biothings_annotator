@@ -1,7 +1,13 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
+
+from biothings_annotator.application.views.document_metadata import (
+    DocumentMetadataRequestError,
+    validate_publication_ids,
+)
 
 
 OPENAPI_PATH = Path(__file__).parents[1] / "biothings_annotator" / "webapp" / "openapi.json"
@@ -128,7 +134,41 @@ def test_all_document_metadata_fast_paths_are_documented():
         assert set(operation["responses"]) == {"200", "400", "500"}
 
     publication_id_schema = specification["components"]["schemas"]["PublicationId"]
-    assert publication_id_schema["pattern"] == "^PMID:[1-9][0-9]*$"
+    documented_pattern = re.compile(publication_id_schema["pattern"])
+    for accepted in ("PMID:30690000", "PMC:PMC1904490", "doi:10.1242/jcs.03153", "DOI:10.1242/JCS.03153"):
+        assert documented_pattern.fullmatch(accepted), accepted
+    for rejected in ("PMID:0", "PMC:12345", "doi:notadoi", "CHEBI:15377"):
+        assert not documented_pattern.fullmatch(rejected), rejected
+
+
+@pytest.mark.unit
+def test_documented_publication_id_pattern_matches_the_served_validation():
+    """A client validating against the spec must not reject IDs the service accepts."""
+    with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
+        specification = json.load(openapi_file)
+
+    documented_pattern = re.compile(specification["components"]["schemas"]["PublicationId"]["pattern"])
+    candidates = (
+        "PMID:30690000",
+        "PMID:0",
+        "PMID:not-a-number",
+        "PMC:PMC1904490",
+        "pmc:pmc1904490",
+        "PMC:12345",
+        "doi:10.1242/jcs.03153",
+        "DOI:10.1242/JCS.03153",
+        "doi:notadoi",
+        "CHEBI:15377",
+    )
+
+    for candidate in candidates:
+        try:
+            validate_publication_ids([candidate])
+        except DocumentMetadataRequestError:
+            served = False
+        else:
+            served = True
+        assert bool(documented_pattern.fullmatch(candidate)) is served, candidate
 
     publication_id_list = specification["components"]["schemas"]["PublicationIdList"]
     assert publication_id_list["minItems"] == 1

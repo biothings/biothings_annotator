@@ -48,9 +48,11 @@ def build_routes() -> List[Dict]:
         "methods": ["GET", "POST"],
     }
 
+    # The path converter is required rather than cosmetic: a DOI suffix contains
+    # slashes, so <publication_id:str> would only ever match its first segment.
     document_metadata_route_get = {
         "handler": DocumentMetadataView.as_view(),
-        "uri": r"/publications/<publication_id:str>",
+        "uri": r"/publications/<publication_id:path>",
         "name": "document_metadata_endpoint",
         "methods": ["GET"],
     }

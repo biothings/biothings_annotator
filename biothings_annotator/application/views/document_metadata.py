@@ -18,15 +18,34 @@ from biothings_annotator.annotator.document_metadata import DocumentMetadataServ
 logger = logging.getLogger(__name__)
 
 MAX_PUBLICATION_IDS = 100
-PMID_PATTERN = re.compile(r"^PMID:[1-9]\d*$")
+# The index stores the PMID as the document _id and carries the DOI and PMCID in
+# pubmed.identifiers. PMCID values keep PubMed's doubled form, PMC:PMC1904490
+# rather than PMC:1904490. Prefix casing is accepted loosely because the index
+# normalizes identifiers case-insensitively, so a mixed-case submission still
+# resolves; the submitted form is what keys the response.
+PUBLICATION_ID_PATTERNS = (
+    re.compile(r"PMID:[1-9]\d*", re.IGNORECASE),
+    re.compile(r"PMC:PMC\d+", re.IGNORECASE),
+    re.compile(r"doi:10\.\d+/\S+", re.IGNORECASE),
+)
+SUPPORTED_PUBLICATION_ID_MESSAGE = (
+    "Only PMID, PMC, and doi identifiers are supported; expected values like "
+    "PMID:30690000, PMC:PMC1904490, or doi:10.1242/jcs.03153."
+)
 
 
 class DocumentMetadataRequestError(ValueError):
     """The publications request cannot be served as submitted."""
 
 
+def _is_supported_publication_id(publication_id: object) -> bool:
+    return isinstance(publication_id, str) and any(
+        pattern.fullmatch(publication_id) for pattern in PUBLICATION_ID_PATTERNS
+    )
+
+
 def validate_publication_ids(value: object) -> List[str]:
-    """Validate, deduplicate, and preserve the order of requested PubMed IDs."""
+    """Validate, deduplicate, and preserve the order of requested publication IDs."""
     if not isinstance(value, (list, tuple)) or not value:
         raise DocumentMetadataRequestError("At least one publication ID is required.")
 
@@ -34,15 +53,8 @@ def validate_publication_ids(value: object) -> List[str]:
     if len(publication_ids) > MAX_PUBLICATION_IDS:
         raise DocumentMetadataRequestError(f"A maximum of {MAX_PUBLICATION_IDS} publication IDs is allowed.")
 
-    invalid_ids = [
-        publication_id
-        for publication_id in publication_ids
-        if not isinstance(publication_id, str) or not PMID_PATTERN.fullmatch(publication_id)
-    ]
-    if invalid_ids:
-        raise DocumentMetadataRequestError(
-            "Only PMID identifiers are available in the current index; expected values like PMID:30690000."
-        )
+    if not all(_is_supported_publication_id(publication_id) for publication_id in publication_ids):
+        raise DocumentMetadataRequestError(SUPPORTED_PUBLICATION_ID_MESSAGE)
 
     return list(dict.fromkeys(publication_ids))
 
