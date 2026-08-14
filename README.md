@@ -303,15 +303,48 @@ verify the 150 ms p90 service objective.
 
 The current PubMed index contains only `PMID:<digits>` document IDs and no `pubmed.identifiers` field,
 so PMCID and DOI lookups return `not_found` until the index is rebuilt. That is the response CCWG#15
-specifies for an identifier the service does not have.
+specifies for an identifier the service does not have, but it is indistinguishable from a genuinely
+absent paper, so the index shape is checked separately — see
+[Verifying the PubMed index shape](#verifying-the-pubmed-index-shape).
 
-With the CI Elasticsearch service forwarded to `localhost:9200`, run the opt-in live check with:
+##### Verifying the PubMed index shape
+
+`DocumentMetadataService.check_index_fields()` probes the live mapping through the alias and reports
+which of the fields the API depends on actually exist:
+
+```json
+{
+  "index": "annotator-pubmed",
+  "fields": {"pubmed.identifiers": false, "pubmed.pubdate_raw": false},
+  "missing_required_fields": ["pubmed.identifiers"],
+  "multi_identifier_lookup": false,
+  "verbatim_publication_date": false
+}
+```
+
+It reports rather than raises. `pubmed.identifiers` is required for DOI and PMCID lookup to work at
+all, so its absence sets `multi_identifier_lookup` to `false`; `pubmed.pubdate_raw` only changes the
+precision of the projected date and has a working fallback, so it is informational. A fatal startup
+assertion would be wrong here, because refusing to boot over a missing field would also take down the
+PMID fast path that does work.
+
+The probe reads the mapping rather than sampling documents, which is what separates "this field is not
+in the index" from "this paper is not in the index" — a DOI query against an unmapped field returns
+zero hits and no error. It stays useful after rollout: it catches a later reindex that drops the field,
+and an alias left pointing at a stale index.
+
+With the CI Elasticsearch service forwarded to `localhost:9200`, run the opt-in live checks with:
 
 ```shell
 RUN_PUBMED_ES_INTEGRATION=1 \
 PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION=ci_local_forward \
-python -m pytest -q tests/test_pubmed.py -m integration
+python -m pytest -q tests/test_pubmed.py tests/test_document_metadata.py -m integration
 ```
+
+The document metadata live checks assert the index shape, resolution by every identifier type,
+case-insensitive matching, and an upper bound of three identifiers per record. That bound is a bad-export
+guard: pubmed2db PR #7 limits a record to its own identifiers, so a record carrying hundreds means the
+export regressed and is pulling in cited references' DOIs.
 
 
 ### Builds

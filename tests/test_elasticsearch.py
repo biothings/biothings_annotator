@@ -191,6 +191,64 @@ async def test_elasticsearch_querymany_formats_biothings_style_hits():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_elasticsearch_field_capabilities_reports_only_mapped_fields():
+    """Absent fields are omitted by Elasticsearch, which is the signal callers read."""
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "query": dict(request.url.params),
+            }
+        )
+        return httpx.Response(
+            200,
+            json={
+                "indices": ["pubmed_20260724"],
+                "fields": {"pubmed.identifiers": {"keyword": {"type": "keyword", "searchable": True}}},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+        capabilities = await client.field_capabilities(["pubmed.identifiers", "pubmed.pubdate_raw"])
+
+    assert requests == [
+        {
+            "method": "GET",
+            "path": "/annotator-pubmed/_field_caps",
+            "query": {"fields": "pubmed.identifiers,pubmed.pubdate_raw"},
+        }
+    ]
+    assert set(capabilities) == {"pubmed.identifiers"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_elasticsearch_field_capabilities_skips_the_request_without_fields():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("An empty field list must not reach Elasticsearch")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+
+        assert await client.field_capabilities([]) == {}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_elasticsearch_mget_fetches_one_hundred_exact_ids_in_one_request():
     requests = []
     query_ids = [f"PMID:{index}" for index in range(100)]

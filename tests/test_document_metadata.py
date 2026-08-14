@@ -1,6 +1,7 @@
 """Tests for the dedicated PubMed document metadata fast path."""
 
 import asyncio
+import os
 import re
 
 import pytest
@@ -10,6 +11,8 @@ from biothings_annotator.annotator.document_metadata import (
     DocumentMetadataService,
     format_publication_metadata,
 )
+from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS
+from biothings_annotator.annotator.utils import get_elasticsearch_client
 from biothings_annotator.application.views.document_metadata import (
     SUPPORTED_PUBLICATION_ID_MESSAGE,
     validate_publication_ids,
@@ -243,6 +246,86 @@ async def test_document_metadata_service_skips_the_scoped_lookup_for_pmid_only_r
     assert calls == ["mget"]
     assert len(results) == 100
     assert not_found == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "capability_fields, expected",
+    [
+        (
+            ["pubmed.identifiers", "pubmed.pubdate_raw"],
+            {"multi_identifier_lookup": True, "verbatim_publication_date": True, "missing_required_fields": []},
+        ),
+        (
+            ["pubmed.identifiers"],
+            {"multi_identifier_lookup": True, "verbatim_publication_date": False, "missing_required_fields": []},
+        ),
+        # The shape of the index before the identifiers reindex: DOI and PMCID
+        # lookups silently return nothing, which is what makes the probe necessary.
+        (
+            ["pubmed.pubdate_raw"],
+            {
+                "multi_identifier_lookup": False,
+                "verbatim_publication_date": True,
+                "missing_required_fields": ["pubmed.identifiers"],
+            },
+        ),
+        (
+            [],
+            {
+                "multi_identifier_lookup": False,
+                "verbatim_publication_date": False,
+                "missing_required_fields": ["pubmed.identifiers"],
+            },
+        ),
+    ],
+)
+async def test_check_index_fields_reports_multi_identifier_capability(monkeypatch, capability_fields, expected):
+    class FakePubMedClient:
+        index = "annotator-pubmed"
+
+        async def field_capabilities(self, fields):
+            # Elasticsearch omits absent fields from the field-caps response.
+            return {field: {"keyword": {}} for field in fields if field in capability_fields}
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: FakePubMedClient(),
+    )
+
+    report = await DocumentMetadataService(elasticsearch_connection="ci").check_index_fields()
+
+    assert report["index"] == "annotator-pubmed"
+    assert report["multi_identifier_lookup"] is expected["multi_identifier_lookup"]
+    assert report["verbatim_publication_date"] is expected["verbatim_publication_date"]
+    assert report["missing_required_fields"] == expected["missing_required_fields"]
+    assert report["fields"] == {
+        "pubmed.identifiers": "pubmed.identifiers" in capability_fields,
+        "pubmed.pubdate_raw": "pubmed.pubdate_raw" in capability_fields,
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_check_index_fields_does_not_raise_when_the_field_is_absent(monkeypatch):
+    """The field is legitimately absent until the reindex, so this must report, not fail."""
+
+    class FakePubMedClient:
+        index = "annotator-pubmed"
+
+        async def field_capabilities(self, fields):
+            del fields
+            return {}
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: FakePubMedClient(),
+    )
+
+    report = await DocumentMetadataService(elasticsearch_connection="ci").check_index_fields()
+
+    assert report["multi_identifier_lookup"] is False
 
 
 @pytest.mark.unit
@@ -580,3 +663,138 @@ async def test_publication_endpoints_return_sanitized_server_error(
     }
     assert "sensitive" not in response.text
 
+
+LIVE_PMID = "PMID:16954148"
+LIVE_PMID_IDENTIFIERS = ["PMID:16954148", "PMC:PMC1904490", "doi:10.1242/jcs.03153"]
+# Real values verified against NCBI upstream. The first two are CCWG#15's own
+# response-spec examples.
+LIVE_DATE_EXPECTATIONS = {
+    "PMID:30690000": ("2019", "Mar", "15"),
+    "PMID:8000234": ("1994", "Sep-Dec", ""),
+    "PMID:10188493": ("1998", "Dec-1999 Jan", ""),
+}
+# pubmed2db PR #7's xrefs fix bounds a record at its own identifiers. A record
+# carrying hundreds means the export regressed and is pulling in cited
+# references' DOIs, which is a bad export rather than a code defect.
+MAX_IDENTIFIERS_PER_RECORD = 3
+
+
+@pytest.fixture
+def live_pubmed_client():
+    """Drop the cached client so each test builds one bound to its own event loop.
+
+    get_elasticsearch_client memoizes the client on ANNOTATOR_CLIENTS, and the
+    httpx client it owns is bound to whichever loop created it. That is correct
+    for the server's single long-lived loop but not for a per-test loop.
+    """
+    ANNOTATOR_CLIENTS["pubmed"]["elasticsearch"]["instance"] = None
+    yield
+    ANNOTATOR_CLIENTS["pubmed"]["elasticsearch"]["instance"] = None
+
+
+def _live_service() -> DocumentMetadataService:
+    return DocumentMetadataService(
+        elasticsearch_connection=os.environ.get(
+            "PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION",
+            "ci_local_forward",
+        ),
+        request_timeout=float(os.environ.get("PUBMED_INTEGRATION_REQUEST_TIMEOUT", "30")),
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.environ.get("RUN_PUBMED_ES_INTEGRATION") != "1",
+    reason="Set RUN_PUBMED_ES_INTEGRATION=1 to query the live PubMed Elasticsearch alias.",
+)
+async def test_live_index_exposes_the_multi_identifier_field(live_pubmed_client):
+    """Fail loudly when the alias cannot support DOI and PMCID lookup at all.
+
+    A zero-hit DOI lookup looks identical to an absent paper, so this asserts the
+    mapping directly rather than inferring capability from a query result.
+    """
+    report = await _live_service().check_index_fields()
+
+    assert report["multi_identifier_lookup"], (
+        f"{report['index']} is missing {report['missing_required_fields']}; "
+        "DOI and PMCID lookups will report not_found for every identifier"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.environ.get("RUN_PUBMED_ES_INTEGRATION") != "1",
+    reason="Set RUN_PUBMED_ES_INTEGRATION=1 to query the live PubMed Elasticsearch alias.",
+)
+async def test_live_index_resolves_a_publication_by_every_identifier_type(live_pubmed_client):
+    service = _live_service()
+
+    results, not_found = await service.get_publications(LIVE_PMID_IDENTIFIERS)
+
+    assert not_found == []
+    # Every identifier must resolve to the same publication, keyed as submitted.
+    titles = {results[identifier]["article_title"] for identifier in LIVE_PMID_IDENTIFIERS}
+    assert len(titles) == 1
+    assert titles.pop()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.environ.get("RUN_PUBMED_ES_INTEGRATION") != "1",
+    reason="Set RUN_PUBMED_ES_INTEGRATION=1 to query the live PubMed Elasticsearch alias.",
+)
+@pytest.mark.parametrize(
+    "identifier",
+    ["DOI:10.1242/JCS.03153", "doi:10.1242/JCS.03153", "pmc:PMC1904490"],
+)
+async def test_live_index_matches_identifiers_case_insensitively(live_pubmed_client, identifier):
+    results, not_found = await _live_service().get_publications([identifier])
+
+    assert not_found == []
+    assert results[identifier]["article_title"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.environ.get("RUN_PUBMED_ES_INTEGRATION") != "1",
+    reason="Set RUN_PUBMED_ES_INTEGRATION=1 to query the live PubMed Elasticsearch alias.",
+)
+async def test_live_index_bounds_identifier_cardinality(live_pubmed_client):
+    """A record with many identifiers means the export predates pubmed2db PR #7."""
+    client = get_elasticsearch_client(
+        "pubmed",
+        os.environ.get("PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION", "ci_local_forward"),
+    )
+
+    hits = await client.mget([LIVE_PMID], fields=["pubmed.identifiers"])
+    identifiers = hits[0]["pubmed"]["identifiers"]
+
+    assert sorted(identifiers) == sorted(LIVE_PMID_IDENTIFIERS)
+    assert len(identifiers) <= MAX_IDENTIFIERS_PER_RECORD
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.environ.get("RUN_PUBMED_ES_INTEGRATION") != "1",
+    reason="Set RUN_PUBMED_ES_INTEGRATION=1 to query the live PubMed Elasticsearch alias.",
+)
+async def test_live_index_projects_verbatim_publication_dates(live_pubmed_client):
+    """Ranges must survive projection, which only pubdate_raw can express."""
+    service = _live_service()
+    report = await service.check_index_fields()
+    if not report["verbatim_publication_date"]:
+        pytest.skip("The export does not carry pubmed.pubdate_raw yet (pubmed2db PR #17).")
+
+    results, not_found = await service.get_publications(list(LIVE_DATE_EXPECTATIONS))
+
+    assert not_found == []
+    projected = {
+        pmid: (result["pub_year"], result["pub_month"], result["pub_day"])
+        for pmid, result in results.items()
+    }
+    assert projected == LIVE_DATE_EXPECTATIONS

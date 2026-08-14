@@ -11,6 +11,11 @@ from biothings_annotator.annotator.utils import get_elasticsearch_client
 PUBMED_SOURCE_FIELDS = ["pubmed"]
 PUBMED_IDENTIFIER_SCOPES = ["pubmed.identifiers"]
 PMID_PREFIX = "PMID"
+# Multi-identifier lookup cannot work at all without the identifiers field, so
+# its absence is a capability gap. pubdate_raw only changes how precisely a date
+# is projected and has a working fallback, so its absence is informational.
+PUBMED_REQUIRED_INDEX_FIELDS = ("pubmed.identifiers",)
+PUBMED_OPTIONAL_INDEX_FIELDS = ("pubmed.pubdate_raw",)
 # Used only by the numeric pub_date fallback. The verbatim pubdate_raw path
 # already carries PubMed's own three-letter abbreviations.
 MONTH_ABBREVIATIONS = ("", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -186,3 +191,32 @@ class DocumentMetadataService:
                 hits_by_id.setdefault(hit.get("query"), hit)
         return hits_by_id
 
+    async def check_index_fields(self) -> Dict[str, object]:
+        """Report whether the live index mapping can support multi-identifier lookup.
+
+        A DOI or PMCID lookup against an index without ``pubmed.identifiers``
+        returns zero hits and no error, so on its own it is indistinguishable from
+        a genuinely absent paper. Probing the mapping separates the two. It stays
+        useful after the reindex ships, because it also catches a later reindex
+        that drops the field or an alias repointed at a stale index.
+
+        This reports rather than raises: the field is legitimately absent until
+        the reindex happens, so a fatal check here would refuse to serve the PMID
+        fast path that does work.
+        """
+        client = get_elasticsearch_client("pubmed", self.elasticsearch_connection)
+        probed_fields = PUBMED_REQUIRED_INDEX_FIELDS + PUBMED_OPTIONAL_INDEX_FIELDS
+        capabilities = await asyncio.wait_for(
+            client.field_capabilities(list(probed_fields)),
+            timeout=self.request_timeout,
+        )
+
+        present = {field: field in capabilities for field in probed_fields}
+        missing_required = sorted(field for field in PUBMED_REQUIRED_INDEX_FIELDS if not present[field])
+        return {
+            "index": client.index,
+            "fields": present,
+            "missing_required_fields": missing_required,
+            "multi_identifier_lookup": not missing_required,
+            "verbatim_publication_date": all(present[field] for field in PUBMED_OPTIONAL_INDEX_FIELDS),
+        }
