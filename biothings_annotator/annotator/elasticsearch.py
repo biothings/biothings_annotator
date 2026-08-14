@@ -16,6 +16,7 @@ class ElasticsearchAnnotatorClient:
     subset the annotator calls today:
 
     * querymany(query_list, scopes, fields=None, size=None)
+    * mget(query_list, fields=None)
     * query(query, fields=None, fetch_all=False, size=None, skip=0)
 
     Unsupported BioThings conveniences like species, facets, as_dataframe,
@@ -67,6 +68,49 @@ class ElasticsearchAnnotatorClient:
         results = []
         for query_batch in self._iter_batches(query_list, self.query_batch_size):
             results.extend(await self._querymany_batch(query_batch, scopes=scopes, fields=fields, size=query_size))
+
+        return results
+
+    async def mget(
+        self,
+        query_list: Iterable[str],
+        fields: Optional[Union[str, List[str]]] = None,
+    ) -> List[Dict]:
+        """Retrieve documents by exact Elasticsearch ``_id`` in one request.
+
+        Unlike :meth:`querymany`, this fast path does not build or execute a
+        search query per identifier. The response mirrors the small subset of
+        BioThings ``querymany`` output used by this project so callers receive
+        one ordered result for every input identifier, including not-found
+        placeholders.
+        """
+        query_list = list(query_list)
+        if not query_list:
+            return []
+
+        params = {}
+        source_filter = self._source_filter(fields)
+        if source_filter is not True:
+            if source_filter:
+                params["_source_includes"] = ",".join(source_filter)
+            else:
+                params["_source"] = "false"
+
+        response = await self._post("_mget", json={"ids": query_list}, params=params)
+        documents = response.json().get("docs", [])
+        if len(documents) != len(query_list):
+            raise RuntimeError(
+                f"Elasticsearch mget returned {len(documents)} documents for {len(query_list)} identifiers"
+            )
+
+        results = []
+        for query_id, document in zip(query_list, documents):
+            if "error" in document:
+                raise RuntimeError(f"Elasticsearch get failed for {query_id}: {document['error']}")
+            if not document.get("found", True):
+                results.append({"query": query_id, "notfound": True})
+                continue
+            results.append(self._format_hit(document, query=query_id))
 
         return results
 
