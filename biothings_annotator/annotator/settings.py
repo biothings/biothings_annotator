@@ -76,6 +76,17 @@ BIOLINK_PREFIX_to_BioThings = {
         "scopes": ["_id"],
         "keep_prefix": True,
     },
+    # DOI and PMCID are carried in the pubmed.identifiers array rather than the
+    # document _id, so they need the identifiers scope instead of PMID's _id
+    # scope. Babel's canonical prefix casing is lowercase "doi" and uppercase
+    # "PMC"; the alternate casings are registered because _scopes_for_prefix
+    # looks the prefix up exactly and an unregistered prefix is silently skipped
+    # on the bulk and TRAPI paths. The index normalizes identifiers
+    # case-insensitively, so the value itself needs no casing variants.
+    "doi": {"type": "pubmed", "scopes": ["pubmed.identifiers"], "keep_prefix": True},
+    "DOI": {"type": "pubmed", "scopes": ["pubmed.identifiers"], "keep_prefix": True},
+    "PMC": {"type": "pubmed", "scopes": ["pubmed.identifiers"], "keep_prefix": True},
+    "pmc": {"type": "pubmed", "scopes": ["pubmed.identifiers"], "keep_prefix": True},
 }
 
 
@@ -217,12 +228,14 @@ ANNOTATOR_CLIENTS = {
         },
         "elasticsearch": {"index": "annotator-pubmed", "instance": None},
         "fields": [
+            "pubmed.identifiers",
             "pubmed.journal.name",
             "pubmed.journal.abbr",
             "pubmed.title",
             "pubmed.vol",
             "pubmed.iss",
             "pubmed.pub_date",
+            "pubmed.pubdate_raw",
             "pubmed.abstract",
         ],
         "scopes": ["_id"],

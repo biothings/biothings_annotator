@@ -84,15 +84,72 @@ def test_pmid_routes_to_standalone_pubmed_alias_without_stripping_prefix():
     }
     assert pubmed_settings["elasticsearch"]["index"] == "annotator-pubmed"
     assert pubmed_settings["fields"] == [
+        "pubmed.identifiers",
         "pubmed.journal.name",
         "pubmed.journal.abbr",
         "pubmed.title",
         "pubmed.vol",
         "pubmed.iss",
         "pubmed.pub_date",
+        "pubmed.pubdate_raw",
         "pubmed.abstract",
     ]
     assert pubmed_settings["scopes"] == ["_id"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("prefix", ["doi", "DOI", "PMC", "pmc"])
+def test_doi_and_pmc_route_to_pubmed_identifiers_scope(prefix):
+    assert BIOLINK_PREFIX_to_BioThings[prefix] == {
+        "type": "pubmed",
+        "scopes": ["pubmed.identifiers"],
+        "keep_prefix": True,
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "curie",
+    ["doi:10.1242/jcs.03153", "DOI:10.1242/JCS.03153", "PMC:PMC1904490", "pmc:PMC1904490"],
+)
+def test_doi_and_pmc_curies_keep_the_full_curie_as_the_query_value(curie):
+    """The identifiers array stores full CURIEs, so the prefix must survive parsing."""
+    assert parse_curie(curie) == ("pubmed", curie)
+
+
+@pytest.mark.unit
+def test_pmid_keeps_the_id_scope_when_grouped_with_doi_and_pmc():
+    """PMIDs must stay on the _id fast scope even when mixed with other prefixes."""
+    annotator = Annotator(query_backend="elasticsearch")
+    node_list = [PMID, "doi:10.1242/jcs.03153", "PMC:PMC1904490", "DOI:10.1000/xyz"]
+
+    assert annotator._group_curies_by_scopes("pubmed", node_list) == [
+        (["_id"], [PMID]),
+        (["pubmed.identifiers"], ["doi:10.1242/jcs.03153", "PMC:PMC1904490", "DOI:10.1000/xyz"]),
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_annotate_doi_queries_the_identifiers_field(monkeypatch):
+    client = FakePubMedClient()
+    doi = "doi:10.1242/jcs.03153"
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_query_client",
+        lambda node_type, query_backend, api_host, elasticsearch_connection: client,
+    )
+
+    result = await Annotator(query_backend="elasticsearch").annotate_curie(doi)
+
+    assert result[doi][0]["query"] == doi
+    assert client.querymany_calls == [
+        {
+            "query_list": [doi],
+            "scopes": ["pubmed.identifiers"],
+            "fields": ANNOTATOR_CLIENTS["pubmed"]["fields"],
+        }
+    ]
 
 
 @pytest.mark.unit
