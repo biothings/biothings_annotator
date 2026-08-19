@@ -107,6 +107,28 @@ def test_format_publication_metadata_falls_back_to_iso_pub_date(pubdate_raw):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "pub_date, expected",
+    [
+        ("1994 Sep-Dec", ("1994", "Sep-Dec", "")),
+        ("1998 Dec-1999 Jan", ("1998", "Dec-1999 Jan", "")),
+        ("2019 Mar 15", ("2019", "Mar", "15")),
+        # Still parsed as ISO when that is the shape it arrives in.
+        ("2019-03-15", ("2019", "Mar", "15")),
+    ],
+)
+def test_format_publication_metadata_reads_a_verbatim_date_from_pub_date(pub_date, expected):
+    """Which field carries the verbatim value depends on the exporter revision.
+
+    The ISO parser returns empty strings for a range, so a verbatim value landing
+    in pub_date rather than pubdate_raw would silently lose the whole date.
+    """
+    formatted = format_publication_metadata({"pub_date": pub_date})
+
+    assert (formatted["pub_year"], formatted["pub_month"], formatted["pub_day"]) == expected
+
+
+@pytest.mark.unit
 def test_parse_publication_ids_accepts_one_hundred_and_preserves_order():
     publication_ids = [f"PMID:{index}" for index in range(1, 101)]
 
@@ -326,8 +348,13 @@ async def test_check_index_fields_reports_multi_identifier_capability(monkeypatc
         index = "annotator-pubmed"
 
         async def field_capabilities(self, fields):
-            # Elasticsearch omits absent fields from the field-caps response.
-            return {field: {"keyword": {}} for field in fields if field in capability_fields}
+            # Elasticsearch omits absent fields from the field-caps response and
+            # always reports "searchable" for the ones it does return.
+            return {
+                field: {"keyword": {"type": "keyword", "searchable": True}}
+                for field in fields
+                if field in capability_fields
+            }
 
     monkeypatch.setattr(
         "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
@@ -344,6 +371,35 @@ async def test_check_index_fields_reports_multi_identifier_capability(monkeypatc
         "pubmed.identifiers": "pubmed.identifiers" in capability_fields,
         "pubmed.pubdate_raw": "pubmed.pubdate_raw" in capability_fields,
     }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_check_index_fields_treats_an_unsearchable_identifier_field_as_unusable(monkeypatch):
+    """A field mapped with index: false is present but matches nothing when queried."""
+
+    class FakePubMedClient:
+        index = "annotator-pubmed"
+
+        async def field_capabilities(self, fields):
+            del fields
+            return {
+                "pubmed.identifiers": {"keyword": {"type": "keyword", "searchable": False}},
+                "pubmed.pubdate_raw": {"keyword": {"type": "keyword", "searchable": True}},
+            }
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: FakePubMedClient(),
+    )
+
+    report = await DocumentMetadataService(elasticsearch_connection="ci").check_index_fields()
+
+    # Present in the mapping, but still reported as missing for lookup purposes.
+    assert report["fields"]["pubmed.identifiers"] is True
+    assert report["missing_required_fields"] == ["pubmed.identifiers"]
+    assert report["multi_identifier_lookup"] is False
+    assert report["verbatim_publication_date"] is True
 
 
 @pytest.mark.unit

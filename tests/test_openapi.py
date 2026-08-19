@@ -166,6 +166,11 @@ def test_documented_publication_id_pattern_matches_the_served_validation():
         "PMID:1\u0662",
         "PMC:PMC\u0661",
         "doi:10.\u0661/x",
+        # Non-ASCII prefix letters. re.IGNORECASE would case-fold these into a
+        # match; the documented explicit case classes do not.
+        "do\u0130:10.1/x",
+        "do\u0131:10.1/x",
+        "PM\u0130D:1",
     )
 
     for candidate in candidates:

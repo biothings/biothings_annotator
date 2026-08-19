@@ -101,11 +101,22 @@ def _publication_date_components(metadata: Dict) -> Tuple[str, str, str]:
     not be deployed yet, and it is absent or unparseable for records with no
     stated date. The ISO fallback keeps those records projecting as they do
     today.
+
+    The verbatim value is read from either field, because which one carries it
+    depends on the exporter revision the index was built from and a range
+    arriving in ``pub_date`` would otherwise be dropped to empty strings. This is
+    safe rather than ambiguous: the two parsers accept disjoint shapes, so an ISO
+    date is only ever read by the ISO parser and a range only by the raw parser.
     """
     year, month, day = _raw_publication_date_components(metadata.get("pubdate_raw"))
     if year:
         return year, month, day
-    return _iso_publication_date_components(metadata.get("pub_date"))
+
+    publication_date = metadata.get("pub_date")
+    year, month, day = _iso_publication_date_components(publication_date)
+    if year:
+        return year, month, day
+    return _raw_publication_date_components(publication_date)
 
 
 def format_publication_metadata(metadata: Dict) -> Dict[str, str]:
@@ -127,6 +138,23 @@ def format_publication_metadata(metadata: Dict) -> Dict[str, str]:
         "abstract": metadata.get("abstract"),
     }
     return {field: value if isinstance(value, str) else "" for field, value in fields.items()}
+
+
+def _is_searchable(field_capabilities: object) -> bool:
+    """Report whether ``_field_caps`` says a present field can actually be queried.
+
+    A field mapped with ``index: false`` still appears in the field-caps response,
+    but every type entry under it is flagged unsearchable. For a scoped DOI or
+    PMCID lookup that is indistinguishable from the field being absent: the term
+    query matches nothing and raises no error. A field can be mapped under more
+    than one type, so one searchable type is enough.
+    """
+    if not isinstance(field_capabilities, dict):
+        return False
+    return any(
+        isinstance(type_capabilities, dict) and type_capabilities.get("searchable") is True
+        for type_capabilities in field_capabilities.values()
+    )
 
 
 class DocumentMetadataService:
@@ -236,8 +264,14 @@ class DocumentMetadataService:
             timeout=self.request_timeout,
         )
 
+        # "fields" reports mapping presence; the required-field gate additionally
+        # demands searchability. A field that is present but unsearchable therefore
+        # shows as fields[f] = true while still appearing in missing_required_fields,
+        # which is precisely the "mapped with index: false" diagnosis.
         present = {field: field in capabilities for field in probed_fields}
-        missing_required = sorted(field for field in PUBMED_REQUIRED_INDEX_FIELDS if not present[field])
+        missing_required = sorted(
+            field for field in PUBMED_REQUIRED_INDEX_FIELDS if not _is_searchable(capabilities.get(field))
+        )
         return {
             "index": client.index,
             "fields": present,

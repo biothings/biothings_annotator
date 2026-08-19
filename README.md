@@ -273,15 +273,24 @@ object as shown above.
 
 The response contains legacy-compatible `_meta`, `results`, and `not_found` sections, keyed by the
 identifier as submitted. Missing source values are returned as empty strings. The publication date is
-projected from PubMed's verbatim `pubdate_raw` when the index carries it, so month ranges survive as
+projected from PubMed's verbatim rendering when the index carries it, so month ranges survive as
 CCWG#15 specifies (`"pub_month": "Sep-Dec"` for `PMID:8000234`); otherwise it falls back to splitting
 the indexed ISO `pub_date` into year, month, and day.
 
+A verbatim value is read from either `pubdate_raw` or `pub_date`, because which field carries it depends
+on the exporter revision the index was built from. This is unambiguous rather than a guess: the verbatim
+and ISO parsers accept disjoint shapes, so `"2019-03-15"` is only ever read as an ISO date and
+`"1994 Sep-Dec"` only as a verbatim one. Reading just one field would silently flatten a range that
+arrived in the other to empty strings.
+
 ##### Accepted identifier types
 
-`PMID`, `PMC`, and `doi` are accepted. Prefix casing is matched case-insensitively, and a PMCID keeps
-PubMed's doubled form — `PMC:PMC1904490`, not `PMC:1904490`. Two shape constraints follow from the
-transport rather than the service:
+`PMID`, `PMC`, and `doi` are accepted. Prefix casing is matched case-insensitively across the ASCII
+spellings only, and a PMCID keeps PubMed's doubled form — `PMC:PMC1904490`, not `PMC:1904490`. The
+served patterns spell each prefix out as explicit case pairs to mirror the OpenAPI `PublicationId`
+pattern character-for-character; `re.IGNORECASE` would case-fold non-ASCII letters such as `doİ:` into
+a match that the published contract rejects and the index cannot resolve. Two further shape constraints
+follow from the transport rather than the service:
 
 - A DOI suffix contains slashes, so the path form relies on a `path` route converter to avoid
   truncating at the first segment.
@@ -324,7 +333,12 @@ which of the fields the API depends on actually exist:
 
 It reports rather than raises. `pubmed.identifiers` is required for DOI and PMCID lookup to work at
 all, so its absence sets `multi_identifier_lookup` to `false`; `pubmed.pubdate_raw` only changes the
-precision of the projected date and has a working fallback, so it is informational. A fatal startup
+precision of the projected date and has a working fallback, so it is informational.
+
+`fields` reports mapping presence, while the required-field gate additionally demands that the field be
+searchable. A field mapped with `index: false` is listed in the field-caps response but matches nothing
+when queried, so it appears as `"pubmed.identifiers": true` **and** in `missing_required_fields` — that
+combination is the signature of a field that exists but was mapped unsearchable. A fatal startup
 assertion would be wrong here, because refusing to boot over a missing field would also take down the
 PMID fast path that does work.
 

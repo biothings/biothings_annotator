@@ -24,14 +24,20 @@ MAX_PUBLICATION_IDS = 100
 # resolve through the case-insensitive identifiers field, and a PMID prefix is
 # canonicalized before the exact-_id lookup. Either way the submitted form is
 # what keys the response.
-# Digits are spelled [0-9] rather than \d on purpose. Python's \d also matches
-# Unicode decimal digits, which would accept identifiers like PMID:1\u0662 that
-# the OpenAPI PublicationId pattern rejects and that can never match the ASCII
-# identifiers in the index.
+# These mirror the OpenAPI PublicationId alternation character-for-character so
+# served validation and the published contract cannot drift. That is why the
+# prefixes are spelled out as explicit case pairs instead of using re.IGNORECASE,
+# and why the digits are [0-9] rather than \d:
+#   - re.IGNORECASE applies Unicode case folding, which accepts prefixes like
+#     "doİ:" and "PMİD:" that the documented classes reject.
+#   - \d accepts Unicode decimal digits, which accepts "PMID:1\u0662".
+# Neither can ever match the ASCII identifiers stored in the index. Adding
+# re.ASCII would fix both but would also narrow \S in the DOI suffix, which the
+# documented pattern leaves Unicode-wide, so it would trade one drift for another.
 PUBLICATION_ID_PATTERNS = (
-    re.compile(r"PMID:[1-9][0-9]*", re.IGNORECASE),
-    re.compile(r"PMC:PMC[0-9]+", re.IGNORECASE),
-    re.compile(r"doi:10\.[0-9]+/\S+", re.IGNORECASE),
+    re.compile(r"[Pp][Mm][Ii][Dd]:[1-9][0-9]*"),
+    re.compile(r"[Pp][Mm][Cc]:[Pp][Mm][Cc][0-9]+"),
+    re.compile(r"[Dd][Oo][Ii]:10\.[0-9]+/\S+"),
 )
 SUPPORTED_PUBLICATION_ID_MESSAGE = (
     "Only PMID, PMC, and doi identifiers are supported; expected values like "
