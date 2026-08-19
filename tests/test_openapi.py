@@ -150,6 +150,7 @@ def test_documented_publication_id_pattern_matches_the_served_validation():
     documented_pattern = re.compile(specification["components"]["schemas"]["PublicationId"]["pattern"])
     candidates = (
         "PMID:30690000",
+        "pmid:30690000",
         "PMID:0",
         "PMID:not-a-number",
         "PMC:PMC1904490",
@@ -159,6 +160,12 @@ def test_documented_publication_id_pattern_matches_the_served_validation():
         "DOI:10.1242/JCS.03153",
         "doi:notadoi",
         "CHEBI:15377",
+        # Non-ASCII decimal digits. The documented pattern is ASCII-only, so the
+        # served regex must not use \d, which would accept these and then never
+        # match the ASCII identifiers stored in the index.
+        "PMID:1\u0662",
+        "PMC:PMC\u0661",
+        "doi:10.\u0661/x",
     )
 
     for candidate in candidates:

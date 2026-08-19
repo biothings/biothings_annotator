@@ -20,13 +20,18 @@ logger = logging.getLogger(__name__)
 MAX_PUBLICATION_IDS = 100
 # The index stores the PMID as the document _id and carries the DOI and PMCID in
 # pubmed.identifiers. PMCID values keep PubMed's doubled form, PMC:PMC1904490
-# rather than PMC:1904490. Prefix casing is accepted loosely because the index
-# normalizes identifiers case-insensitively, so a mixed-case submission still
-# resolves; the submitted form is what keys the response.
+# rather than PMC:1904490. Prefix casing is accepted loosely: DOI and PMCID
+# resolve through the case-insensitive identifiers field, and a PMID prefix is
+# canonicalized before the exact-_id lookup. Either way the submitted form is
+# what keys the response.
+# Digits are spelled [0-9] rather than \d on purpose. Python's \d also matches
+# Unicode decimal digits, which would accept identifiers like PMID:1\u0662 that
+# the OpenAPI PublicationId pattern rejects and that can never match the ASCII
+# identifiers in the index.
 PUBLICATION_ID_PATTERNS = (
-    re.compile(r"PMID:[1-9]\d*", re.IGNORECASE),
-    re.compile(r"PMC:PMC\d+", re.IGNORECASE),
-    re.compile(r"doi:10\.\d+/\S+", re.IGNORECASE),
+    re.compile(r"PMID:[1-9][0-9]*", re.IGNORECASE),
+    re.compile(r"PMC:PMC[0-9]+", re.IGNORECASE),
+    re.compile(r"doi:10\.[0-9]+/\S+", re.IGNORECASE),
 )
 SUPPORTED_PUBLICATION_ID_MESSAGE = (
     "Only PMID, PMC, and doi identifiers are supported; expected values like "
