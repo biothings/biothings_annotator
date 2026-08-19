@@ -26,6 +26,22 @@ def _is_document_id(publication_id: str) -> bool:
     return publication_id.split(":", 1)[0].upper() == PMID_PREFIX
 
 
+def _canonical_lookup_id(publication_id: str) -> str:
+    """Normalize a PMID prefix to the casing the index stores it under.
+
+    Elasticsearch matches ``_id`` byte-exactly, so a submitted ``pmid:30690000``
+    misses the document stored as ``PMID:30690000`` and would be reported absent.
+    The endpoint accepts the prefix case-insensitively, so the casing has to be
+    repaired here rather than rejected there. Only the prefix is touched; the
+    digits carry no case. DOI and PMCID resolve through the case-insensitive
+    ``identifiers`` field instead of ``_id``, so they pass through unchanged.
+    """
+    prefix, separator, suffix = publication_id.partition(":")
+    if separator and prefix.upper() == PMID_PREFIX:
+        return f"{PMID_PREFIX}{separator}{suffix}"
+    return publication_id
+
+
 def _raw_publication_date_components(pubdate_raw: object) -> Tuple[str, str, str]:
     """Split PubMed's verbatim publication date into the legacy response fields.
 
@@ -140,8 +156,17 @@ class DocumentMetadataService:
         if not publication_ids:
             return {}, []
 
-        document_ids = [publication_id for publication_id in publication_ids if _is_document_id(publication_id)]
-        search_ids = [publication_id for publication_id in publication_ids if not _is_document_id(publication_id)]
+        # Two spellings of one PMID collapse to a single lookup but stay separate
+        # response keys, so the backend is never asked for the same _id twice.
+        document_ids: List[str] = []
+        search_ids: List[str] = []
+        for publication_id in publication_ids:
+            if _is_document_id(publication_id):
+                canonical_id = _canonical_lookup_id(publication_id)
+                if canonical_id not in document_ids:
+                    document_ids.append(canonical_id)
+            else:
+                search_ids.append(publication_id)
 
         client = get_elasticsearch_client("pubmed", self.elasticsearch_connection)
         hits_by_id = await asyncio.wait_for(
@@ -152,7 +177,7 @@ class DocumentMetadataService:
         results: Dict[str, Dict[str, str]] = {}
         not_found: List[str] = []
         for publication_id in publication_ids:
-            metadata = hits_by_id.get(publication_id, {}).get("pubmed")
+            metadata = hits_by_id.get(_canonical_lookup_id(publication_id), {}).get("pubmed")
             if not isinstance(metadata, dict):
                 not_found.append(publication_id)
                 continue

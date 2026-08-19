@@ -250,6 +250,46 @@ async def test_document_metadata_service_skips_the_scoped_lookup_for_pmid_only_r
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_document_metadata_service_canonicalizes_the_pmid_prefix_for_exact_id_lookup(monkeypatch):
+    """A loosely cased PMID must still hit the document stored under PMID:<digits>."""
+    requested = []
+
+    class FakePubMedClient:
+        async def mget(self, query_list, fields):
+            del fields
+            requested.append(list(query_list))
+            # Elasticsearch matches _id byte-exactly; only the stored casing resolves.
+            return [
+                (
+                    {"query": query_id, "_id": query_id, "pubmed": PUBMED_METADATA}
+                    if query_id == PMID
+                    else {"query": query_id, "notfound": True}
+                )
+                for query_id in query_list
+            ]
+
+        async def querymany(self, *args, **kwargs):
+            del args, kwargs
+            raise AssertionError("A PMID-only request must not issue a scoped lookup")
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: FakePubMedClient(),
+    )
+
+    service = DocumentMetadataService(elasticsearch_connection="ci")
+    submitted = [PMID, PMID.lower(), "Pmid:30690000"]
+    results, not_found = await service.get_publications(submitted)
+
+    # Three spellings collapse to one backend lookup, and each is still keyed as sent.
+    assert requested == [[PMID]]
+    assert list(results) == submitted
+    assert not_found == []
+    assert all(result == FORMATTED_METADATA for result in results.values())
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "capability_fields, expected",
     [
