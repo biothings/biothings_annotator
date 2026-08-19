@@ -15,6 +15,9 @@ PMID_PREFIX = "PMID"
 # its absence is a capability gap. pubdate_raw only changes how precisely a date
 # is projected and has a working fallback, so its absence is informational.
 PUBMED_REQUIRED_INDEX_FIELDS = ("pubmed.identifiers",)
+# Confirmed against the ingest side: whatever the upstream exporter emits, the
+# in-house transformation lands the verbatim value in pubmed.pubdate_raw, so that
+# is the field the capability probe checks.
 PUBMED_OPTIONAL_INDEX_FIELDS = ("pubmed.pubdate_raw",)
 # Used only by the numeric pub_date fallback. The verbatim pubdate_raw path
 # already carries PubMed's own three-letter abbreviations.
@@ -125,11 +128,12 @@ def _publication_date_components(metadata: Dict) -> Tuple[str, str, str]:
     stated date. The ISO fallback keeps those records projecting as they do
     today.
 
-    The verbatim value is read from either field, because which one carries it
-    depends on the exporter revision the index was built from and a range
-    arriving in ``pub_date`` would otherwise be dropped to empty strings. This is
-    safe rather than ambiguous: the two parsers accept disjoint shapes, so an ISO
-    date is only ever read by the ISO parser and a range only by the raw parser.
+    The index carries the verbatim value in ``pubdate_raw``, so the matching read
+    of ``pub_date`` below is defensive: it costs one call and stops a verbatim
+    value landing there from being flattened to empty strings if the ingest
+    transformation ever changes. It cannot misread anything, because the two
+    parsers accept disjoint shapes — an ISO date is only ever claimed by the ISO
+    parser and a range only by the verbatim one.
     """
     year, month, day = _raw_publication_date_components(metadata.get("pubdate_raw"))
     if year:

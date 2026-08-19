@@ -277,11 +277,12 @@ projected from PubMed's verbatim rendering when the index carries it, so month r
 CCWG#15 specifies (`"pub_month": "Sep-Dec"` for `PMID:8000234`); otherwise it falls back to splitting
 the indexed ISO `pub_date` into year, month, and day.
 
-A verbatim value is read from either `pubdate_raw` or `pub_date`, because which field carries it depends
-on the exporter revision the index was built from. This is unambiguous rather than a guess: the verbatim
-and ISO parsers accept disjoint shapes, so `"2019-03-15"` is only ever read as an ISO date and
-`"1994 Sep-Dec"` only as a verbatim one. Reading just one field would silently flatten a range that
-arrived in the other to empty strings.
+The index carries the verbatim value in `pubdate_raw` — whatever the upstream exporter emits, the
+in-house ingest transformation normalizes it to that field, which is also the field the capability probe
+checks. `pub_date` is additionally read as a verbatim value purely defensively, so that a raw value
+landing there is not flattened to empty strings if that transformation ever changes. It cannot misread
+anything: the verbatim and ISO parsers accept disjoint shapes, so `"2019-03-15"` is only ever read as an
+ISO date and `"1994 Sep-Dec"` only as a verbatim one.
 
 A bare year range is the one shape that collides with an ISO date, since both open with `YYYY-`. It is
 projected losslessly into `pub_year` — `"1987-1988"` gives `{"pub_year": "1987-1988", "pub_month": "",
@@ -321,6 +322,13 @@ so PMCID and DOI lookups return `not_found` until the index is rebuilt. That is 
 specifies for an identifier the service does not have, but it is indistinguishable from a genuinely
 absent paper, so the index shape is checked separately — see
 [Verifying the PubMed index shape](#verifying-the-pubmed-index-shape).
+
+The reindex is treated as a deployment prerequisite rather than something the service polices. The
+identifier routing, the scoped lookup, and the capability probe all ship here so that PMCID and DOI
+support becomes live the moment the index is rebuilt, with no further code change. Deliberately, the
+endpoint does not refuse PMCID and DOI requests while the field is absent: a startup gate would also
+take down the PMID fast path, which works against the index as it stands today. Use
+`check_index_fields()` to tell "not in this index" from "not a real paper" before rollout.
 
 ##### Verifying the PubMed index shape
 
