@@ -283,6 +283,12 @@ and ISO parsers accept disjoint shapes, so `"2019-03-15"` is only ever read as a
 `"1994 Sep-Dec"` only as a verbatim one. Reading just one field would silently flatten a range that
 arrived in the other to empty strings.
 
+A bare year range is the one shape that collides with an ISO date, since both open with `YYYY-`. It is
+projected losslessly into `pub_year` — `"1987-1988"` gives `{"pub_year": "1987-1988", "pub_month": "",
+"pub_day": ""}` — because the legacy fields have no home for a second year and `pub_month` would misfile
+one. Reading it as ISO instead would return `"1987"` and drop the closing year. A two-digit tail such as
+`"1987-88"` keeps its ISO reading, because it cannot be distinguished from the month in `"2026-07"`.
+
 ##### Accepted identifier types
 
 `PMID`, `PMC`, and `doi` are accepted. Prefix casing is matched case-insensitively across the ASCII

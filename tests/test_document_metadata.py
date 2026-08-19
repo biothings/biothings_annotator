@@ -113,8 +113,15 @@ def test_format_publication_metadata_falls_back_to_iso_pub_date(pubdate_raw):
         ("1994 Sep-Dec", ("1994", "Sep-Dec", "")),
         ("1998 Dec-1999 Jan", ("1998", "Dec-1999 Jan", "")),
         ("2019 Mar 15", ("2019", "Mar", "15")),
-        # Still parsed as ISO when that is the shape it arrives in.
+        # A bare year range shares its leading shape with an ISO date. Reading it
+        # as ISO yields ("1987", "", "") and drops the closing year outright.
+        ("1987-1988", ("1987-1988", "", "")),
+        ("1998-1999", ("1998-1999", "", "")),
+        # Still parsed as ISO when that is the shape it arrives in, including the
+        # two-digit tail that cannot be distinguished from a month.
         ("2019-03-15", ("2019", "Mar", "15")),
+        ("2026-07", ("2026", "Jul", "")),
+        ("1987-88", ("1987", "", "")),
     ],
 )
 def test_format_publication_metadata_reads_a_verbatim_date_from_pub_date(pub_date, expected):

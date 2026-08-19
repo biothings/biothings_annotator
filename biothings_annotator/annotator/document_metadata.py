@@ -42,6 +42,19 @@ def _canonical_lookup_id(publication_id: str) -> str:
     return publication_id
 
 
+def _is_bare_year_range(value: str) -> bool:
+    """Detect a spaceless verbatim year range such as ``"1987-1988"``.
+
+    This shape collides with an ISO date: both open with ``YYYY-``. Only a
+    four-digit tail is treated as a range, because ``"2026-07"`` is a valid ISO
+    year-month and a two-digit tail cannot be told apart from a month. A range
+    written that way therefore keeps its existing ISO reading rather than
+    guessing.
+    """
+    head, separator, tail = value.partition("-")
+    return bool(separator) and len(head) == 4 and head.isdigit() and len(tail) == 4 and tail.isdigit()
+
+
 def _raw_publication_date_components(pubdate_raw: object) -> Tuple[str, str, str]:
     """Split PubMed's verbatim publication date into the legacy response fields.
 
@@ -56,7 +69,17 @@ def _raw_publication_date_components(pubdate_raw: object) -> Tuple[str, str, str
         return "", "", ""
 
     parts = pubdate_raw.strip().split(maxsplit=1)
-    if not parts or len(parts[0]) != 4 or not parts[0].isdigit():
+    if not parts:
+        return "", "", ""
+
+    # A bare year range has no whitespace, so the leading token is the whole
+    # expression. The legacy fields have no home for a second year and pub_month
+    # would misfile one, so pub_year carries the range verbatim rather than
+    # truncating to its opening year.
+    if len(parts) == 1 and _is_bare_year_range(parts[0]):
+        return parts[0], "", ""
+
+    if len(parts[0]) != 4 or not parts[0].isdigit():
         return "", "", ""
 
     year = parts[0]
@@ -113,10 +136,14 @@ def _publication_date_components(metadata: Dict) -> Tuple[str, str, str]:
         return year, month, day
 
     publication_date = metadata.get("pub_date")
-    year, month, day = _iso_publication_date_components(publication_date)
+    # The verbatim reading is tried first because a bare year range and an ISO
+    # date share their leading shape: the ISO parser would claim "1987-1988",
+    # return just "1987", and silently drop the closing year. The verbatim parser
+    # declines anything ISO-shaped, so nothing else changes hands.
+    year, month, day = _raw_publication_date_components(publication_date)
     if year:
         return year, month, day
-    return _raw_publication_date_components(publication_date)
+    return _iso_publication_date_components(publication_date)
 
 
 def format_publication_metadata(metadata: Dict) -> Dict[str, str]:
