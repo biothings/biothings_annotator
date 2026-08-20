@@ -16,7 +16,9 @@ class ElasticsearchAnnotatorClient:
     subset the annotator calls today:
 
     * querymany(query_list, scopes, fields=None, size=None)
+    * mget(query_list, fields=None)
     * query(query, fields=None, fetch_all=False, size=None, skip=0)
+    * field_capabilities(fields)
 
     Unsupported BioThings conveniences like species, facets, as_dataframe,
     return_raw, and returnall are intentionally absent so they fail explicitly
@@ -69,6 +71,65 @@ class ElasticsearchAnnotatorClient:
             results.extend(await self._querymany_batch(query_batch, scopes=scopes, fields=fields, size=query_size))
 
         return results
+
+    async def mget(
+        self,
+        query_list: Iterable[str],
+        fields: Optional[Union[str, List[str]]] = None,
+    ) -> List[Dict]:
+        """Retrieve documents by exact Elasticsearch ``_id`` in one request.
+
+        Unlike :meth:`querymany`, this fast path does not build or execute a
+        search query per identifier. The response mirrors the small subset of
+        BioThings ``querymany`` output used by this project so callers receive
+        one ordered result for every input identifier, including not-found
+        placeholders.
+        """
+        query_list = list(query_list)
+        if not query_list:
+            return []
+
+        params = {}
+        source_filter = self._source_filter(fields)
+        if source_filter is not True:
+            if source_filter:
+                params["_source_includes"] = ",".join(source_filter)
+            else:
+                params["_source"] = "false"
+
+        response = await self._post("_mget", json={"ids": query_list}, params=params)
+        documents = response.json().get("docs", [])
+        if len(documents) != len(query_list):
+            raise RuntimeError(
+                f"Elasticsearch mget returned {len(documents)} documents for {len(query_list)} identifiers"
+            )
+
+        results = []
+        for query_id, document in zip(query_list, documents):
+            if "error" in document:
+                raise RuntimeError(f"Elasticsearch get failed for {query_id}: {document['error']}")
+            if not document.get("found", True):
+                results.append({"query": query_id, "notfound": True})
+                continue
+            results.append(self._format_hit(document, query=query_id))
+
+        return results
+
+    async def field_capabilities(self, fields: Union[str, List[str]]) -> Dict[str, Dict]:
+        """Report which of the requested fields exist in the index mapping.
+
+        Elasticsearch omits absent fields from the field-caps response, which is
+        what makes this usable as an index-shape check rather than a document
+        check: a field missing here is missing from the mapping, not merely unset
+        on the documents that happened to be sampled. Reading through an alias
+        also catches an alias left pointing at a stale index.
+        """
+        field_list = self._normalize_scopes(fields)
+        if not field_list:
+            return {}
+
+        response = await self._get("_field_caps", params={"fields": ",".join(field_list)})
+        return response.json().get("fields", {})
 
     async def _querymany_batch(
         self,
@@ -249,6 +310,10 @@ class ElasticsearchAnnotatorClient:
     async def _post(self, endpoint: str, **kwargs) -> httpx.Response:
         url = f"{self.host}/{self.index}/{endpoint.lstrip('/')}"
         return await self._request("POST", url, **kwargs)
+
+    async def _get(self, endpoint: str, **kwargs) -> httpx.Response:
+        url = f"{self.host}/{self.index}/{endpoint.lstrip('/')}"
+        return await self._request("GET", url, **kwargs)
 
     async def _post_root(self, endpoint: str, **kwargs) -> httpx.Response:
         url = f"{self.host}/{endpoint.lstrip('/')}"

@@ -91,6 +91,183 @@
         }
       }
     },
+    "/publications": {
+      "get": {
+        "operationId": "get~legacy_document_metadata_endpoint",
+        "summary": "Retrieve metadata for a comma-separated list of publications",
+        "description": "Legacy-compatible batch multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve against pubmed.identifiers and cost one search per identifier, so a PMID-only request stays on the single-request fast path. The current index carries PMID identifiers only, so PMC and doi values are reported in not_found until the index is rebuilt with pubmed.identifiers.",
+        "tags": ["metadata"],
+        "parameters": [
+          {
+            "name": "pubids",
+            "in": "query",
+            "required": true,
+            "description": "Comma-separated PMID, PMC, or doi identifiers. At most 100 values are accepted; duplicate values are queried once. A DOI suffix may itself contain a comma, which this form cannot express; use the JSON request body for those identifiers.",
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "$ref": "#/components/schemas/PublicationIdList"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/DocumentMetadataRequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Publication metadata and identifiers that were not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The pubids query parameter is missing, malformed, carries an unsupported identifier prefix, or contains more than 100 values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The PubMed metadata backend could not serve the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "post~batch_document_metadata_endpoint",
+        "summary": "Retrieve metadata for publication IDs in a JSON request body",
+        "description": "Batch multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve against pubmed.identifiers and cost one search per identifier, so a PMID-only request stays on the single-request fast path. The current index carries PMID identifiers only, so PMC and doi values are reported in not_found until the index is rebuilt with pubmed.identifiers.",
+        "tags": ["metadata"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DocumentMetadataRequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "One to 100 PMID, PMC, or doi identifiers. The object form can include a request_id; its value takes precedence over the request_id query parameter.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentMetadataRequest"
+              },
+              "examples": {
+                "object": {
+                  "summary": "IDs with an optional request identifier",
+                  "value": {
+                    "ids": ["PMID:30690000", "PMC:PMC1904490", "doi:10.1242/jcs.03153"],
+                    "request_id": "1df88223-c0f8-47f5-a1f3-661b944c7849"
+                  }
+                },
+                "array": {
+                  "summary": "Bare ID list",
+                  "value": ["PMID:30690000", "PMID:82374"]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Publication metadata and identifiers that were not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The JSON body or request_id is malformed, unsupported, empty, or contains more than 100 publication IDs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The PubMed metadata backend could not serve the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/publications/{publication_id}": {
+      "get": {
+        "operationId": "get~document_metadata_endpoint",
+        "summary": "Retrieve metadata for one publication",
+        "description": "Single-identifier multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. A PMID resolves against the document _id in one multi-get request; PMC and doi values resolve against pubmed.identifiers with one search. The current index carries PMID identifiers only, so PMC and doi values are reported in not_found until the index is rebuilt with pubmed.identifiers.",
+        "tags": ["metadata"],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "description": "Publication identifier. A DOI suffix contains slashes, which are accepted unencoded in this path.",
+            "schema": {
+              "$ref": "#/components/schemas/PublicationId"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/DocumentMetadataRequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Publication metadata, or the requested identifier in not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The publication_id path parameter is malformed or carries an unsupported identifier prefix.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The PubMed metadata backend could not serve the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/curie/{curie}": {
       "get": {
         "operationId": "get~curie_endpoint",
@@ -1802,6 +1979,118 @@
       }
     },
     "schemas": {
+      "PublicationId": {
+        "type": "string",
+        "description": "Publication identifier. PMID resolves against the document _id; PMC and doi resolve against pubmed.identifiers. A PMCID keeps PubMed's doubled form, PMC:PMC1904490 rather than PMC:1904490. Prefix casing is matched case-insensitively, which is what the character classes in the pattern encode.",
+        "pattern": "^(?:[Pp][Mm][Ii][Dd]:[1-9][0-9]*|[Pp][Mm][Cc]:[Pp][Mm][Cc][0-9]+|[Dd][Oo][Ii]:10\\.[0-9]+/\\S+)$",
+        "example": "PMID:30690000"
+      },
+      "PublicationIdList": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 100,
+        "items": {
+          "$ref": "#/components/schemas/PublicationId"
+        },
+        "example": ["PMID:30690000", "PMC:PMC1904490", "doi:10.1242/jcs.03153"]
+      },
+      "DocumentMetadataRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PublicationIdList"
+          },
+          {
+            "type": "object",
+            "required": ["ids"],
+            "properties": {
+              "ids": {
+                "$ref": "#/components/schemas/PublicationIdList"
+              },
+              "request_id": {
+                "type": "string",
+                "description": "Optional caller identifier returned unchanged in the response metadata."
+              }
+            }
+          }
+        ]
+      },
+      "PublicationMetadata": {
+        "type": "object",
+        "required": [
+          "journal_name",
+          "journal_abbrev",
+          "article_title",
+          "volume",
+          "issue",
+          "pub_year",
+          "pub_month",
+          "pub_day",
+          "abstract"
+        ],
+        "properties": {
+          "journal_name": {"type": "string"},
+          "journal_abbrev": {"type": "string"},
+          "article_title": {"type": "string"},
+          "volume": {"type": "string"},
+          "issue": {"type": "string"},
+          "pub_year": {"type": "string"},
+          "pub_month": {"type": "string"},
+          "pub_day": {"type": "string"},
+          "abstract": {"type": "string"}
+        }
+      },
+      "DocumentMetadataResponse": {
+        "type": "object",
+        "required": ["_meta", "results", "not_found"],
+        "properties": {
+          "_meta": {
+            "type": "object",
+            "required": ["timestamp", "n_results", "request_id", "processing_time_ms"],
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "n_results": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "request_id": {
+                "type": "string"
+              },
+              "processing_time_ms": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "results": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PublicationMetadata"
+            }
+          },
+          "not_found": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DocumentMetadataError": {
+        "type": "object",
+        "required": ["endpoint", "message"],
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "enum": ["/publications"]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
       "BackendSkipResult": {
         "type": "array",
         "description": "Per-CURIE status returned in the same list shape as a not-found annotation result when source discovery confirms that a recognized source is unavailable through the selected backend. The skipped flag distinguishes this status from a completed query with no match.",
@@ -1858,6 +2147,15 @@
       }
     },
     "parameters": {
+      "DocumentMetadataRequestId": {
+        "name": "request_id",
+        "in": "query",
+        "required": false,
+        "description": "Optional caller identifier returned unchanged in the response metadata.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "QueryBackend": {
         "name": "query_backend",
         "in": "query",

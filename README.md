@@ -247,13 +247,132 @@ reporting a skip.
 curl 'http://localhost:9000/curie/PMID:12345678?query_backend=elasticsearch'
 ```
 
-With the CI Elasticsearch service forwarded to `localhost:9200`, run the opt-in live check with:
+##### Dedicated document metadata endpoint
+
+The dedicated publications API is the PubMed-only fast path requested by the
+[Core Components Working Group](https://github.com/NCATSTranslator/Core-Components-Working-Group/issues/15).
+It supports the legacy batch query contract, a path-based single-publication lookup, and a JSON batch
+contract:
+
+```shell
+# Legacy-compatible batch lookup
+curl 'http://localhost:9000/publications?pubids=PMID:30690000,PMID:82374&request_id=request-123'
+
+# Single-publication lookup
+curl 'http://localhost:9000/publications/PMID:30690000?request_id=request-123'
+
+# JSON batch lookup, mixing identifier types
+curl -X POST 'http://localhost:9000/publications' \
+  -H 'Content-Type: application/json' \
+  -d '{"ids":["PMID:30690000","PMC:PMC1904490","doi:10.1242/jcs.03153"],"request_id":"request-123"}'
+```
+
+Both batch forms accept at most 100 identifiers; the path form looks up one identifier. An optional
+`request_id` is round-tripped in the response metadata. For `POST`, it can be supplied in the JSON
+object as shown above.
+
+The response contains legacy-compatible `_meta`, `results`, and `not_found` sections, keyed by the
+identifier as submitted. Missing source values are returned as empty strings. The publication date is
+projected from PubMed's verbatim rendering when the index carries it, so month ranges survive as
+CCWG#15 specifies (`"pub_month": "Sep-Dec"` for `PMID:8000234`); otherwise it falls back to splitting
+the indexed ISO `pub_date` into year, month, and day.
+
+The index carries the verbatim value in `pubdate_raw` — whatever the upstream exporter emits, the
+in-house ingest transformation normalizes it to that field, which is also the field the capability probe
+checks. `pub_date` is additionally read as a verbatim value purely defensively, so that a raw value
+landing there is not flattened to empty strings if that transformation ever changes. It cannot misread
+anything: the verbatim and ISO parsers accept disjoint shapes, so `"2019-03-15"` is only ever read as an
+ISO date and `"1994 Sep-Dec"` only as a verbatim one.
+
+A bare year range is the one shape that collides with an ISO date, since both open with `YYYY-`. It is
+projected losslessly into `pub_year` — `"1987-1988"` gives `{"pub_year": "1987-1988", "pub_month": "",
+"pub_day": ""}` — because the legacy fields have no home for a second year and `pub_month` would misfile
+one. Reading it as ISO instead would return `"1987"` and drop the closing year. A two-digit tail such as
+`"1987-88"` keeps its ISO reading, because it cannot be distinguished from the month in `"2026-07"`.
+
+##### Accepted identifier types
+
+`PMID`, `PMC`, and `doi` are accepted. Prefix casing is matched case-insensitively across the ASCII
+spellings only, and a PMCID keeps PubMed's doubled form — `PMC:PMC1904490`, not `PMC:1904490`. The
+served patterns spell each prefix out as explicit case pairs to mirror the OpenAPI `PublicationId`
+pattern character-for-character; `re.IGNORECASE` would case-fold non-ASCII letters such as `doİ:` into
+a match that the published contract rejects and the index cannot resolve. Two further shape constraints
+follow from the transport rather than the service:
+
+- A DOI suffix contains slashes, so the path form relies on a `path` route converter to avoid
+  truncating at the first segment.
+- A DOI suffix may itself contain a comma, which the legacy comma-separated `pubids` form cannot
+  express. Use the JSON body for those identifiers.
+
+These routes are deliberately separate from the generic annotation pipeline. They always read the
+`annotator-pubmed` Elasticsearch alias and retrieve only the `pubmed` source object. They do not
+perform BioThings source discovery, CURIE grouping, extra annotation lookup, or per-request backend
+selection. The request has a two-second total backend deadline by default (configurable with
+`DOCUMENT_METADATA_REQUEST_TIMEOUT`) so a degraded Elasticsearch service fails quickly.
+
+PMIDs are the document `_id`, so they resolve through one exact-ID Elasticsearch `_mget` for the whole
+batch, including a complete batch of 100. PMCID and DOI resolve against `pubmed.identifiers` instead,
+which costs one `_msearch` entry per identifier, so a PMID-only request stays on the single-request fast
+path and only mixed requests pay for the scoped lookup. The behavioral performance test verifies that a
+100-PMID request remains one backend request; the deployment still needs a mixed-load benchmark to
+verify the 150 ms p90 service objective.
+
+The current PubMed index contains only `PMID:<digits>` document IDs and no `pubmed.identifiers` field,
+so PMCID and DOI lookups return `not_found` until the index is rebuilt. That is the response CCWG#15
+specifies for an identifier the service does not have, but it is indistinguishable from a genuinely
+absent paper, so the index shape is checked separately — see
+[Verifying the PubMed index shape](#verifying-the-pubmed-index-shape).
+
+The reindex is treated as a deployment prerequisite rather than something the service polices. The
+identifier routing, the scoped lookup, and the capability probe all ship here so that PMCID and DOI
+support becomes live the moment the index is rebuilt, with no further code change. Deliberately, the
+endpoint does not refuse PMCID and DOI requests while the field is absent: a startup gate would also
+take down the PMID fast path, which works against the index as it stands today. Use
+`check_index_fields()` to tell "not in this index" from "not a real paper" before rollout.
+
+##### Verifying the PubMed index shape
+
+`DocumentMetadataService.check_index_fields()` probes the live mapping through the alias and reports
+which of the fields the API depends on actually exist:
+
+```json
+{
+  "index": "annotator-pubmed",
+  "fields": {"pubmed.identifiers": false, "pubmed.pubdate_raw": false},
+  "missing_required_fields": ["pubmed.identifiers"],
+  "multi_identifier_lookup": false,
+  "verbatim_publication_date": false
+}
+```
+
+It reports rather than raises. `pubmed.identifiers` is required for DOI and PMCID lookup to work at
+all, so its absence sets `multi_identifier_lookup` to `false`; `pubmed.pubdate_raw` only changes the
+precision of the projected date and has a working fallback, so it is informational.
+
+`fields` reports mapping presence, while the required-field gate additionally demands that the field be
+searchable. A field mapped with `index: false` is listed in the field-caps response but matches nothing
+when queried, so it appears as `"pubmed.identifiers": true` **and** in `missing_required_fields` — that
+combination is the signature of a field that exists but was mapped unsearchable. A fatal startup
+assertion would be wrong here, because refusing to boot over a missing field would also take down the
+PMID fast path that does work.
+
+The probe reads the mapping rather than sampling documents, which is what separates "this field is not
+in the index" from "this paper is not in the index" — a DOI query against an unmapped field returns
+zero hits and no error. It stays useful after rollout: it catches a later reindex that drops the field,
+and an alias left pointing at a stale index.
+
+With the CI Elasticsearch service forwarded to `localhost:9200`, run the opt-in live checks with:
 
 ```shell
 RUN_PUBMED_ES_INTEGRATION=1 \
 PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION=ci_local_forward \
-python -m pytest -q tests/test_pubmed.py -m integration
+python -m pytest -q tests/test_pubmed.py tests/test_document_metadata.py -m integration
 ```
+
+The document metadata live checks assert the index shape, resolution by every identifier type,
+case-insensitive matching, and an upper bound of three identifiers per record. That bound is a bad-export
+guard: pubmed2db PR #7 limits a record to its own identifiers, so a record carrying hundreds means the
+export regressed and is pulling in cited references' DOIs.
 
 
 ### Builds

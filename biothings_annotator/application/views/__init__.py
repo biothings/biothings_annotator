@@ -1,5 +1,6 @@
 from typing import Dict, List
 from biothings_annotator.application.views.curie import CurieView
+from biothings_annotator.application.views.document_metadata import DocumentMetadataView
 from biothings_annotator.application.views.metadata import VersionView
 from biothings_annotator.application.views.status import StatusView
 from biothings_annotator.application.views.trapi import TrapiView
@@ -39,6 +40,23 @@ def build_routes() -> List[Dict]:
         "methods": ["POST"],
     }
 
+    # --- DOCUMENT METADATA ROUTE ---
+    document_metadata_route_collection = {
+        "handler": DocumentMetadataView.as_view(),
+        "uri": r"/publications",
+        "name": "document_metadata_collection_endpoint",
+        "methods": ["GET", "POST"],
+    }
+
+    # The path converter is required rather than cosmetic: a DOI suffix contains
+    # slashes, so <publication_id:str> would only ever match its first segment.
+    document_metadata_route_get = {
+        "handler": DocumentMetadataView.as_view(),
+        "uri": r"/publications/<publication_id:path>",
+        "name": "document_metadata_endpoint",
+        "methods": ["GET"],
+    }
+
     # --- TRAPI ROUTES ---
     trapi_route = {"handler": TrapiView.as_view(), "uri": "/trapi/", "name": "trapi_endpoint"}
 
@@ -52,6 +70,8 @@ def build_routes() -> List[Dict]:
     route_collection = [
         curie_route_get,
         curie_route_post,
+        document_metadata_route_collection,
+        document_metadata_route_get,
         trapi_route,
         status_route,
         version_route,

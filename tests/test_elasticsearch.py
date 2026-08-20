@@ -189,6 +189,123 @@ async def test_elasticsearch_querymany_formats_biothings_style_hits():
     ]
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_elasticsearch_field_capabilities_reports_only_mapped_fields():
+    """Absent fields are omitted by Elasticsearch, which is the signal callers read."""
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "query": dict(request.url.params),
+            }
+        )
+        return httpx.Response(
+            200,
+            json={
+                "indices": ["pubmed_20260724"],
+                "fields": {"pubmed.identifiers": {"keyword": {"type": "keyword", "searchable": True}}},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+        capabilities = await client.field_capabilities(["pubmed.identifiers", "pubmed.pubdate_raw"])
+
+    assert requests == [
+        {
+            "method": "GET",
+            "path": "/annotator-pubmed/_field_caps",
+            "query": {"fields": "pubmed.identifiers,pubmed.pubdate_raw"},
+        }
+    ]
+    assert set(capabilities) == {"pubmed.identifiers"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_elasticsearch_field_capabilities_skips_the_request_without_fields():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("An empty field list must not reach Elasticsearch")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+
+        assert await client.field_capabilities([]) == {}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_elasticsearch_mget_fetches_one_hundred_exact_ids_in_one_request():
+    requests = []
+    query_ids = [f"PMID:{index}" for index in range(100)]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "query": dict(request.url.params),
+                "body": body,
+            }
+        )
+        return httpx.Response(
+            200,
+            json={
+                "docs": [
+                    {
+                        "_id": query_id,
+                        "found": True,
+                        "_source": {"pubmed": {"title": f"Title {query_id}"}},
+                    }
+                    if index != 50
+                    else {"_id": query_id, "found": False}
+                    for index, query_id in enumerate(query_ids)
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+        result = await client.mget(query_ids, fields=["pubmed"])
+
+    assert requests == [
+        {
+            "method": "POST",
+            "path": "/annotator-pubmed/_mget",
+            "query": {"_source_includes": "pubmed"},
+            "body": {"ids": query_ids},
+        }
+    ]
+    assert len(result) == 100
+    assert result[0] == {
+        "pubmed": {"title": "Title PMID:0"},
+        "_id": "PMID:0",
+        "query": "PMID:0",
+    }
+    assert result[50] == {"query": "PMID:50", "notfound": True}
+    assert result[-1]["query"] == "PMID:99"
+
+
 @pytest.mark.asyncio
 async def test_elasticsearch_querymany_uses_mapped_uniprot_leaf_fields():
     async def handler(request: httpx.Request) -> httpx.Response:
