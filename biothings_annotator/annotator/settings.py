@@ -31,6 +31,17 @@ ELASTICSEARCH_CONNECTIONS = {
     "ci_local_forward": CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION,
     # Deprecated alias for compatibility with existing local-forward overrides.
     "ci_forward": CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION,
+    # The test cluster is reached through an ingress that routes on the Host
+    # header, so the header is sent explicitly rather than left to the resolved
+    # host. "test_local_forward" pairs the same header with a port-forward.
+    "test": {
+        "host": "http://core-components-es.test.transltr.io:9200",
+        "headers": {"Host": "core-components-es.test.transltr.io"},
+    },
+    "test_local_forward": {
+        "host": "http://localhost:9200",
+        "headers": {"Host": "core-components-es.test.transltr.io"},
+    },
 }
 ELASTICSEARCH_REQUEST_TIMEOUT = 30
 ELASTICSEARCH_QUERY_SIZE = 10

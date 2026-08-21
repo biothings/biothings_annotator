@@ -393,6 +393,18 @@ def test_elasticsearch_connection_config_supports_local_forwarded_ci_host():
     assert get_elasticsearch_connection("ci_forward") == expected_connection
 
 
+def test_elasticsearch_connection_config_supports_test_instance():
+    assert get_elasticsearch_connection("test") == {
+        "host": "http://core-components-es.test.transltr.io:9200",
+        "headers": {"Host": "core-components-es.test.transltr.io"},
+    }
+    assert get_elasticsearch_connection("test_local_forward") == {
+        "host": "http://localhost:9200",
+        "headers": {"Host": "core-components-es.test.transltr.io"},
+    }
+    assert ELASTICSEARCH_CONNECTIONS["test"] is not ELASTICSEARCH_CONNECTIONS["test_local_forward"]
+
+
 def test_elasticsearch_client_uses_named_connection_config():
     elasticsearch_settings = ANNOTATOR_CLIENTS["gene"]["elasticsearch"]
     original_instance = elasticsearch_settings.get("instance")
@@ -408,6 +420,11 @@ def test_elasticsearch_client_uses_named_connection_config():
         assert local_client is not ci_local_forward_client
         assert local_client.host == "http://localhost:9200"
         assert local_client.headers == {}
+
+        test_client = get_elasticsearch_client("gene", "test")
+        assert test_client is not local_client
+        assert test_client.host == "http://core-components-es.test.transltr.io:9200"
+        assert test_client.headers == {"Host": "core-components-es.test.transltr.io"}
     finally:
         elasticsearch_settings["instance"] = original_instance
 
