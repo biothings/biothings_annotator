@@ -450,55 +450,26 @@ The PMID fast path meets the objective with roughly half the budget to spare, an
 with batch size: a hundredfold larger batch costs about ten times a single lookup, which is the
 batched `_mget` behaving as intended.
 
-Sweeping concurrency shows where the objective stops holding — and the comparison against a
-single-identifier batch at the same concurrency shows why:
+Sweeping concurrency, across three independent runs plus a single-identifier control:
 
-| concurrent requests | 100 ids: throughput | p50 | p90 | verdict | 1 id: throughput | p50 | p90 | verdict |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 8 | 46 rps | 67 | 89 | pass | 85 rps | 4 | 6 | pass |
-| 12 | 43 rps | 120 | 306 | fail | 114 rps | 4 | 6 | pass |
-| 16 | 28 rps | 419 | 720 | fail | 156 rps | 4 | 6 | pass |
-| 24 | 38 rps | 457 | 782 | fail | 184 rps | 4 | 6 | pass |
-| 32 | — | — | — | — | 221 rps | 4 | 6 | pass |
+| concurrency | run A | run B | run C | 1 id (control) |
+| --- | --- | --- | --- | --- |
+| 8 | 46 rps / 52 ms | 37 rps / 45 ms | 35 rps / 44 ms | 85 rps / 6 ms |
+| 16 | 81 rps / 83 ms | 85 rps / 74 ms | 63 rps / 78 ms | 156 rps / 6 ms |
+| 24 | 109 rps / 106 ms | 100 rps / 109 ms | 86 rps / 77 ms | 184 rps / 6 ms |
+| 32 | — | 106 rps / 152 ms | 99 rps / 129 ms | 221 rps / 6 ms |
 
-**The binding constraint is response bytes, not requests in flight.** Single-identifier requests scale
-linearly to 221 rps with a flat 6 ms p90 and no knee anywhere, so nothing about 12 concurrent
-*requests* is hard for the service. Full batches plateau at roughly 5 MB/s of response body — 46 rps
-× 114 kB — and past that point latency climbs while throughput stops rising, which is queueing rather
-than slower work: every request still returns 200, just later.
+Under smooth closed-loop load the objective holds to about 100 rps at 24 concurrent full batches, and
+the p90 reaches the 150 ms line around 32. The single-identifier control never leaves 6 ms, so nothing
+about the concurrency itself is hard: what costs is the response body, and a full batch is ~114 kB of
+which **abstracts are 75%** (titles 8%). Caddy compresses it 2.9x to ~42 kB on the wire.
 
-So the ceiling is a byte-rate, and the payload is dominated by one field: **abstracts are 75% of a
-100-identifier response** (titles are 8%). Three consequences worth acting on before reading the
-concurrency figure as a capacity limit:
-
-- CI runs `replicaCount: 1`, and the bottleneck is per-pod work — Sanic serializing ~119 kB of JSON and
-  Caddy compressing it 2.9× to 42 kB on the wire, under 8 Sanic workers on one pod. It should scale
-  close to linearly with replicas, so the number describes the current CI sizing rather than the
-  service.
-- Field selection would move the ceiling further than replicas would. A caller rendering a list of 100
-  publications may not need every abstract, and omitting them would cut the payload roughly fourfold.
-  The DocumentMetadataAPI specification does mandate `abstract`, so this is an addition for callers that
-  opt out, not a change to the documented response.
-- At 46 full batches per second — about 4,500 publication lookups per second on a single pod — the
-  ceiling is well above expected UI traffic. What deserves attention is its *shape*: 89 ms to 306 ms to
-  720 ms with no graceful degradation and no load shedding, so a burst does not get gently slower.
-
-One honesty note on attribution: server-side `processing_time_ms` is measured inside the handler before
-the response is written, so a slow client cannot inflate it directly. Event-loop time spent draining
-large responses to a distant client can still delay a worker's other requests, which is damped but not
-eliminated by 8 separate worker processes behind Caddy. Confirming the ceiling is CPU rather than
-egress needs pod-level metrics during a run, which the benchmark does not collect.
-
-Two results deserve attention rather than a passing grade:
-
-- **Mixed identifier batches pass at p90 but have a much heavier tail.** Their p50 is *lower* than a
-  PMID-only batch, because a PMCID or DOI currently resolves to nothing and a miss is cheap, yet p95
-  reaches 181 ms. The distribution is bimodal: the per-identifier `_msearch` path is what produces the
-  tail. This is the workload to re-measure first once the reindex lands and those identifiers start
-  resolving, since today's cheap misses become real lookups and the tail can only grow.
-- **Server-side latency is cache-sensitive.** A replayed batch runs at well under half the cold-cache
-  cost, which is the concrete form of the specification's note that "caching of results server-side is
-  recommended to achieve this SLO".
+A fourth run measured a knee at 12 concurrent, with the p90 reaching 720 ms at 16 — roughly an order of
+magnitude worse than the three runs above at the same concurrency, and with throughput plateauing rather
+than climbing. It did not reproduce. CI is a shared single-replica deployment and the benchmark ran from
+outside the cluster, so a run like that should be treated as an environment sample rather than a
+property of the service, and repeated before anything is concluded from it. **Run the ramp at least
+twice before quoting a ceiling.**
 
 ###### Concurrency is not users
 
@@ -550,11 +521,27 @@ User mode differs from the concurrency ramp in three ways that all matter:
   saturating the service bounds nothing from above, and the report says so rather than letting the
   achieved rate be mistaken for a ceiling.
 
-Measured against CI, a realistic population reaches roughly **90 rps at a 66 ms p90** — about double the
-46 rps cold-cache closed-loop ceiling. Two effects account for the gap, and both are properties of a
-real population rather than measurement error: a skewed draw collapses repeated popular papers, so a
-100-identifier request sends about 79 distinct ones, and the shared hot set stays cached. The cold-cache
-concurrency ramp is therefore a conservative bound, not the expected operating point.
+Measured against CI at a 30 s think time, over 300 s so the joining transient has washed out:
+
+| readers | offered | achieved | p50 | p90 | p99 | success | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 300 | 10 rps | 12 rps | 31 | 42 | 54 | 100% | pass |
+| 600 | 20 rps | 25 rps | 25 | 33 | 56 | 100% | pass |
+| 1,200 | 40 rps | 42 rps | 22 | **28** | 38 | 100% | pass |
+| 2,400 | 80 rps | 53 rps | 31 | **808** | 1554 | 100% | fail |
+
+So roughly **1,200 concurrent readers** fit inside the objective, with the p90 at 28 ms — a fifth of the
+budget. At 2,400 the population offers 80 rps, the service delivers 53, and the p90 goes to 808 ms.
+
+Worth noting that 1,200 readers pass at a *better* p90 (28 ms) than 100 readers do (87 ms, p99 333 ms).
+That is not noise: at a low request rate the shared hot set falls out of cache between requests, so a
+lightly loaded service does more cold lookups than a moderately loaded one.
+
+The population fails at 53 rps while the closed-loop ramp sustained ~100 rps, and the difference is
+**burstiness**, not a contradiction. Closed-loop load is perfectly smooth — exactly N requests in flight,
+never more. Exponential think times produce Poisson arrivals, whose instantaneous rate clumps well above
+its mean, and those clumps queue behind the 8 Sanic workers. Real traffic is bursty, so the lower number
+is the more realistic one and the smooth ramp should be read as an optimistic bound.
 
 Around that rate the service is at its edge. One 100 rps run was served cleanly; another at the same
 offered rate shed about 1.5% of requests as HTTP 500s, which is the two-second backend deadline
