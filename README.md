@@ -314,8 +314,8 @@ PMIDs are the document `_id`, so they resolve through one exact-ID Elasticsearch
 batch, including a complete batch of 100. PMCID and DOI resolve against `pubmed.identifiers` instead,
 which costs one `_msearch` entry per identifier, so a PMID-only request stays on the single-request fast
 path and only mixed requests pay for the scoped lookup. The behavioral performance test verifies that a
-100-PMID request remains one backend request; the deployment still needs a mixed-load benchmark to
-verify the 150 ms p90 service objective.
+100-PMID request remains one backend request, and the load benchmark measures what that costs against
+the 150 ms p90 service objective — see [Load benchmark](#load-benchmark-and-the-150-ms-objective).
 
 The current PubMed index contains only `PMID:<digits>` document IDs and no `pubmed.identifiers` field,
 so PMCID and DOI lookups return `not_found` until the index is rebuilt. That is the response CCWG#15
@@ -373,6 +373,128 @@ The document metadata live checks assert the index shape, resolution by every id
 case-insensitive matching, and an upper bound of three identifiers per record. That bound is a bad-export
 guard: pubmed2db PR #7 limits a record to its own identifiers, so a record carrying hundreds means the
 export regressed and is pulling in cited references' DOIs.
+
+
+##### Load benchmark and the 150 ms objective
+
+CCWG#15 sets a service objective of a 150 ms p90 for requests carrying up to 100 publication
+identifiers. `benchmarks/publications` measures a deployment against it. The endpoint is meant as a
+drop-in replacement for DocumentMetadataAPI, so the benchmark deliberately covers only
+`/publications` — none of the generic annotation routes share its code path.
+
+```shell
+# The headline CCWG#15 case: 100 identifiers per request, against CI.
+python -m benchmarks.publications --requests 200
+
+# Load-bearing sweep: where does the objective stop holding?
+python -m benchmarks.publications --ramp 1,4,8,16 --requests 200
+
+# The JSON body form, and the cached case the specification recommends.
+python -m benchmarks.publications --method POST
+python -m benchmarks.publications --unique-ratio 0.0 --hot-pool 200
+
+# Mixed identifiers, which take the per-identifier _msearch path instead of the batched _mget.
+python -m benchmarks.publications --pmid-ratio 0.5
+
+# Machine-readable output; exit status is 0 only if every stage met the objective.
+python -m benchmarks.publications --json --slo-basis server
+```
+
+###### Reading the numbers
+
+Every run reports two latencies per request, because they answer different questions and can
+disagree:
+
+- **server** is the endpoint's own `_meta.processing_time_ms`. It is what the service controls and is
+  comparable from any vantage point, so it is what `--slo-basis` gates on by default.
+- **client** is wall-clock time to a fully-read response, which is what a UI actually experiences. It
+  includes the network path from wherever the benchmark runs. A full batch of 100 returns roughly
+  115 kB of abstracts, so from outside the cluster transit and transfer alone add 150–250 ms at p90 and
+  the client-side verdict fails on network cost rather than on service time. Run the benchmark from
+  inside the cluster, or from the UI's own vantage point, before reading a client-side number as an SLO
+  result. The report prints the measured `net p90` difference so this is never invisible.
+
+Four methodology choices are worth knowing about, because each one would otherwise flatter the result:
+
+- **Warmup is discarded.** Each stage first issues throwaway requests to fill the keep-alive pool, so
+  no measured sample is charged for a TLS handshake. The warmup deliberately draws *different*
+  identifiers than the measured stage, so it does not pre-warm the backend cache for the very lookups
+  under measurement.
+- **Identifiers are drawn fresh by default.** `--unique-ratio 1.0` makes every lookup a first-time
+  lookup, which is the cold-cache bound. Elasticsearch caches aggressively — the same batch replayed
+  drops from roughly 70 ms to under 30 ms — so a benchmark that reused identifiers would report the
+  best case as if it were typical. `--verify-corpus` is available for a known-present corpus, and any
+  run using it is labelled `cache_primed`, because verification is itself a query that warms the cache.
+- **The hit ratio is reported.** PMIDs are drawn at random from the range PubMed has issued, so around
+  96% resolve. That matters because an all-`not_found` response is cheap to serve; a run whose
+  identifiers mostly missed would show a fast p90 for work the service never did.
+- **Percentiles are nearest-rank.** An interpolated p90 reports a latency that was never observed. The
+  report also prints the fraction of requests strictly under the threshold, which is the more literal
+  reading of "90% of requests should take <150ms" and needs no interpolation convention to reproduce.
+
+###### Measured against CI
+
+Full batches of 100 identifiers against `https://annotator.ci.transltr.io`, cold cache, server-side
+latency in milliseconds:
+
+| workload | p50 | p90 | p95 | p99 | verdict |
+| --- | --- | --- | --- | --- | --- |
+| 1 identifier | 5 | 7 | 7 | 8 | pass |
+| 10 identifiers | 12 | 16 | 18 | 21 | pass |
+| 100 identifiers, `GET` | 62 | 73 | 80 | 84 | pass |
+| 100 identifiers, `POST` | 68 | 77 | 82 | 86 | pass |
+| 100 identifiers, replayed (warm cache) | 27 | 49 | 55 | 62 | pass |
+| 100 identifiers, 50% PMCID and DOI | 34 | 54 | 181 | 199 | pass at p90 |
+
+The PMID fast path meets the objective with roughly half the budget to spare, and scales sublinearly
+with batch size: a hundredfold larger batch costs about ten times a single lookup, which is the
+batched `_mget` behaving as intended.
+
+Sweeping concurrency with the same 100-identifier batch shows where the objective stops holding:
+
+| concurrent requests | throughput | p50 | p90 | under 150 ms | verdict |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 5 rps | 64 | 80 | 100% | pass |
+| 4 | 21 rps | 63 | 79 | 100% | pass |
+| 8 | 46 rps | 67 | 89 | 100% | pass |
+| 12 | 43 rps | 120 | 306 | 56% | fail |
+| 16 | 28 rps | 419 | 720 | 12% | fail |
+| 24 | 38 rps | 457 | 782 | 14% | fail |
+
+The knee sits between 8 and 12 concurrent full batches, at roughly 45 requests per second — about
+4,500 identifier lookups per second. Past that point throughput stops rising while latency climbs
+steeply, which is queueing rather than slower work: every request still returns 200, just later. Two
+things follow. Concurrency, not batch size, is the binding constraint on the objective — a full batch of
+100 has ample headroom on its own. And the number itself describes the current CI sizing, not the
+service, so it should be re-measured against whatever replica count Test and Prod are given rather than
+carried over.
+
+Two results deserve attention rather than a passing grade:
+
+- **Mixed identifier batches pass at p90 but have a much heavier tail.** Their p50 is *lower* than a
+  PMID-only batch, because a PMCID or DOI currently resolves to nothing and a miss is cheap, yet p95
+  reaches 181 ms. The distribution is bimodal: the per-identifier `_msearch` path is what produces the
+  tail. This is the workload to re-measure first once the reindex lands and those identifiers start
+  resolving, since today's cheap misses become real lookups and the tail can only grow.
+- **Server-side latency is cache-sensitive.** A replayed batch runs at well under half the cold-cache
+  cost, which is the concrete form of the specification's note that "caching of results server-side is
+  recommended to achieve this SLO".
+
+###### Running it as a test
+
+The benchmark is also wrapped as an opt-in pytest module. The offline tests cover the harness itself —
+percentile arithmetic, verdict boundaries, and the accounting that keeps a failed or malformed response
+from scoring as a fast one — and run with the normal suite. The live tests generate real load and are
+gated:
+
+```shell
+RUN_PUBLICATIONS_LOAD_TEST=1 python -m pytest -q tests/test_publications_load.py -m performance
+```
+
+`PUBLICATIONS_LOAD_TEST_BASE_URL`, `PUBLICATIONS_LOAD_TEST_REQUESTS`,
+`PUBLICATIONS_LOAD_TEST_CONCURRENCY`, and `PUBLICATIONS_LOAD_TEST_SLO_BASIS` override the target and
+the load. The ramp test reports the concurrency levels that held the objective rather than asserting a
+specific one, because that number describes the deployment's current sizing rather than the service.
 
 
 ### Builds
