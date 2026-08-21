@@ -363,7 +363,9 @@ def test_success_rate_is_reported_beside_latency():
 def test_report_says_a_population_that_was_served_bounds_nothing_from_above():
     """A non-saturating run reports the load offered, not the load available."""
     stage = _stage("300u", throughput_rps=10.0, server_ms=47, successes=100)
-    model = UserModel(users=300, think_time_seconds=30.0, duration_seconds=60.0)
+    # Long enough that the joining transient has washed out, so the rate
+    # comparison is trustworthy and the report speaks to saturation.
+    model = UserModel(users=300, think_time_seconds=30.0, duration_seconds=600.0)
     plan = RunPlan(base_url="https://example.invalid", workload=Workload())
     rendered = render_text(RunResult(plan=plan, stages=[stage], user_model=model))
     assert "kept up" in rendered
@@ -373,7 +375,7 @@ def test_report_says_a_population_that_was_served_bounds_nothing_from_above():
 @pytest.mark.unit
 def test_report_flags_a_population_whose_offered_rate_went_unmet():
     stage = _stage("200u", throughput_rps=40.0, server_ms=400, successes=100)
-    model = UserModel(users=200, think_time_seconds=2.0, duration_seconds=60.0)
+    model = UserModel(users=200, think_time_seconds=2.0, duration_seconds=60.0)  # 30 think times
     plan = RunPlan(base_url="https://example.invalid", workload=Workload())
     rendered = render_text(RunResult(plan=plan, stages=[stage], user_model=model))
     assert "short of offered" in rendered
@@ -398,6 +400,46 @@ def test_report_always_states_that_user_counts_rest_on_the_think_time_assumption
     stage = _stage("c=1", throughput_rps=46.0, server_ms=89, successes=100)
     plan = RunPlan(base_url="https://example.invalid", workload=Workload())
     assert "think-time assumption" in render_text(RunResult(plan=plan, stages=[stage]))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "duration, think_time, expected",
+    [(60.0, 30.0, 2.0), (300.0, 30.0, 10.0), (60.0, 2.0, 30.0)],
+)
+def test_run_length_is_measured_in_think_times(duration: float, think_time: float, expected: float):
+    model = UserModel(users=10, think_time_seconds=think_time, duration_seconds=duration)
+    assert model.think_times_elapsed == pytest.approx(expected)
+
+
+@pytest.mark.unit
+def test_a_short_run_does_not_claim_the_service_fell_short():
+    """Every user fires once on joining, which inflates the rate on a short run.
+
+    At two think times the observed rate reads about 25% high, so a genuinely
+    saturated population can look as though it kept up. The report must say the
+    comparison is untrustworthy rather than render a verdict from it.
+    """
+    model = UserModel(users=2400, think_time_seconds=30.0, duration_seconds=60.0)
+    assert not model.reaches_steady_state
+
+    stage = _stage("2400u", throughput_rps=50.0, server_ms=50, successes=100)
+    plan = RunPlan(base_url="https://example.invalid", workload=Workload())
+    rendered = render_text(RunResult(plan=plan, stages=[stage], user_model=model))
+    assert "reads roughly 25% high" in rendered
+    assert "bounds nothing from above" not in rendered
+
+
+@pytest.mark.unit
+def test_latency_is_trusted_even_on_a_short_run():
+    """Each latency sample is an independent measurement; only the rate is biased."""
+    model = UserModel(users=100, think_time_seconds=30.0, duration_seconds=60.0)
+    stage = _stage("100u", throughput_rps=4.1, server_ms=87, successes=100)
+    plan = RunPlan(base_url="https://example.invalid", workload=Workload())
+    result = RunResult(plan=plan, stages=[stage], user_model=model)
+    assert not model.reaches_steady_state
+    assert stage.verdict("server").met
+    assert "Latency is unaffected" in render_text(result)
 
 
 # --- SHARED CATALOGUE ---

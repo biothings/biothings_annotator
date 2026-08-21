@@ -51,6 +51,10 @@ DEFAULT_CATALOG_SIZE = 50_000
 # Classic Zipf. Publication access is heavily skewed, and this is the usual
 # first-order model for it.
 DEFAULT_ZIPF_EXPONENT = 1.0
+# Below this many think times of run length, the joining-request transient still
+# inflates the observed rate by more than ~5% and the offered-versus-achieved
+# reading should not be trusted.
+MIN_STEADY_STATE_THINK_TIMES = 10.0
 
 
 @dataclass(frozen=True)
@@ -87,6 +91,25 @@ class UserModel:
         says whether the service kept up.
         """
         return self.users / self.think_time_seconds
+
+    @property
+    def think_times_elapsed(self) -> float:
+        """Run length measured in think times, which sets the startup bias.
+
+        Every user issues one request the moment it joins and then settles into
+        its think-time cadence, so a short run is dominated by those joining
+        requests. Over ``duration = k * think_time`` the observed rate runs
+        roughly ``1 + 1/(2k)`` times the steady-state rate: 25% high at k=2, 5%
+        at k=10, 1% at k=60. The latency samples are unaffected -- each is an
+        independent per-request measurement -- but the offered-versus-achieved
+        comparison is only meaningful once k is large.
+        """
+        return self.duration_seconds / self.think_time_seconds
+
+    @property
+    def reaches_steady_state(self) -> bool:
+        """Whether the run is long enough for the rate comparison to mean anything."""
+        return self.think_times_elapsed >= MIN_STEADY_STATE_THINK_TIMES
 
     def describe(self) -> str:
         return (

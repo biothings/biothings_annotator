@@ -4,6 +4,7 @@ import json
 from typing import Dict, List, Optional
 
 from benchmarks.publications.metrics import SLO_QUANTILE, LatencySummary, StageReport
+from benchmarks.publications.users import MIN_STEADY_STATE_THINK_TIMES, capacity_table
 from benchmarks.publications.runner import RunResult
 
 _COLUMNS = (
@@ -84,8 +85,6 @@ def _capacity_lines(result: RunResult) -> List[str]:
     reflects the load offered, not the load available, and reading a user ceiling
     off it would just restate the input.
     """
-    from benchmarks.publications.users import capacity_table
-
     ceiling = sustained_ceiling(result)
     if ceiling is None:
         degraded = [
@@ -132,7 +131,10 @@ def _user_lines(result: RunResult) -> List[str]:
     # A population that offers more than the service accepts is backing up: the
     # deficit is requests its users are still waiting on rather than issuing.
     shortfall = (offered - achieved) / offered if offered else 0.0
-    saturated = shortfall > 0.05
+    # Only trust the rate comparison once the joining transient has washed out.
+    # Before that the achieved rate reads high and a saturated run can look as
+    # though it kept up.
+    saturated = shortfall > 0.05 and model.reaches_steady_state
 
     lines = [
         "",
@@ -152,7 +154,14 @@ def _user_lines(result: RunResult) -> List[str]:
             f"  mean batch sent    {identifiers['mean_batch_size']:.0f} of {result.plan.workload.batch_size} "
             "requested, after a skewed draw collapsed repeats"
         )
-    if not saturated:
+    if not model.reaches_steady_state:
+        lines.append(
+            f"  the run covers {model.think_times_elapsed:.1f} think times, so every user's joining request "
+            f"is still a large share of the total and the achieved rate reads roughly "
+            f"{1 / (2 * model.think_times_elapsed):.0%} high. Latency is unaffected; for a trustworthy rate "
+            f"comparison run at least {MIN_STEADY_STATE_THINK_TIMES * model.think_time_seconds:.0f}s"
+        )
+    elif not saturated:
         lines.append(
             "  this population was served without saturating the service, so it bounds nothing from above; "
             "use --ramp to find the ceiling"
