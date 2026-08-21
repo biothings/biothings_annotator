@@ -450,24 +450,44 @@ The PMID fast path meets the objective with roughly half the budget to spare, an
 with batch size: a hundredfold larger batch costs about ten times a single lookup, which is the
 batched `_mget` behaving as intended.
 
-Sweeping concurrency with the same 100-identifier batch shows where the objective stops holding:
+Sweeping concurrency shows where the objective stops holding — and the comparison against a
+single-identifier batch at the same concurrency shows why:
 
-| concurrent requests | throughput | p50 | p90 | under 150 ms | verdict |
-| --- | --- | --- | --- | --- | --- |
-| 1 | 5 rps | 64 | 80 | 100% | pass |
-| 4 | 21 rps | 63 | 79 | 100% | pass |
-| 8 | 46 rps | 67 | 89 | 100% | pass |
-| 12 | 43 rps | 120 | 306 | 56% | fail |
-| 16 | 28 rps | 419 | 720 | 12% | fail |
-| 24 | 38 rps | 457 | 782 | 14% | fail |
+| concurrent requests | 100 ids: throughput | p50 | p90 | verdict | 1 id: throughput | p50 | p90 | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 8 | 46 rps | 67 | 89 | pass | 85 rps | 4 | 6 | pass |
+| 12 | 43 rps | 120 | 306 | fail | 114 rps | 4 | 6 | pass |
+| 16 | 28 rps | 419 | 720 | fail | 156 rps | 4 | 6 | pass |
+| 24 | 38 rps | 457 | 782 | fail | 184 rps | 4 | 6 | pass |
+| 32 | — | — | — | — | 221 rps | 4 | 6 | pass |
 
-The knee sits between 8 and 12 concurrent full batches, at roughly 45 requests per second — about
-4,500 identifier lookups per second. Past that point throughput stops rising while latency climbs
-steeply, which is queueing rather than slower work: every request still returns 200, just later. Two
-things follow. Concurrency, not batch size, is the binding constraint on the objective — a full batch of
-100 has ample headroom on its own. And the number itself describes the current CI sizing, not the
-service, so it should be re-measured against whatever replica count Test and Prod are given rather than
-carried over.
+**The binding constraint is response bytes, not requests in flight.** Single-identifier requests scale
+linearly to 221 rps with a flat 6 ms p90 and no knee anywhere, so nothing about 12 concurrent
+*requests* is hard for the service. Full batches plateau at roughly 5 MB/s of response body — 46 rps
+× 114 kB — and past that point latency climbs while throughput stops rising, which is queueing rather
+than slower work: every request still returns 200, just later.
+
+So the ceiling is a byte-rate, and the payload is dominated by one field: **abstracts are 75% of a
+100-identifier response** (titles are 8%). Three consequences worth acting on before reading the
+concurrency figure as a capacity limit:
+
+- CI runs `replicaCount: 1`, and the bottleneck is per-pod work — Sanic serializing ~119 kB of JSON and
+  Caddy compressing it 2.9× to 42 kB on the wire, under 8 Sanic workers on one pod. It should scale
+  close to linearly with replicas, so the number describes the current CI sizing rather than the
+  service.
+- Field selection would move the ceiling further than replicas would. A caller rendering a list of 100
+  publications may not need every abstract, and omitting them would cut the payload roughly fourfold.
+  The DocumentMetadataAPI specification does mandate `abstract`, so this is an addition for callers that
+  opt out, not a change to the documented response.
+- At 46 full batches per second — about 4,500 publication lookups per second on a single pod — the
+  ceiling is well above expected UI traffic. What deserves attention is its *shape*: 89 ms to 306 ms to
+  720 ms with no graceful degradation and no load shedding, so a burst does not get gently slower.
+
+One honesty note on attribution: server-side `processing_time_ms` is measured inside the handler before
+the response is written, so a slow client cannot inflate it directly. Event-loop time spent draining
+large responses to a distant client can still delay a worker's other requests, which is damped but not
+eliminated by 8 separate worker processes behind Caddy. Confirming the ceiling is CPU rather than
+egress needs pod-level metrics during a run, which the benchmark does not collect.
 
 Two results deserve attention rather than a passing grade:
 
