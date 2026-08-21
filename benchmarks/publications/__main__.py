@@ -17,6 +17,12 @@ from benchmarks.publications.corpus import (
 from benchmarks.publications.metrics import SLO_THRESHOLD_MS
 from benchmarks.publications.report import render_json, render_text, slo_met
 from benchmarks.publications.runner import RunResult, run_plan, verify_pmid_pool
+from benchmarks.publications.users import (
+    DEFAULT_CATALOG_SIZE,
+    DEFAULT_ZIPF_EXPONENT,
+    UserModel,
+    run_user_plan,
+)
 from benchmarks.publications.workload import DEFAULT_BATCH_SIZE, RunPlan, Workload
 
 # CI is the deployment CCWG#15 is being validated against.
@@ -98,6 +104,43 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--json", action="store_true", help="emit machine-readable output only")
+
+    population = parser.add_argument_group(
+        "user population",
+        "Model N readers with think time between their requests instead of holding a fixed number of "
+        "requests in flight. Concurrency measures the capacity ceiling; this measures whether a "
+        "population fits under it.",
+    )
+    population.add_argument(
+        "--users",
+        type=int,
+        default=None,
+        help="simulate this many concurrent readers; enables user mode",
+    )
+    population.add_argument(
+        "--think-time",
+        type=float,
+        default=30.0,
+        help="mean seconds a reader waits before its next request, exponentially distributed",
+    )
+    population.add_argument(
+        "--duration",
+        type=float,
+        default=60.0,
+        help="how long to run user mode, in seconds",
+    )
+    population.add_argument(
+        "--catalog-size",
+        type=int,
+        default=DEFAULT_CATALOG_SIZE,
+        help="papers in the shared catalogue the population draws from",
+    )
+    population.add_argument(
+        "--zipf",
+        type=float,
+        default=DEFAULT_ZIPF_EXPONENT,
+        help="popularity skew across the catalogue; 0 is uniform, 1 is classic Zipf",
+    )
     return parser
 
 
@@ -153,7 +196,19 @@ async def execute(arguments: argparse.Namespace) -> RunResult:
         threshold_ms=arguments.threshold_ms,
         ramp=tuple(arguments.ramp or ()),
     )
-    return await run_plan(plan, cache_primed=cache_primed)
+    if arguments.users is None:
+        return await run_plan(plan, cache_primed=cache_primed)
+
+    return await run_user_plan(
+        plan,
+        UserModel(
+            users=arguments.users,
+            think_time_seconds=arguments.think_time,
+            duration_seconds=arguments.duration,
+            catalog_size=arguments.catalog_size,
+            zipf_exponent=arguments.zipf,
+        ),
+    )
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

@@ -20,12 +20,16 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import httpx
 
 from benchmarks.publications.metrics import Sample, StageReport
 from benchmarks.publications.workload import RunPlan, Workload
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard
+    # users imports _issue_request from here, so the annotation is deferred.
+    from benchmarks.publications.users import UserModel
 
 # Seeds for per-worker corpora are derived from the plan seed by offset, so a
 # seeded run is reproducible without every worker drawing the same identifiers.
@@ -59,6 +63,10 @@ class RunResult:
     plan: RunPlan
     stages: List[StageReport] = field(default_factory=list)
     request_id_mismatches: int = 0
+    # Set when the run modelled a user population rather than a fixed number of
+    # requests in flight. It changes how the result should be read, so the
+    # report needs to know.
+    user_model: Optional["UserModel"] = None
 
     @property
     def all_samples(self) -> List[Sample]:

@@ -27,7 +27,9 @@ from benchmarks.publications import (
     run_plan,
     slo_met,
 )
+from benchmarks.publications.report import MIN_CEILING_SUCCESS_RATE, sustained_ceiling
 from benchmarks.publications.runner import RunResult
+from benchmarks.publications.users import UserModel, capacity_table, run_user_plan, supported_users
 
 LIVE_BASE_URL = os.environ.get("PUBLICATIONS_LOAD_TEST_BASE_URL", "https://annotator.ci.transltr.io")
 LIVE_REQUESTS = int(os.environ.get("PUBLICATIONS_LOAD_TEST_REQUESTS", "60"))
@@ -256,6 +258,195 @@ def test_report_states_both_verdicts_because_they_can_disagree():
     assert not slo_met(result, "client")
 
 
+# --- USER POPULATION MODEL ---
+def _stage(label: str, throughput_rps: float, server_ms: int, successes: int, failures: int = 0) -> StageReport:
+    samples = [_sample(server_ms + 100.0, server_ms) for _ in range(successes)]
+    samples += [Sample(client_ms=2100.0, status=500, requested=100) for _ in range(failures)]
+    return StageReport(
+        label=label,
+        concurrency=1,
+        wall_seconds=len(samples) / throughput_rps,
+        samples=samples,
+    )
+
+
+@pytest.mark.unit
+def test_one_user_offers_far_less_load_than_one_closed_loop_worker():
+    """The distinction the user model exists to make explicit.
+
+    A closed-loop worker at 90 ms service time offers about 11 rps. A reader with
+    a 30 s think time offers about 0.03 rps — nearly three orders of magnitude
+    apart, which is why a concurrency figure cannot be read as a user count.
+    """
+    model = UserModel(users=1, think_time_seconds=30.0, duration_seconds=60.0)
+    assert model.offered_rate_rps == pytest.approx(1 / 30.0)
+    assert model.offered_rate_rps < 0.05
+
+
+@pytest.mark.unit
+def test_offered_rate_scales_with_the_population():
+    assert UserModel(users=300, think_time_seconds=30.0, duration_seconds=60.0).offered_rate_rps == pytest.approx(10.0)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "field, value",
+    [("users", 0), ("think_time_seconds", 0.0), ("duration_seconds", 0.0), ("catalog_size", 0), ("zipf_exponent", -1)],
+)
+def test_user_model_rejects_degenerate_configurations(field: str, value: float):
+    arguments = {"users": 10, "think_time_seconds": 30.0, "duration_seconds": 60.0}
+    arguments[field] = value
+    with pytest.raises(ValueError):
+        UserModel(**arguments)
+
+
+@pytest.mark.unit
+def test_supported_users_follows_littles_law():
+    """46 rps at a 90 ms latency and a 30 s think time is about 1,384 readers."""
+    assert supported_users(46.0, 90.0, 30.0) == pytest.approx(46.0 * 30.09)
+
+
+@pytest.mark.unit
+def test_supported_users_counts_service_latency_not_just_think_time():
+    """At a short think time the service latency stops being a rounding error."""
+    assert supported_users(10.0, 500.0, 1.0) == pytest.approx(15.0)
+
+
+@pytest.mark.unit
+def test_supported_users_is_zero_when_nothing_was_served():
+    assert supported_users(0.0, 90.0, 30.0) == 0.0
+
+
+@pytest.mark.unit
+def test_capacity_table_rises_with_think_time():
+    rows = capacity_table(46.0, 90.0)
+    users = [row["supported_users"] for row in rows]
+    assert users == sorted(users)
+    assert all(row["requests_per_user_rps"] > 0 for row in rows)
+
+
+# --- SUSTAINED CEILING ---
+@pytest.mark.unit
+def test_ceiling_is_the_fastest_passing_stage_not_the_fastest_stage():
+    passing = _stage("c=8", throughput_rps=46.0, server_ms=89, successes=100)
+    failing = _stage("c=12", throughput_rps=60.0, server_ms=306, successes=100)
+    plan = RunPlan(base_url="https://example.invalid", workload=Workload(), ramp=(8, 12))
+    assert sustained_ceiling(RunResult(plan=plan, stages=[passing, failing])) is passing
+
+
+@pytest.mark.unit
+def test_a_stage_shedding_load_is_not_capacity_even_with_a_passing_p90():
+    """The survivorship trap: failures leave the distribution, improving the p90.
+
+    A stage answering 5% of its load with 500s posts a better p90 than one that
+    serves everything slowly, so gating capacity on latency alone would
+    recommend a load level at which the service is already erroring.
+    """
+    shedding = _stage("200u", throughput_rps=87.0, server_ms=100, successes=95, failures=5)
+    assert shedding.verdict("server").met
+    assert shedding.success_rate < MIN_CEILING_SUCCESS_RATE
+    plan = RunPlan(base_url="https://example.invalid", workload=Workload())
+    result = RunResult(plan=plan, stages=[shedding])
+    assert sustained_ceiling(result) is None
+    assert "not sustained" in render_text(result)
+
+
+@pytest.mark.unit
+def test_success_rate_is_reported_beside_latency():
+    stage = _stage("c=1", throughput_rps=10.0, server_ms=50, successes=90, failures=10)
+    assert stage.success_rate == pytest.approx(0.90)
+    assert stage.as_dict()["success_rate"] == pytest.approx(0.90)
+
+
+# --- POPULATION REPORTING ---
+@pytest.mark.unit
+def test_report_says_a_population_that_was_served_bounds_nothing_from_above():
+    """A non-saturating run reports the load offered, not the load available."""
+    stage = _stage("300u", throughput_rps=10.0, server_ms=47, successes=100)
+    model = UserModel(users=300, think_time_seconds=30.0, duration_seconds=60.0)
+    plan = RunPlan(base_url="https://example.invalid", workload=Workload())
+    rendered = render_text(RunResult(plan=plan, stages=[stage], user_model=model))
+    assert "kept up" in rendered
+    assert "bounds nothing from above" in rendered
+
+
+@pytest.mark.unit
+def test_report_flags_a_population_whose_offered_rate_went_unmet():
+    stage = _stage("200u", throughput_rps=40.0, server_ms=400, successes=100)
+    model = UserModel(users=200, think_time_seconds=2.0, duration_seconds=60.0)
+    plan = RunPlan(base_url="https://example.invalid", workload=Workload())
+    rendered = render_text(RunResult(plan=plan, stages=[stage], user_model=model))
+    assert "short of offered" in rendered
+    # Server-side latency is over budget here, so the service is the suspect and
+    # the load-generator caveat must not be offered as an excuse.
+    assert "load generator" not in rendered
+
+
+@pytest.mark.unit
+def test_report_blames_the_generator_only_when_the_service_looks_healthy():
+    """A shortfall with a healthy in-handler p90 and no errors is a client limit."""
+    stage = _stage("200u", throughput_rps=40.0, server_ms=66, successes=100)
+    model = UserModel(users=200, think_time_seconds=2.0, duration_seconds=60.0)
+    plan = RunPlan(base_url="https://example.invalid", workload=Workload())
+    rendered = render_text(RunResult(plan=plan, stages=[stage], user_model=model))
+    assert "short of offered" in rendered
+    assert "load generator" in rendered
+
+
+@pytest.mark.unit
+def test_report_always_states_that_user_counts_rest_on_the_think_time_assumption():
+    stage = _stage("c=1", throughput_rps=46.0, server_ms=89, successes=100)
+    plan = RunPlan(base_url="https://example.invalid", workload=Workload())
+    assert "think-time assumption" in render_text(RunResult(plan=plan, stages=[stage]))
+
+
+# --- SHARED CATALOGUE ---
+@pytest.mark.unit
+def test_a_skewed_catalogue_concentrates_draws_on_popular_papers():
+    """Shared, skewed interest is what a backend cache actually gets to absorb."""
+    import collections
+
+    corpus = IdentifierCorpus(CorpusConfig(seed=4))
+    catalogue = corpus.seed_catalog(1_000, zipf_exponent=1.0)
+    counts = collections.Counter()
+    for _ in range(100):
+        counts.update(corpus.catalog_batch(100))
+
+    hottest = counts[catalogue[0]]
+    coldest = counts[catalogue[-1]]
+    assert hottest > coldest
+    # The rank-1 paper should appear in nearly every request under classic Zipf.
+    assert hottest > 50
+
+
+@pytest.mark.unit
+def test_a_uniform_catalogue_spreads_draws_evenly():
+    import collections
+
+    corpus = IdentifierCorpus(CorpusConfig(seed=4))
+    catalogue = corpus.seed_catalog(500, zipf_exponent=0.0)
+    counts = collections.Counter()
+    for _ in range(100):
+        counts.update(corpus.catalog_batch(100))
+    assert counts[catalogue[0]] < 50
+
+
+@pytest.mark.unit
+def test_catalogue_batches_collapse_repeated_popular_papers():
+    """A skewed draw really does repeat, and the endpoint deduplicates too."""
+    corpus = IdentifierCorpus(CorpusConfig(seed=8))
+    corpus.seed_catalog(20, zipf_exponent=2.0)
+    batch = corpus.catalog_batch(100)
+    assert len(batch) == len(set(batch))
+    assert len(batch) <= 20
+
+
+@pytest.mark.unit
+def test_drawing_from_an_unseeded_catalogue_is_an_error():
+    with pytest.raises(ValueError):
+        IdentifierCorpus(CorpusConfig(seed=1)).catalog_batch(10)
+
+
 # --- LIVE DEPLOYMENT ---
 @pytest.mark.performance
 @requires_live_deployment
@@ -327,3 +518,29 @@ async def test_concurrency_ramp_reports_where_the_objective_stops_holding():
     sustained = [stage.concurrency for stage in result.stages if stage.verdict(LIVE_BASIS).met]
     print(f"concurrency levels meeting the {LIVE_BASIS}-side objective: {sustained or 'none'}")
     assert result.stages[0].successful
+
+
+@pytest.mark.performance
+@requires_live_deployment
+@pytest.mark.asyncio(loop_scope="module")
+async def test_a_simulated_reader_population_is_served_inside_the_budget():
+    """The user-facing question: does a population of readers fit under the SLO?
+
+    Asserts on the population being served rather than on a specific user count,
+    since the count that fits depends on the deployment's sizing.
+    """
+    plan = RunPlan(base_url=LIVE_BASE_URL, workload=Workload(batch_size=100), seed=2026, timeout_seconds=30.0)
+    model = UserModel(
+        users=int(os.environ.get("PUBLICATIONS_LOAD_TEST_USERS", "100")),
+        think_time_seconds=float(os.environ.get("PUBLICATIONS_LOAD_TEST_THINK_TIME", "30")),
+        duration_seconds=float(os.environ.get("PUBLICATIONS_LOAD_TEST_DURATION", "45")),
+    )
+    result = await run_user_plan(plan, model)
+    print(render_text(result))
+
+    stage = result.stages[0]
+    assert stage.samples, "the population issued no requests"
+    assert (
+        stage.success_rate >= MIN_CEILING_SUCCESS_RATE
+    ), f"the service shed load at {model.users} users: {stage.status_counts}"
+    assert stage.verdict(LIVE_BASIS).met

@@ -22,6 +22,7 @@ from benchmarks.publications.metrics import (
 )
 from benchmarks.publications.report import as_dict, render_json, render_text, slo_met
 from benchmarks.publications.runner import RunResult, run_plan, verify_pmid_pool
+from benchmarks.publications.users import UserModel, capacity_table, run_user_plan, supported_users
 from benchmarks.publications.workload import DEFAULT_BATCH_SIZE, RunPlan, Workload
 
 __all__ = [
@@ -36,12 +37,16 @@ __all__ = [
     "Sample",
     "SloVerdict",
     "StageReport",
+    "UserModel",
     "Workload",
     "as_dict",
+    "capacity_table",
     "percentile",
     "render_json",
     "render_text",
     "run_plan",
+    "run_user_plan",
     "slo_met",
+    "supported_users",
     "verify_pmid_pool",
 ]

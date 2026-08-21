@@ -500,6 +500,76 @@ Two results deserve attention rather than a passing grade:
   cost, which is the concrete form of the specification's note that "caching of results server-side is
   recommended to achieve this SLO".
 
+###### Concurrency is not users
+
+The concurrency figures above are a capacity instrument, not a headcount. A closed-loop worker issues
+its next request the instant the previous one returns, so `c=8` describes eight requests permanently in
+flight — eight infinitely impatient robots, not eight people. A reader who spends half a minute looking
+at a result page before triggering another lookup occupies the service for about 90 ms of those 30
+seconds, and therefore offers roughly 0.03 requests per second rather than the ~11 a saturated worker
+offers. The two differ by nearly three orders of magnitude, which is why one cannot be read as the
+other.
+
+Little's Law converts between them:
+
+```
+users = throughput x (service latency + think time)
+```
+
+So the 46 rps that CI sustains inside the objective corresponds to:
+
+| mean think time | requests per user | supported readers |
+| --- | --- | --- |
+| 5 s | 0.197 rps | ~230 |
+| 10 s | 0.099 rps | ~460 |
+| 30 s | 0.033 rps | ~1,380 |
+| 60 s | 0.017 rps | ~2,750 |
+
+The think time is an assumption about reader behaviour, not something the benchmark can measure, so the
+range is the answer rather than any single row. Even the pessimistic end is far above expected Translator
+UI traffic.
+
+To measure a population directly instead of inferring one, use user mode:
+
+```shell
+# 300 readers, each pausing ~30 s between lookups, for 90 seconds.
+python -m benchmarks.publications --users 300 --think-time 30 --duration 90
+```
+
+User mode differs from the concurrency ramp in three ways that all matter:
+
+- **Think times are exponentially distributed**, not fixed. A fixed gap keeps simulated users locked in
+  whatever phase they started in, producing periodic bursts a real independent population does not have.
+  Arrivals are also staggered across the first think-time window, so the run does not begin with a
+  synchronized thundering herd.
+- **Users share one popularity-ranked catalogue** (`--catalog-size`, `--zipf`). Real readers' interests
+  overlap heavily, and that overlap is what a backend cache actually gets to absorb. Independent random
+  draws per user would hide it. Classic Zipf is the default; `--zipf 0` gives a uniform catalogue for
+  comparison.
+- **The report distinguishes offered from achieved rate.** A population that was served without
+  saturating the service bounds nothing from above, and the report says so rather than letting the
+  achieved rate be mistaken for a ceiling.
+
+Measured against CI, a realistic population reaches roughly **90 rps at a 66 ms p90** — about double the
+46 rps cold-cache closed-loop ceiling. Two effects account for the gap, and both are properties of a
+real population rather than measurement error: a skewed draw collapses repeated popular papers, so a
+100-identifier request sends about 79 distinct ones, and the shared hot set stays cached. The cold-cache
+concurrency ramp is therefore a conservative bound, not the expected operating point.
+
+Around that rate the service is at its edge. One 100 rps run was served cleanly; another at the same
+offered rate shed about 1.5% of requests as HTTP 500s, which is the two-second backend deadline
+(`DOCUMENT_METADATA_REQUEST_TIMEOUT`) doing what it was built to do. That matters for how capacity is
+read: **failures leave the latency distribution, so a stage that sheds load posts a *better* p90 than one
+that serves everything slowly.** The benchmark gates its capacity figure on a 99% success rate for that
+reason, and flags any stage that passes on latency while shedding.
+
+One limit on all of the above. At these rates a single load generator becomes a plausible bottleneck of
+its own — 90 rps of 92 kB responses is around 8 MB/s to decompress and parse on one host. Server-side
+latency is measured in the handler and stays trustworthy, so the report uses it as the discriminator: a
+shortfall in achieved rate alongside a healthy server-side p90 and no errors points at the generator,
+and the report says so instead of crediting the service with a ceiling it was never pushed to. Settling
+it needs a run from inside the cluster, or a generator split across hosts.
+
 ###### Running it as a test
 
 The benchmark is also wrapped as an opt-in pytest module. The offline tests cover the harness itself —

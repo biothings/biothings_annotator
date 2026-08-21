@@ -180,6 +180,19 @@ class StageReport:
         return dict(sorted(counts.items()))
 
     @property
+    def success_rate(self) -> float:
+        """Fraction of attempts that returned a well-formed 200.
+
+        Reported alongside every latency figure because the two interact
+        dangerously: failures are excluded from the latency distribution, so a
+        stage that sheds load as errors shows *better* percentiles than one that
+        serves everything slowly. Latency alone cannot tell those apart.
+        """
+        if not self.samples:
+            return 0.0
+        return len(self.successful) / len(self.samples)
+
+    @property
     def throughput_rps(self) -> float:
         if self.wall_seconds <= 0:
             return 0.0
@@ -247,6 +260,7 @@ class StageReport:
             "wall_seconds": round(self.wall_seconds, 3),
             "requests": len(self.samples),
             "successful": len(self.successful),
+            "success_rate": round(self.success_rate, 4),
             "throughput_rps": round(self.throughput_rps, 2),
             "status_counts": self.status_counts,
             "cache_primed": self.cache_primed,

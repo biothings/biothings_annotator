@@ -50,6 +50,130 @@ def _stage_row(stage: StageReport) -> str:
     return "".join(_cell(value, width) for value, (_, width) in zip(values, _COLUMNS))
 
 
+# A stage shedding more than this fraction of its load is not serving that load,
+# whatever its surviving requests did for latency.
+MIN_CEILING_SUCCESS_RATE = 0.99
+
+
+def sustained_ceiling(result: RunResult) -> Optional[StageReport]:
+    """The highest-throughput stage that met the objective *and* stayed healthy.
+
+    This is the capacity number a user count has to be derived from, and it takes
+    two conditions rather than one. Latency alone is not enough: because failures
+    are excluded from the percentiles, a stage that answers a tenth of its load
+    with 500s can post a better p90 than a stage that serves everything. Reading
+    a ceiling off that would recommend a load level at which the service is
+    already erroring, so the success rate gates it too.
+    """
+    passing = [
+        stage
+        for stage in result.stages
+        if (verdict := stage.verdict("server", result.plan.threshold_ms)) is not None
+        and verdict.met
+        and stage.success_rate >= MIN_CEILING_SUCCESS_RATE
+    ]
+    return max(passing, key=lambda stage: stage.throughput_rps, default=None)
+
+
+def _capacity_lines(result: RunResult) -> List[str]:
+    """Translate a measured ceiling into supported user counts.
+
+    Derived from the fastest *passing* stage rather than from whatever throughput
+    the run happened to produce. In a user-model run that distinction matters: if
+    the population was served without saturating the service, its achieved rate
+    reflects the load offered, not the load available, and reading a user ceiling
+    off it would just restate the input.
+    """
+    from benchmarks.publications.users import capacity_table
+
+    ceiling = sustained_ceiling(result)
+    if ceiling is None:
+        degraded = [
+            f"{stage.label} ({stage.success_rate:.1%} success)"
+            for stage in result.stages
+            if stage.success_rate < MIN_CEILING_SUCCESS_RATE
+        ]
+        reason = (
+            f"every stage either missed the objective or shed load: {', '.join(degraded)}"
+            if degraded
+            else "no stage met the objective"
+        )
+        return ["", f"no sustained capacity to report — {reason}"]
+
+    server = ceiling.server_latency()
+    if server is None:
+        return []
+
+    lines = [
+        "",
+        "supported users, by Little's Law",
+        "  users = throughput x (service latency + think time)",
+        f"  from the fastest passing stage: {ceiling.label} at "
+        f"{ceiling.throughput_rps:.1f} rps, {server.p90:.0f} ms p90",
+    ]
+    for row in capacity_table(ceiling.throughput_rps, server.p90):
+        lines.append(
+            f"    {row['think_time_seconds']:>5.0f}s think time  "
+            f"{row['supported_users']:>7,.0f} users  "
+            f"({row['requests_per_user_rps']:.4f} rps each)"
+        )
+    return lines
+
+
+def _user_lines(result: RunResult) -> List[str]:
+    """Render the population view: what was offered, and what was served."""
+    model = result.user_model
+    if model is None:
+        return []
+
+    stage = result.stages[0]
+    achieved = stage.throughput_rps
+    offered = model.offered_rate_rps
+    # A population that offers more than the service accepts is backing up: the
+    # deficit is requests its users are still waiting on rather than issuing.
+    shortfall = (offered - achieved) / offered if offered else 0.0
+    saturated = shortfall > 0.05
+
+    lines = [
+        "",
+        "population",
+        f"  simulated          {model.users} users at {model.think_time_seconds:g}s mean think time",
+        f"  offered rate       {offered:.1f} rps",
+        f"  achieved rate      {achieved:.1f} rps"
+        # Deliberately not phrased as "the service did not keep up": the next
+        # line works out which end the shortfall came from.
+        + (f"  ({shortfall:.0%} short of offered)" if saturated else "  (kept up)"),
+        f"  catalogue          {model.catalog_size} papers, zipf {model.zipf_exponent:g}",
+    ]
+
+    identifiers = stage.identifier_stats
+    if identifiers.get("requests"):
+        lines.append(
+            f"  mean batch sent    {identifiers['mean_batch_size']:.0f} of {result.plan.workload.batch_size} "
+            "requested, after a skewed draw collapsed repeats"
+        )
+    if not saturated:
+        lines.append(
+            "  this population was served without saturating the service, so it bounds nothing from above; "
+            "use --ramp to find the ceiling"
+        )
+    else:
+        server = stage.server_latency()
+        healthy = server is not None and server.p90 < result.plan.threshold_ms
+        if healthy and stage.success_rate >= MIN_CEILING_SUCCESS_RATE:
+            # The discriminator: server-side latency is measured in-handler, so
+            # if it is healthy while the offered rate goes unmet, the load
+            # generator is the more likely constraint. One machine driving this
+            # many connections has to decompress and parse every response.
+            lines.append(
+                "  the shortfall came with a healthy server-side p90 and no errors, which points at the "
+                "load generator rather than the service — one host driving this many connections must "
+                "decompress and parse every response. Re-run from inside the cluster, or split the "
+                "generator across hosts, before reading this as the service's ceiling"
+            )
+    return lines
+
+
 def render_text(result: RunResult) -> str:
     """Render a run as an aligned latency table with an SLO verdict per stage."""
     plan = result.plan
@@ -58,8 +182,13 @@ def render_text(result: RunResult) -> str:
         "/publications load benchmark",
         f"  target     {plan.normalized_base_url}",
         f"  workload   {plan.workload.describe()}",
-        f"  load       {plan.requests} measured requests per stage, "
-        f"{plan.warmup_requests} discarded warmup, {plan.timeout_seconds:g}s timeout",
+        (
+            f"  load       {result.user_model.users} simulated users for "
+            f"{result.user_model.duration_seconds:g}s, {plan.timeout_seconds:g}s timeout"
+            if result.user_model is not None
+            else f"  load       {plan.requests} measured requests per stage, "
+            f"{plan.warmup_requests} discarded warmup, {plan.timeout_seconds:g}s timeout"
+        ),
         f"  objective  p90 < {threshold:g} ms at the 90th percentile (CCWG#15)",
         "",
         "latency in milliseconds; net = client minus server, i.e. transit and transfer",
@@ -77,11 +206,19 @@ def render_text(result: RunResult) -> str:
                 lines.append(f"  {stage.label:<7} {basis:<7} no successful samples")
                 continue
             status = "PASS" if verdict.met else "FAIL"
+            # A stage can post a passing p90 while shedding load, because the
+            # shed requests are not in the distribution. Flag it inline rather
+            # than leaving it to the status-code block further down.
+            shedding = (
+                ""
+                if stage.success_rate >= MIN_CEILING_SUCCESS_RATE
+                else (f"  [only {stage.success_rate:.1%} succeeded — not sustained]")
+            )
             lines.append(
                 f"  {stage.label:<7} {basis:<7} {status}  "
                 f"p90 {verdict.p90_ms:>7.1f} ms  "
                 f"{verdict.fraction_under_threshold:>6.1%} under {threshold:g} ms  "
-                f"headroom {verdict.headroom_ms:>+8.1f} ms"
+                f"headroom {verdict.headroom_ms:>+8.1f} ms{shedding}"
             )
 
     failures = {
@@ -91,6 +228,9 @@ def render_text(result: RunResult) -> str:
         lines.extend(["", f"non-200 and transport failures  {failures}"])
     if result.request_id_mismatches:
         lines.append(f"request_id round-trip mismatches  {result.request_id_mismatches}")
+
+    lines.extend(_user_lines(result))
+    lines.extend(_capacity_lines(result))
 
     notes = _caveats(result)
     if notes:
@@ -108,6 +248,10 @@ def _caveats(result: RunResult) -> List[str]:
     """
     notes: List[str] = []
     plan = result.plan
+    notes.append(
+        "the supported-user figures follow from the think-time assumption, which is a claim about reader "
+        "behaviour rather than something this benchmark measures; treat the range as the answer"
+    )
     overheads = [stage.overhead_latency() for stage in result.stages]
     measured = [summary.p90 for summary in overheads if summary is not None]
     if measured and max(measured) > 20:
@@ -120,7 +264,7 @@ def _caveats(result: RunResult) -> List[str]:
             "the corpus was verified before measuring, which primes the backend cache: "
             "these are warm-cache latencies, not what a first-time lookup costs"
         )
-    if plan.workload.unique_ratio >= 1.0:
+    if plan.workload.unique_ratio >= 1.0 and result.user_model is None:
         notes.append(
             "every identifier is drawn fresh, so this is the cold-cache bound; "
             "re-run with --unique-ratio below 1.0 for the cached case"
@@ -170,6 +314,18 @@ def as_dict(result: RunResult) -> Dict[str, object]:
             "stages": list(plan.stages),
             "seed": plan.seed,
         },
+        "user_model": (
+            {
+                "users": result.user_model.users,
+                "think_time_seconds": result.user_model.think_time_seconds,
+                "duration_seconds": result.user_model.duration_seconds,
+                "offered_rate_rps": round(result.user_model.offered_rate_rps, 3),
+                "catalog_size": result.user_model.catalog_size,
+                "zipf_exponent": result.user_model.zipf_exponent,
+            }
+            if result.user_model is not None
+            else None
+        ),
         "request_id_mismatches": result.request_id_mismatches,
         "caveats": _caveats(result),
         "stages": [stage.as_dict(plan.threshold_ms) for stage in result.stages],

@@ -61,6 +61,8 @@ class IdentifierCorpus:
         self.config = config or CorpusConfig()
         self._random = random.Random(self.config.seed)
         self._hot_pool = list(hot_pool or [])
+        self._catalog: List[str] = []
+        self._catalog_cumulative_weights: List[float] = []
 
     @property
     def hot_pool(self) -> List[str]:
@@ -85,6 +87,60 @@ class IdentifierCorpus:
             raise ValueError("hot pool size must be >= 0")
         self._hot_pool = [self.fresh_pmid() for _ in range(size)]
         return self.hot_pool
+
+    def seed_catalog(self, size: int, zipf_exponent: float = 1.0) -> List[str]:
+        """Build a shared catalogue of papers with a skewed popularity ranking.
+
+        This is what a *population* of users looks like, as distinct from one
+        user issuing back-to-back requests. Real readers do not draw papers
+        uniformly: a small number of publications are requested constantly and a
+        long tail almost never, which is the distribution that decides how much
+        of the population's traffic a backend cache can absorb. Drawing the
+        catalogue uniformly would understate cache hits; replaying one fixed
+        batch would overstate them.
+
+        ``zipf_exponent`` is the skew. 0.0 is uniform; 1.0 is classic Zipf,
+        where the most popular paper is drawn about twice as often as the second
+        and a hundred times as often as the hundredth.
+        """
+        if size < 1:
+            raise ValueError("catalogue size must be >= 1")
+        if zipf_exponent < 0:
+            raise ValueError("zipf_exponent must be >= 0")
+
+        self._catalog = [self.fresh_pmid() for _ in range(size)]
+        # Cumulative weights are precomputed once so each draw is a binary
+        # search rather than a rebuild of the whole weight vector.
+        cumulative = 0.0
+        self._catalog_cumulative_weights = []
+        for rank in range(1, size + 1):
+            cumulative += 1.0 / (rank**zipf_exponent)
+            self._catalog_cumulative_weights.append(cumulative)
+        return list(self._catalog)
+
+    @property
+    def catalog(self) -> List[str]:
+        """The shared, popularity-ranked pool a user population draws from."""
+        return list(self._catalog)
+
+    def catalog_batch(self, size: int) -> List[str]:
+        """Draw one user's request from the shared catalogue by popularity.
+
+        Deduplicated like :meth:`batch`, which under a skewed draw is a real
+        effect rather than a rounding detail: a popular paper drawn twice in one
+        request collapses to a single lookup, exactly as the endpoint would
+        collapse it.
+        """
+        if size < 1:
+            raise ValueError("batch size must be >= 1")
+        if not self._catalog:
+            raise ValueError("seed_catalog must be called before drawing catalogue batches")
+        drawn = self._random.choices(
+            self._catalog,
+            cum_weights=self._catalog_cumulative_weights,
+            k=size,
+        )
+        return list(dict.fromkeys(drawn))
 
     def batch(self, size: int, pmid_ratio: float = 1.0, unique_ratio: float = 1.0) -> List[str]:
         """Build one request's identifier list.
