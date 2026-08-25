@@ -14,7 +14,11 @@ BIOTHINGS_SOURCE_DISCOVERY_TIMEOUT = 5
 BIOTHINGS_SOURCE_DISCOVERY_TTL = 60
 BIOTHINGS_SOURCE_DISCOVERY_ERROR_TTL = 5
 
-ELASTICSEARCH_CONNECTION = "ci"
+ELASTICSEARCH_CONNECTION = "in_cluster"
+IN_CLUSTER_ELASTICSEARCH_CONNECTION = {
+    "host": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
+    "headers": {},
+}
 CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION = {
     "host": "http://localhost:9200",
     "headers": {"Host": "core-components-es.ci.transltr.io"},
@@ -24,13 +28,23 @@ ELASTICSEARCH_CONNECTIONS = {
         "host": "http://localhost:9200",
         "headers": {},
     },
-    "ci": {
-        "host": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
-        "headers": {},
-    },
+    "in_cluster": IN_CLUSTER_ELASTICSEARCH_CONNECTION,
+    # Deprecated alias for deployments configured before the cluster-neutral rename.
+    "ci": IN_CLUSTER_ELASTICSEARCH_CONNECTION,
     "ci_local_forward": CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION,
     # Deprecated alias for compatibility with existing local-forward overrides.
     "ci_forward": CI_LOCAL_FORWARD_ELASTICSEARCH_CONNECTION,
+    # The test cluster is reached through an ingress that routes on the Host
+    # header, so the header is sent explicitly rather than left to the resolved
+    # host. "test_local_forward" pairs the same header with a port-forward.
+    "test": {
+        "host": "http://core-components-es.test.transltr.io:9200",
+        "headers": {"Host": "core-components-es.test.transltr.io"},
+    },
+    "test_local_forward": {
+        "host": "http://localhost:9200",
+        "headers": {"Host": "core-components-es.test.transltr.io"},
+    },
 }
 ELASTICSEARCH_REQUEST_TIMEOUT = 30
 ELASTICSEARCH_QUERY_SIZE = 10

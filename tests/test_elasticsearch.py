@@ -27,11 +27,11 @@ def test_annotator_can_switch_query_backend_by_assignment(monkeypatch):
 
     annotator = Annotator()
     assert annotator.query_backend == "biothings"
-    assert annotator.elasticsearch_connection == "ci"
+    assert annotator.elasticsearch_connection == "in_cluster"
 
     annotator.query_backend = "elasticsearch"
     assert annotator.query_backend == "elasticsearch"
-    assert annotator.elasticsearch_connection == "ci"
+    assert annotator.elasticsearch_connection == "in_cluster"
 
     annotator.elasticsearch_connection = "local"
     assert annotator.elasticsearch_connection == "local"
@@ -378,12 +378,17 @@ async def test_elasticsearch_client_supports_configured_headers():
     assert result == [{"query": "1017", "notfound": True}]
 
 
-def test_elasticsearch_connection_config_supports_local_forwarded_ci_host():
-    assert get_elasticsearch_connection("ci") == {
+def test_elasticsearch_connection_config_supports_in_cluster_with_ci_alias():
+    expected_connection = {
         "host": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
         "headers": {},
     }
+    assert ELASTICSEARCH_CONNECTIONS["ci"] is ELASTICSEARCH_CONNECTIONS["in_cluster"]
+    assert get_elasticsearch_connection("in_cluster") == expected_connection
+    assert get_elasticsearch_connection("ci") == expected_connection
 
+
+def test_elasticsearch_connection_config_supports_local_forwarded_ci_host():
     expected_connection = {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.ci.transltr.io"},
@@ -393,11 +398,28 @@ def test_elasticsearch_connection_config_supports_local_forwarded_ci_host():
     assert get_elasticsearch_connection("ci_forward") == expected_connection
 
 
+def test_elasticsearch_connection_config_supports_test_instance():
+    assert get_elasticsearch_connection("test") == {
+        "host": "http://core-components-es.test.transltr.io:9200",
+        "headers": {"Host": "core-components-es.test.transltr.io"},
+    }
+    assert get_elasticsearch_connection("test_local_forward") == {
+        "host": "http://localhost:9200",
+        "headers": {"Host": "core-components-es.test.transltr.io"},
+    }
+    assert ELASTICSEARCH_CONNECTIONS["test"] is not ELASTICSEARCH_CONNECTIONS["test_local_forward"]
+
+
 def test_elasticsearch_client_uses_named_connection_config():
     elasticsearch_settings = ANNOTATOR_CLIENTS["gene"]["elasticsearch"]
     original_instance = elasticsearch_settings.get("instance")
     try:
         elasticsearch_settings["instance"] = None
+
+        in_cluster_client = get_elasticsearch_client("gene", "in_cluster")
+        assert in_cluster_client.host == "http://elasticsearch.es-core-components.svc.cluster.local:9200"
+        assert in_cluster_client.headers == {}
+        assert get_elasticsearch_client("gene", "ci") is in_cluster_client
 
         ci_local_forward_client = get_elasticsearch_client("gene", "ci_local_forward")
         assert ci_local_forward_client.host == "http://localhost:9200"
@@ -408,6 +430,11 @@ def test_elasticsearch_client_uses_named_connection_config():
         assert local_client is not ci_local_forward_client
         assert local_client.host == "http://localhost:9200"
         assert local_client.headers == {}
+
+        test_client = get_elasticsearch_client("gene", "test")
+        assert test_client is not local_client
+        assert test_client.host == "http://core-components-es.test.transltr.io:9200"
+        assert test_client.headers == {"Host": "core-components-es.test.transltr.io"}
     finally:
         elasticsearch_settings["instance"] = original_instance
 

@@ -171,13 +171,19 @@ tracing and targets `http://jaeger-otel-collector.sri:4318` by default.
 
 The annotator query backend is controlled with `ANNOTATOR_QUERY_BACKEND`. Supported values are
 `biothings` and `elasticsearch`; when unset, the service uses `biothings`.
-The Helm/Jenkins deployment defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch` and
-`ELASTICSEARCH_CONNECTION=ci`; set `ANNOTATOR_QUERY_BACKEND` to `biothings` during deployment
+The checked-in Helm defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch` and
+`ELASTICSEARCH_CONNECTION=in_cluster`; set `ANNOTATOR_QUERY_BACKEND` to `biothings` during deployment
 to switch back.
 Set `ELASTICSEARCH_CONNECTION` to one of the named presets in
-`biothings_annotator/annotator/settings.py`. The `ci` preset points at
-`http://elasticsearch.es-core-components.svc.cluster.local:9200`. The `ci_local_forward` preset is
-for local port-forward use; `ci_forward` remains as a deprecated alias.
+`biothings_annotator/annotator/settings.py`. The `in_cluster` preset points at
+`http://elasticsearch.es-core-components.svc.cluster.local:9200`; `ci` remains as a compatibility
+alias. The `ci_local_forward` preset is for CI port-forward use; `ci_forward` remains as its
+deprecated alias.
+The `test` preset is for external access through `http://core-components-es.test.transltr.io:9200`
+and sends an explicit `Host: core-components-es.test.transltr.io` header because the ingress routes
+on that header. `test_local_forward` pairs the same header with `http://localhost:9200` for
+port-forward use. In-cluster CI and test deployments should use `in_cluster`, not either `test`
+preset.
 The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
 the selected `elasticsearch_connection`.
 
@@ -368,6 +374,9 @@ RUN_PUBMED_ES_INTEGRATION=1 \
 PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION=ci_local_forward \
 python -m pytest -q tests/test_pubmed.py tests/test_document_metadata.py -m integration
 ```
+
+Point `PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION` at `test_local_forward` to run the same checks
+against a forwarded test-instance service, or at `test` to reach the test ingress directly.
 
 The document metadata live checks assert the index shape, resolution by every identifier type,
 case-insensitive matching, and an upper bound of three identifiers per record. That bound is a bad-export
