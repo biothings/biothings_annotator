@@ -307,11 +307,23 @@ class DocumentMetadataService:
         whole DOI lookup behind the PMID fetch and would lose that overlap, while
         a DOI-heavy batch has little overlap to lose. Measure per workload.
 
-        Note that this does not address the ``_msearch``'s dominant cost. A term
-        query on ``pubmed.identifiers`` carries no routing key, so every entry
-        executes on every shard regardless of how little it returns; only the
-        fetch phase gets cheaper here. Removing the fan-out would mean making
-        DOI and PMCID resolvable by ``_id`` instead of by query.
+        Measured against CI and found to be a regression at every identifier
+        mix, so it is kept off. The premise does not hold: source retrieval is
+        not what the ``_msearch`` costs. A 100-identifier search that resolves
+        every one takes 22 ms of Elasticsearch wall-clock, and ``"_source":
+        false`` removes about 1 ms of that (4.5%). The 84% cut in the search
+        leg's response size is not a saving either -- those bytes reappear in
+        the larger ``_mget``, plus its per-document envelope, so the strategy
+        moves 3-8% *more* total bytes. Against that it adds a serial round trip
+        and forfeits the overlap that currently hides the whole DOI lookup
+        behind the PMID fetch.
+
+        Retained rather than deleted because the measurement is the useful part:
+        it says the identifier path is already cheap and that effort belongs
+        elsewhere. The per-identifier cost also *falls* with batch size, from
+        0.40 ms at 10 identifiers to 0.22 ms at 100, so the shard fan-out this
+        docstring previously called the dominant cost is not a practical problem
+        at these sizes either.
         """
         # Several submitted identifiers can name one document -- a DOI and the
         # PMID of the same paper, or a DOI and its PMCID -- so resolution is kept

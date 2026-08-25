@@ -375,6 +375,68 @@ guard: pubmed2db PR #7 limits a record to its own identifiers, so a record carry
 export regressed and is pulling in cited references' DOIs.
 
 
+###### Identifier lookup: two measured optimizations
+
+Both were measured against the CI Elasticsearch cluster (`es-core-components-cluster`, index
+`pubmed_20260824_ybg350zl_202608250007`, 41.0M documents, 21.5 GB per copy, 5 primary shards and 2
+replicas), using identifiers sampled from the live index rather than synthesized ones.
+
+**Deduplicating `pubmed.identifiers` so the PMID is not stored twice — adopted, storage win only.**
+The PMID is already the document `_id`, so carrying it in `identifiers` as well was redundant. The
+field now holds 43.5M values across 41.0M documents (1.06 per document; 80% of documents carry any
+identifier at all), and re-adding the PMID would take that to 84.5M, near enough a doubling.
+
+Measured by building two indices from the same 29,983 real documents with the live mapping and
+analysis settings, differing only in whether the PMID is present in `identifiers`, then force-merging
+both to one segment:
+
+| | deduped | PMID re-added | delta |
+| --- | --- | --- | --- |
+| index store size | 31.0 MB | 31.7 MB | **+2.3%** |
+| `pubmed.identifiers` total | 0.9 MB | 1.4 MB | +50.1% |
+| — inverted index | 0.5 MB | 0.7 MB | +48.4% |
+| — doc_values | 0.5 MB | 0.7 MB | +51.8% |
+| `_source` | 26.5 MB | 26.7 MB | +1.0% |
+| `_msearch` took, 100 identifiers | 4 ms | 4 ms | **0%** |
+| `_mget` response, 100 PMIDs | 152.7 kB | 154.2 kB | +1.0% |
+
+Extrapolated to the live index that is **1.0 GB saved per copy, 3.0 GB across the three copies** — the
+field itself roughly halved, which is 2.3% of the index. The latency gain is nil, and measurably so:
+identical `_msearch` timings and a `_mget` response 1% smaller. Worth having as a storage and index-size
+change; it is not a latency optimization and should not be quoted as one.
+
+**Resolving to `_id` first, then one combined `_mget` — measured and rejected.** The idea was to ask
+the `_msearch` only for `_id`, then fetch everything through a single exact-ID `_mget`. Implemented
+behind `DOCUMENT_METADATA_TWO_PHASE_LOOKUP` and left off, because it is a regression at every mix:
+
+| identifier mix | current total | two-phase total | delta | current ES took | two-phase ES took | ES round trips |
+| --- | --- | --- | --- | --- | --- | --- |
+| 75 PMID / 25 other | 154.0 kB | 158.9 kB | **+3.2%** | 9 ms | 8 ms | 1 parallel → 2 serial |
+| 50 / 50 | 160.5 kB | 167.1 kB | **+4.1%** | 12 ms | 12 ms | 1 parallel → 2 serial |
+| 25 / 75 | 166.0 kB | 173.7 kB | **+4.7%** | 18 ms | 16 ms | 1 parallel → 2 serial |
+| 0 / 100 other | 168.7 kB | 181.9 kB | **+7.8%** | 22 ms | 21 ms | 1 → 2 serial |
+
+The premise does not survive measurement. Source retrieval is not what the `_msearch` costs: 100
+identifiers that all resolve take 22 ms of Elasticsearch wall-clock, and `"_source": false` removes
+about 1 ms of it. It does cut that leg's response by 84% (169 kB to 26 kB), but those bytes are not
+saved — they reappear in the larger `_mget` along with its per-document envelope, so total bytes go
+*up*. Against no gain it adds a serial round trip and forfeits the concurrency that currently hides the
+entire DOI lookup behind the PMID fetch.
+
+Two corrections to earlier reasoning come out of this. The shard fan-out is not the practical problem it
+looked like: per-identifier cost *falls* with batch size, 0.40 ms at 10 identifiers to 0.22 ms at 100,
+so Elasticsearch is parallelising the sub-searches well across the 5 shards. And the identifier path is
+not where the latency budget goes at all — 22 ms for a fully-resolving 100-identifier batch, against the
+~114 kB of response body that the [load benchmark](#load-benchmark-and-the-150-ms-objective) shows to be
+the actual constraint. Optimisation effort belongs on payload size, not on identifier resolution.
+
+A measurement note for anyone repeating this. Run through an SSH tunnel, every Elasticsearch round trip
+costs 90-190 ms and drifts during a session, which is two orders of magnitude above in-cluster and more
+than the entire effect being measured. Wall-clock timings from outside the cluster are therefore
+worthless here; the numbers above come from the top-level `took` on the `_msearch` response, which is
+Elasticsearch's own wall-clock and never crosses the network. Per-sub-request `took` values must not be
+summed — Elasticsearch runs `_msearch` entries concurrently, so their sum is total work, not latency.
+
 ##### Load benchmark and the 150 ms objective
 
 CCWG#15 sets a service objective of a 150 ms p90 for requests carrying up to 100 publication
