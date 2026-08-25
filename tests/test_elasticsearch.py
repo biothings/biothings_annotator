@@ -27,11 +27,11 @@ def test_annotator_can_switch_query_backend_by_assignment(monkeypatch):
 
     annotator = Annotator()
     assert annotator.query_backend == "biothings"
-    assert annotator.elasticsearch_connection == "ci"
+    assert annotator.elasticsearch_connection == "in_cluster"
 
     annotator.query_backend = "elasticsearch"
     assert annotator.query_backend == "elasticsearch"
-    assert annotator.elasticsearch_connection == "ci"
+    assert annotator.elasticsearch_connection == "in_cluster"
 
     annotator.elasticsearch_connection = "local"
     assert annotator.elasticsearch_connection == "local"
@@ -378,12 +378,17 @@ async def test_elasticsearch_client_supports_configured_headers():
     assert result == [{"query": "1017", "notfound": True}]
 
 
-def test_elasticsearch_connection_config_supports_local_forwarded_ci_host():
-    assert get_elasticsearch_connection("ci") == {
+def test_elasticsearch_connection_config_supports_in_cluster_with_ci_alias():
+    expected_connection = {
         "host": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
         "headers": {},
     }
+    assert ELASTICSEARCH_CONNECTIONS["ci"] is ELASTICSEARCH_CONNECTIONS["in_cluster"]
+    assert get_elasticsearch_connection("in_cluster") == expected_connection
+    assert get_elasticsearch_connection("ci") == expected_connection
 
+
+def test_elasticsearch_connection_config_supports_local_forwarded_ci_host():
     expected_connection = {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.ci.transltr.io"},
@@ -410,6 +415,11 @@ def test_elasticsearch_client_uses_named_connection_config():
     original_instance = elasticsearch_settings.get("instance")
     try:
         elasticsearch_settings["instance"] = None
+
+        in_cluster_client = get_elasticsearch_client("gene", "in_cluster")
+        assert in_cluster_client.host == "http://elasticsearch.es-core-components.svc.cluster.local:9200"
+        assert in_cluster_client.headers == {}
+        assert get_elasticsearch_client("gene", "ci") is in_cluster_client
 
         ci_local_forward_client = get_elasticsearch_client("gene", "ci_local_forward")
         assert ci_local_forward_client.host == "http://localhost:9200"

@@ -46,6 +46,15 @@ FORMATTED_METADATA = {
 
 
 @pytest.mark.unit
+def test_document_metadata_service_uses_default_in_cluster_connection(monkeypatch):
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
+
+    service = DocumentMetadataService()
+
+    assert service.elasticsearch_connection == "in_cluster"
+
+
+@pytest.mark.unit
 def test_format_publication_metadata_uses_empty_strings_and_date_precision():
     assert format_publication_metadata(PUBMED_METADATA) == FORMATTED_METADATA
     assert format_publication_metadata({"pub_date": "2026-07"}) == {

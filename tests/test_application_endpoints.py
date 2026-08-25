@@ -173,12 +173,14 @@ async def test_version_get_success(test_annotator: sanic.Sanic, endpoint: str, m
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/version/"])
-async def test_version_get_reports_elasticsearch_backend(test_annotator: sanic.Sanic, endpoint: str, monkeypatch):
+async def test_version_get_reports_default_elasticsearch_connection(
+    test_annotator: sanic.Sanic, endpoint: str, monkeypatch
+):
     """
     Test the Version endpoint GET method includes runtime backend metadata.
     """
     monkeypatch.setenv(QUERY_BACKEND_ENV, "elasticsearch")
-    monkeypatch.setenv("ELASTICSEARCH_CONNECTION", "ci")
+    monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
 
     with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
@@ -194,7 +196,7 @@ async def test_version_get_reports_elasticsearch_backend(test_annotator: sanic.S
         expected_response_body = {
             "version": "GITHUB_HASH_VERSION_ABC123",
             "query_backend": "elasticsearch",
-            "elasticsearch_connection": "ci",
+            "elasticsearch_connection": "in_cluster",
         }
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"

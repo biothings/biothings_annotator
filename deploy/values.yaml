@@ -23,7 +23,7 @@ containers:
   name: biothingsannotator
   es_host: ES_HOST_VALUE
   query_backend: elasticsearch
-  elasticsearch_connection: ci
+  elasticsearch_connection: in_cluster
   port: 9000
   OPENTELEMETRY_ENABLED_VALUE: True
 
