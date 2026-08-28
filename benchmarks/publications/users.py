@@ -34,7 +34,7 @@ Two details make it a population rather than N copies of one user:
 import asyncio
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, List, Optional
 
 import httpx
@@ -161,7 +161,8 @@ async def _virtual_user(
     generator: random.Random,
     deadline: float,
     collected: List[Sample],
-    mismatches: List[int],
+    request_id_mismatches: List[int],
+    lookup_strategy_mismatches: List[int],
 ) -> None:
     """One reader: request, think, repeat, until the run's deadline."""
     # Stagger arrivals across the first think-time window. Without this every
@@ -171,10 +172,12 @@ async def _virtual_user(
 
     while time.monotonic() < deadline:
         identifiers = corpus.catalog_batch(plan.workload.batch_size)
-        sample, request_id_matched = await _issue_request(client, plan.workload, identifiers)
+        sample, request_id_matched, lookup_strategy_matched = await _issue_request(client, plan.workload, identifiers)
         collected.append(sample)
         if not request_id_matched:
-            mismatches.append(1)
+            request_id_mismatches.append(1)
+        if not lookup_strategy_matched:
+            lookup_strategy_mismatches.append(1)
 
         # Exponential rather than fixed: the memoryless gap is what keeps
         # independent users from drifting into lockstep.
@@ -192,12 +195,23 @@ async def run_user_plan(plan: RunPlan, model: UserModel) -> RunResult:
     corpus is safe to share because drawing a batch never awaits, so no two tasks
     can interleave inside a draw.
     """
-    corpus = IdentifierCorpus(CorpusConfig(seed=plan.seed))
-    corpus.seed_catalog(model.catalog_size, model.zipf_exponent)
+    corpus = IdentifierCorpus(
+        CorpusConfig(seed=plan.seed),
+        identifier_pool=plan.workload.identifier_pool,
+    )
+    if plan.workload.uses_identifier_pool:
+        corpus.seed_catalog_from_identifiers(plan.workload.identifier_pool, model.zipf_exponent)
+        # The entire curated pool is the shared catalogue; reflect that actual
+        # input in the population report instead of repeating --catalog-size,
+        # which only controls synthesized catalogues.
+        model = replace(model, catalog_size=len(plan.workload.identifier_pool))
+    else:
+        corpus.seed_catalog(model.catalog_size, model.zipf_exponent)
     generator = random.Random(plan.seed)
 
     collected: List[Sample] = []
-    mismatches: List[int] = []
+    request_id_mismatches: List[int] = []
+    lookup_strategy_mismatches: List[int] = []
     # Connections are pooled per user, since a user population really does hold
     # that many sockets open against the service.
     limits = httpx.Limits(max_connections=model.users, max_keepalive_connections=model.users)
@@ -212,14 +226,25 @@ async def run_user_plan(plan: RunPlan, model: UserModel) -> RunResult:
         deadline = time.monotonic() + model.duration_seconds
         await asyncio.gather(
             *(
-                _virtual_user(client, plan, corpus, model, generator, deadline, collected, mismatches)
+                _virtual_user(
+                    client,
+                    plan,
+                    corpus,
+                    model,
+                    generator,
+                    deadline,
+                    collected,
+                    request_id_mismatches,
+                    lookup_strategy_mismatches,
+                )
                 for _ in range(model.users)
             )
         )
         wall_seconds = time.perf_counter() - started_at
 
     result = RunResult(plan=plan, user_model=model)
-    result.request_id_mismatches = len(mismatches)
+    result.request_id_mismatches = len(request_id_mismatches)
+    result.lookup_strategy_mismatches = len(lookup_strategy_mismatches)
     result.stages.append(
         StageReport(
             label=f"{model.users}u",

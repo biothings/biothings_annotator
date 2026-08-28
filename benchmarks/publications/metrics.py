@@ -37,6 +37,12 @@ class Sample:
     found: int = 0
     not_found: int = 0
     response_bytes: int = 0
+    lookup_strategy: Optional[str] = None
+    # Canonical digest of ``results`` plus ``not_found``. It is intentionally
+    # not rendered: paired A/B mode only needs to prove that both treatments
+    # returned the same semantic response without retaining every abstract a
+    # second time in memory.
+    semantic_signature: Optional[str] = None
     error: Optional[str] = None
 
     @property
@@ -248,6 +254,16 @@ class StageReport:
             "mean_response_kb": round(sum(sample.response_bytes for sample in successful) / len(successful) / 1024, 1),
         }
 
+    @property
+    def lookup_strategy_counts(self) -> Dict[str, int]:
+        """Strategies attributed by measured 200 responses, including rejected mismatches."""
+        counts: Dict[str, int] = {}
+        for sample in self.samples:
+            if sample.status == 200:
+                strategy = sample.lookup_strategy or "<missing>"
+                counts[strategy] = counts.get(strategy, 0) + 1
+        return dict(sorted(counts.items()))
+
     def as_dict(self, threshold_ms: float = SLO_THRESHOLD_MS) -> Dict[str, object]:
         client = self.client_latency()
         server = self.server_latency()
@@ -264,6 +280,7 @@ class StageReport:
             "throughput_rps": round(self.throughput_rps, 2),
             "status_counts": self.status_counts,
             "cache_primed": self.cache_primed,
+            "lookup_strategy_counts": self.lookup_strategy_counts,
             "identifiers": self.identifier_stats,
             "client_latency": client.as_dict() if client else None,
             "server_latency": server.as_dict() if server else None,

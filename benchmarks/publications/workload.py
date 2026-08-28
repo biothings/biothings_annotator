@@ -13,10 +13,12 @@ from benchmarks.publications.corpus import CorpusConfig, IdentifierCorpus
 from benchmarks.publications.metrics import SLO_THRESHOLD_MS
 
 PUBLICATIONS_PATH = "/publications"
+LOOKUP_STRATEGY_HEADER = "X-Publications-Lookup-Strategy"
 # CCWG#15: "Expect up to 100 pubids in request". This is the headline case, so it
 # is the default batch size rather than something the caller has to opt into.
 DEFAULT_BATCH_SIZE = 100
 SUPPORTED_METHODS = ("GET", "POST")
+SUPPORTED_LOOKUP_STRATEGIES = ("current", "two-phase")
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,14 @@ class Workload:
     # identifiers from the hot pool (warm cache, the optimistic bound).
     unique_ratio: float = 1.0
     hot_pool_size: int = 1_000
+    # Temporary benchmark selector. Every response must attribute itself to the
+    # same strategy before its latency is admitted into the measured sample.
+    lookup_strategy: str = "current"
+    # Optional curated real identifiers. When present this replaces synthesized
+    # and hot-pool sampling entirely, so both A/B treatments receive identical,
+    # resolving batches under the same seed.
+    identifier_pool: Tuple[str, ...] = ()
+    identifier_pool_source: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not 1 <= self.batch_size <= 100:
@@ -46,27 +56,48 @@ class Workload:
             raise ValueError("unique_ratio must be within [0.0, 1.0]")
         if self.unique_ratio < 1.0 and self.hot_pool_size < 1:
             raise ValueError("a hot pool is required when unique_ratio is below 1.0")
+        if self.lookup_strategy not in SUPPORTED_LOOKUP_STRATEGIES:
+            raise ValueError(f"lookup_strategy must be one of {SUPPORTED_LOOKUP_STRATEGIES}")
+        normalized_pool = tuple(dict.fromkeys(self.identifier_pool))
+        object.__setattr__(self, "identifier_pool", normalized_pool)
+        if normalized_pool and len(normalized_pool) < self.batch_size:
+            raise ValueError(
+                f"identifier pool has {len(normalized_pool)} unique entries but batch size is {self.batch_size}"
+            )
+        if self.identifier_pool_source and not normalized_pool:
+            raise ValueError("identifier_pool_source requires a non-empty identifier_pool")
 
     @property
     def normalized_method(self) -> str:
         return self.method.upper()
 
+    @property
+    def uses_identifier_pool(self) -> bool:
+        return bool(self.identifier_pool)
+
     def describe(self) -> str:
         parts = [f"{self.batch_size} ids", self.normalized_method]
-        if self.pmid_ratio >= 1.0:
+        if self.uses_identifier_pool:
+            source = self.identifier_pool_source or "provided pool"
+            parts.append(f"{len(self.identifier_pool)} real ids from {source}")
+        elif self.pmid_ratio >= 1.0:
             parts.append("PMID only")
         else:
             parts.append(f"{self.pmid_ratio:.0%} PMID / {1 - self.pmid_ratio:.0%} PMC+DOI")
-        parts.append("cold cache" if self.unique_ratio >= 1.0 else f"{1 - self.unique_ratio:.0%} replayed")
+        if not self.uses_identifier_pool:
+            parts.append("cold cache" if self.unique_ratio >= 1.0 else f"{1 - self.unique_ratio:.0%} replayed")
+        parts.append(f"{self.lookup_strategy} lookup")
         return ", ".join(parts)
 
     def build_corpus(self, seed: Optional[int]) -> IdentifierCorpus:
-        corpus = IdentifierCorpus(CorpusConfig(seed=seed))
-        if self.unique_ratio < 1.0:
+        corpus = IdentifierCorpus(CorpusConfig(seed=seed), identifier_pool=self.identifier_pool)
+        if not self.uses_identifier_pool and self.unique_ratio < 1.0:
             corpus.seed_hot_pool(self.hot_pool_size)
         return corpus
 
     def next_batch(self, corpus: IdentifierCorpus) -> List[str]:
+        if self.uses_identifier_pool:
+            return corpus.pool_batch(self.batch_size)
         return corpus.batch(
             size=self.batch_size,
             pmid_ratio=self.pmid_ratio,
@@ -80,10 +111,14 @@ class Workload:
         DocumentMetadataAPI clients send today. POST uses the JSON body, which is
         the only form able to carry a DOI whose suffix contains a comma.
         """
+        request_headers = {LOOKUP_STRATEGY_HEADER: self.lookup_strategy}
         if self.normalized_method == "GET":
             query = urllib.parse.urlencode({"pubids": ",".join(identifiers), "request_id": request_id})
-            return f"{PUBLICATIONS_PATH}?{query}", {}
-        return PUBLICATIONS_PATH, {"json": {"ids": identifiers, "request_id": request_id}}
+            return f"{PUBLICATIONS_PATH}?{query}", {"headers": request_headers}
+        return PUBLICATIONS_PATH, {
+            "json": {"ids": identifiers, "request_id": request_id},
+            "headers": request_headers,
+        }
 
 
 @dataclass(frozen=True)

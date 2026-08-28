@@ -10,7 +10,7 @@ Run it from the repository root:
     python -m benchmarks.publications --help
 """
 
-from benchmarks.publications.corpus import CorpusConfig, IdentifierCorpus
+from benchmarks.publications.corpus import CorpusConfig, IdentifierCorpus, load_identifier_file
 from benchmarks.publications.metrics import (
     SLO_QUANTILE,
     SLO_THRESHOLD_MS,
@@ -21,29 +21,50 @@ from benchmarks.publications.metrics import (
     percentile,
 )
 from benchmarks.publications.report import as_dict, render_json, render_text, slo_met
-from benchmarks.publications.runner import RunResult, run_plan, verify_pmid_pool
+from benchmarks.publications.runner import (
+    ComparisonResult,
+    ComparisonStage,
+    PairedObservation,
+    RunResult,
+    run_comparison_plan,
+    run_plan,
+    verify_pmid_pool,
+)
 from benchmarks.publications.users import UserModel, capacity_table, run_user_plan, supported_users
-from benchmarks.publications.workload import DEFAULT_BATCH_SIZE, RunPlan, Workload
+from benchmarks.publications.workload import (
+    DEFAULT_BATCH_SIZE,
+    LOOKUP_STRATEGY_HEADER,
+    SUPPORTED_LOOKUP_STRATEGIES,
+    RunPlan,
+    Workload,
+)
 
 __all__ = [
     "CorpusConfig",
+    "ComparisonResult",
+    "ComparisonStage",
     "DEFAULT_BATCH_SIZE",
     "IdentifierCorpus",
     "LatencySummary",
+    "LOOKUP_STRATEGY_HEADER",
     "RunPlan",
     "RunResult",
     "SLO_QUANTILE",
     "SLO_THRESHOLD_MS",
     "Sample",
+    "PairedObservation",
     "SloVerdict",
     "StageReport",
+    "SUPPORTED_LOOKUP_STRATEGIES",
     "UserModel",
     "Workload",
     "as_dict",
     "capacity_table",
+    "load_identifier_file",
     "percentile",
     "render_json",
     "render_text",
+    "run_comparison_plan",
     "run_plan",
     "run_user_plan",
     "slo_met",

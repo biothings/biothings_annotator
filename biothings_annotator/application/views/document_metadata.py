@@ -14,10 +14,15 @@ from sanic.views import HTTPMethodView
 
 from biothings_annotator.annotator.document_metadata import DocumentMetadataService
 
-
 logger = logging.getLogger(__name__)
 
 MAX_PUBLICATION_IDS = 100
+# Temporary single-deployment A/B hook for the CCWG#15 benchmark. Keep it out of
+# OpenAPI and remove it with the losing lookup implementation after measurement.
+PUBLICATIONS_LOOKUP_STRATEGY_HEADER = "X-Publications-Lookup-Strategy"
+CURRENT_LOOKUP_STRATEGY = "current"
+TWO_PHASE_LOOKUP_STRATEGY = "two-phase"
+PUBLICATIONS_LOOKUP_STRATEGIES = (CURRENT_LOOKUP_STRATEGY, TWO_PHASE_LOOKUP_STRATEGY)
 # The index stores the PMID as the document _id and carries the DOI and PMCID in
 # pubmed.identifiers. PMCID values keep PubMed's doubled form, PMC:PMC1904490
 # rather than PMC:1904490. Prefix casing is accepted loosely: DOI and PMCID
@@ -84,9 +89,30 @@ def parse_pubids_query(value: object) -> List[str]:
 class DocumentMetadataView(HTTPMethodView):
     """Serve publication metadata without entering the generic annotation path."""
 
-    def __init__(self):
-        super().__init__()
-        self.document_metadata = DocumentMetadataService()
+    # HTTPMethodView constructs a view object for every request, so these live on
+    # the class to provide exactly two fixed service instances per worker.
+    # Mutating one shared service's ``two_phase_lookup`` flag would race when
+    # current and two-phase requests overlap in the same worker.
+    document_metadata = DocumentMetadataService(two_phase_lookup=False)
+    two_phase_document_metadata = DocumentMetadataService(two_phase_lookup=True)
+
+    @staticmethod
+    def _lookup_strategy(request: Request) -> str:
+        lookup_strategy = request.headers.get(
+            PUBLICATIONS_LOOKUP_STRATEGY_HEADER,
+            CURRENT_LOOKUP_STRATEGY,
+        )
+        if lookup_strategy not in PUBLICATIONS_LOOKUP_STRATEGIES:
+            raise DocumentMetadataRequestError(
+                f"The {PUBLICATIONS_LOOKUP_STRATEGY_HEADER} header must be either "
+                f"{CURRENT_LOOKUP_STRATEGY} or {TWO_PHASE_LOOKUP_STRATEGY}."
+            )
+        return lookup_strategy
+
+    def _service_for_lookup_strategy(self, lookup_strategy: str) -> DocumentMetadataService:
+        if lookup_strategy == TWO_PHASE_LOOKUP_STRATEGY:
+            return self.two_phase_document_metadata
+        return self.document_metadata
 
     @staticmethod
     def _request_error(error: DocumentMetadataRequestError):
@@ -99,9 +125,16 @@ class DocumentMetadataView(HTTPMethodView):
             headers={"Cache-Control": "no-store"},
         )
 
-    async def _lookup(self, publication_ids: List[str], request_id: str, started_at: int):
+    async def _lookup(
+        self,
+        publication_ids: List[str],
+        request_id: str,
+        lookup_strategy: str,
+        started_at: int,
+    ):
+        document_metadata = self._service_for_lookup_strategy(lookup_strategy)
         try:
-            results, not_found = await self.document_metadata.get_publications(publication_ids)
+            results, not_found = await document_metadata.get_publications(publication_ids)
         except Exception:
             logger.exception("Unable to retrieve PubMed document metadata")
             return sanic.json(
@@ -121,15 +154,21 @@ class DocumentMetadataView(HTTPMethodView):
                     "n_results": len(results),
                     "request_id": request_id,
                     "processing_time_ms": processing_time_ms,
+                    "lookup_strategy": lookup_strategy,
                 },
                 "results": results,
                 "not_found": not_found,
-            }
+            },
+            # The temporary strategy selector changes _meta and may change
+            # timing/content if an implementation is incorrect.  A shared HTTP
+            # cache must never reuse one arm's response for the other arm.
+            headers={"Vary": PUBLICATIONS_LOOKUP_STRATEGY_HEADER},
         )
 
     async def get(self, request: Request, publication_id: Optional[str] = None):
         started_at = time.perf_counter_ns()
         try:
+            lookup_strategy = self._lookup_strategy(request)
             if publication_id is None:
                 publication_ids = parse_pubids_query(request.args.get("pubids"))
             else:
@@ -143,11 +182,17 @@ class DocumentMetadataView(HTTPMethodView):
         return await self._lookup(
             publication_ids,
             request.args.get("request_id", ""),
+            lookup_strategy,
             started_at,
         )
 
     async def post(self, request: Request):
         started_at = time.perf_counter_ns()
+        try:
+            lookup_strategy = self._lookup_strategy(request)
+        except DocumentMetadataRequestError as error:
+            return self._request_error(error)
+
         try:
             body = request.json
         except BadRequest:
@@ -165,4 +210,4 @@ class DocumentMetadataView(HTTPMethodView):
         if not isinstance(request_id, str):
             return self._request_error(DocumentMetadataRequestError("request_id must be a string."))
 
-        return await self._lookup(publication_ids, request_id, started_at)
+        return await self._lookup(publication_ids, request_id, lookup_strategy, started_at)

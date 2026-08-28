@@ -307,16 +307,17 @@ class DocumentMetadataService:
         whole DOI lookup behind the PMID fetch and would lose that overlap, while
         a DOI-heavy batch has little overlap to lose. Measure per workload.
 
-        Measured against CI and found to be a regression at every identifier
-        mix, so it is kept off. The premise does not hold: source retrieval is
-        not what the ``_msearch`` costs. A 100-identifier search that resolves
-        every one takes 22 ms of Elasticsearch wall-clock, and ``"_source":
-        false`` removes about 1 ms of that (4.5%). The 84% cut in the search
-        leg's response size is not a saving either -- those bytes reappear in
-        the larger ``_mget``, plus its per-document envelope, so the strategy
-        moves 3-8% *more* total bytes. Against that it adds a serial round trip
-        and forfeits the overlap that currently hides the whole DOI lookup
-        behind the PMID fetch.
+        Preliminary CI Elasticsearch measurements are not an endpoint latency
+        comparison, so this remains off pending the request-attributed A/B. A
+        100-identifier search that resolves every one takes 22 ms of
+        Elasticsearch wall-clock, and ``"_source": false`` removes about 1 ms
+        of that (4.5%). The 84% cut in the search leg's response size is not a
+        net byte saving either -- those bytes reappear in the larger ``_mget``,
+        plus its per-document envelope, so the strategy moves 3-8% more total
+        backend response bytes. It also adds a serial round trip and forfeits
+        the overlap that currently hides the DOI lookup behind the PMID fetch.
+        Those facts argue against adoption without a complete-path win; they do
+        not by themselves measure that path's latency.
 
         Retained rather than deleted because the measurement is the useful part:
         it says the identifier path is already cheap and that effort belongs

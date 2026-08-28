@@ -405,23 +405,25 @@ field itself roughly halved, which is 2.3% of the index. The latency gain is nil
 identical `_msearch` timings and a `_mget` response 1% smaller. Worth having as a storage and index-size
 change; it is not a latency optimization and should not be quoted as one.
 
-**Resolving to `_id` first, then one combined `_mget` — measured and rejected.** The idea was to ask
-the `_msearch` only for `_id`, then fetch everything through a single exact-ID `_mget`. Implemented
-behind `DOCUMENT_METADATA_TWO_PHASE_LOOKUP` and left off, because it is a regression at every mix:
+**Resolving to `_id` first, then one combined `_mget` — keep off pending an endpoint A/B.** The idea is
+to ask the `_msearch` only for `_id`, then fetch everything through a single exact-ID `_mget`. It is
+an explicit `DocumentMetadataService` option. The endpoint keeps `current` as its hard-coded safe default
+and exposes the temporary per-request benchmark selector below:
 
-| identifier mix | current total | two-phase total | delta | current ES took | two-phase ES took | ES round trips |
+| identifier mix | current total | two-phase total | delta | current `_msearch` took | two-phase `_msearch` took | ES round trips |
 | --- | --- | --- | --- | --- | --- | --- |
 | 75 PMID / 25 other | 154.0 kB | 158.9 kB | **+3.2%** | 9 ms | 8 ms | 1 parallel → 2 serial |
 | 50 / 50 | 160.5 kB | 167.1 kB | **+4.1%** | 12 ms | 12 ms | 1 parallel → 2 serial |
 | 25 / 75 | 166.0 kB | 173.7 kB | **+4.7%** | 18 ms | 16 ms | 1 parallel → 2 serial |
 | 0 / 100 other | 168.7 kB | 181.9 kB | **+7.8%** | 22 ms | 21 ms | 1 → 2 serial |
 
-The premise does not survive measurement. Source retrieval is not what the `_msearch` costs: 100
-identifiers that all resolve take 22 ms of Elasticsearch wall-clock, and `"_source": false` removes
-about 1 ms of it. It does cut that leg's response by 84% (169 kB to 26 kB), but those bytes are not
-saved — they reappear in the larger `_mget` along with its per-document envelope, so total bytes go
-*up*. Against no gain it adds a serial round trip and forfeits the concurrency that currently hides the
-entire DOI lookup behind the PMID fetch.
+These measurements do not establish full-path latency. The timing columns are only the top-level
+`_msearch.took`; the two-phase value omits the `_mget` that follows it. They do show that source
+retrieval is not an expensive part of `_msearch`: 100 identifiers that all resolve take 22 ms of
+Elasticsearch wall-clock, and `"_source": false` removes about 1 ms. It cuts that leg's response by 84%
+(169 kB to 26 kB), but those bytes reappear in the combined `_mget` with its per-document envelope, so
+total backend response bytes rise 3–8%. The extra serial round trip makes a slowdown plausible, not
+measured; use the single-deployment endpoint A/B below before calling it a latency regression.
 
 Two corrections to earlier reasoning come out of this. The shard fan-out is not the practical problem it
 looked like: per-identifier cost *falls* with batch size, 0.40 ms at 10 identifiers to 0.22 ms at 100,
@@ -432,10 +434,10 @@ the actual constraint. Optimisation effort belongs on payload size, not on ident
 
 A measurement note for anyone repeating this. Run through an SSH tunnel, every Elasticsearch round trip
 costs 90-190 ms and drifts during a session, which is two orders of magnitude above in-cluster and more
-than the entire effect being measured. Wall-clock timings from outside the cluster are therefore
-worthless here; the numbers above come from the top-level `took` on the `_msearch` response, which is
-Elasticsearch's own wall-clock and never crosses the network. Per-sub-request `took` values must not be
-summed — Elasticsearch runs `_msearch` entries concurrently, so their sum is total work, not latency.
+than the entire effect being measured. Tunnel wall-clock does establish how the forwarded path behaves,
+but it exaggerates the production cost of a second round trip. Per-sub-request `took` values must not be
+summed either — Elasticsearch runs `_msearch` entries concurrently, so their sum is total work, not
+latency. Compare the complete endpoint paths through CI's own `processing_time_ms` instead.
 
 ##### Load benchmark and the 150 ms objective
 
@@ -458,9 +460,46 @@ python -m benchmarks.publications --unique-ratio 0.0 --hot-pool 200
 # Mixed identifiers, which take the per-identifier _msearch path instead of the batched _mget.
 python -m benchmarks.publications --pmid-ratio 0.5
 
+# Temporary one-deployment A/B selector. Every identifier batch goes to both implementations.
+python -m benchmarks.publications --method POST --compare-lookup-strategies \
+  --identifier-file real-publication-ids.txt --concurrency 1 \
+  --requests 200 --warmup 20 --seed 2026
+
+# A single arm remains available for an absolute load-bearing sweep.
+python -m benchmarks.publications --lookup-strategy two-phase --ramp 1,4,8,16 --requests 200
+
 # Machine-readable output; exit status is 0 only if every stage met the objective.
 python -m benchmarks.publications --json --slo-basis server
 ```
+
+`--lookup-strategy` sends the undocumented `X-Publications-Lookup-Strategy` benchmark header. The
+endpoint defaults to `current`, holds independent current and two-phase service instances, and echoes
+the selection as `_meta.lookup_strategy`. The harness rejects a missing or mismatched attribution rather
+than admitting that latency into the result. `--compare-lookup-strategies` performs the A/B in one
+invocation: it precomputes each batch, sends that exact batch to both implementations, and balances
+current-first/two-phase-first order after the batches are known. In comparison mode, `--requests` and
+`--warmup` count pairs, so 200 measured pairs produce 400 HTTP requests. The measured pair count must be
+even and at least two, ensuring both request orders are represented. `--concurrency` remains the maximum
+number of HTTP requests in flight; the two members of a pair are sequential rather than doubling the
+offered load.
+
+The paired report keeps current-first and two-phase-first deltas separate as well as combined. That is
+necessary because the second request can benefit from Elasticsearch state warmed by the first. Balanced
+ordering is applied separately to pairs containing DOI/PMCID identifiers and to PMID-only controls, so
+the changed path is represented in both orders. This controls first-order bias, but one shared deployment
+cannot give both treatments a cold first lookup. If the order strata disagree in direction, treat the run
+as cache/order-sensitive rather than declaring a winner. The mixed A/B wall time is not a standalone
+capacity measurement; use the existing single-strategy mode with `--ramp` for that. Comparison mode is
+intentionally closed-loop and cannot be combined with `--users`. The selector is temporary measurement
+scaffolding and should be removed with the losing implementation after the A/B.
+
+Comparison mode requires `--identifier-file` with one real, resolving identifier per line, at least one
+batch's worth of identifiers, and at least one DOI or PMCID; blank lines and lines beginning with `#` are
+ignored. Prefer one identifier per distinct document and enough DOI/PMCID entries for the reported mix to
+represent the traffic being decided. Synthesized DOI values mostly miss, while an all-PMID corpus sends
+both implementations down the same `_mget` path, so neither can decide whether the two-phase source fetch
+is faster. Any identifier reported as `not_found` by either arm invalidates its pair and makes the
+comparison exit nonzero.
 
 ###### Reading the numbers
 
@@ -479,9 +518,9 @@ disagree:
 Four methodology choices are worth knowing about, because each one would otherwise flatter the result:
 
 - **Warmup is discarded.** Each stage first issues throwaway requests to fill the keep-alive pool, so
-  no measured sample is charged for a TLS handshake. The warmup deliberately draws *different*
-  identifiers than the measured stage, so it does not pre-warm the backend cache for the very lookups
-  under measurement.
+  no measured sample is charged for a TLS handshake. The warmup uses a separate seeded draw; synthetic
+  fresh identifiers therefore stay separate, while a fixed identifier pool can overlap and is reported
+  as a cache-warming workload.
 - **Identifiers are drawn fresh by default.** `--unique-ratio 1.0` makes every lookup a first-time
   lookup, which is the cold-cache bound. Elasticsearch caches aggressively — the same batch replayed
   drops from roughly 70 ms to under 30 ms — so a benchmark that reused identifiers would report the

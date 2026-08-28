@@ -13,24 +13,41 @@ cache and reports a latency the next real user would not see. Verification is
 therefore opt-in (:func:`verify_pmid_pool`) and the report labels the run as
 cache-primed when it is used.
 
-PMCIDs and DOIs are synthesized rather than sampled. They cannot be discovered
-through the service, because the deployed index carries no
-``pubmed.identifiers`` field for them to resolve against. They are still worth
-sending: a PMCID or DOI takes the scoped ``_msearch`` path, one entry per
-identifier, instead of the single batched ``_mget`` that PMIDs take, so a mixed
-batch measures the expensive path even while every such identifier comes back in
-``not_found``. Once the reindex lands, the same workload measures it resolving.
+PMCIDs and DOIs are synthesized by the default mixed workload. Because those
+values usually miss, a benchmark comparing implementations should instead load
+a curated file of known-resolving PMIDs, PMCIDs, and DOIs. A fixed pool is
+sampled without replacement within each request and with the same seeded random
+generator as the synthetic corpus, so two runs with the same seed issue the
+same batches.
 """
 
 import random
 from dataclasses import dataclass
-from typing import List, Optional, Sequence
+from pathlib import Path
+from typing import List, Optional, Sequence, Union
 
 # PubMed had issued IDs up to roughly 41,000,000 by 2026. The default upper
 # bound stays below that so the draw does not concentrate on the newest records,
 # which are the least likely to be present in an index snapshot.
 DEFAULT_MAX_PMID = 38_000_000
 DEFAULT_MIN_PMID = 1
+
+
+def load_identifier_file(path: Union[str, Path]) -> List[str]:
+    """Load one publication identifier per line from ``path``.
+
+    Blank lines and lines whose first non-whitespace character is ``#`` are
+    ignored. Identifiers are stripped and deduplicated while preserving their
+    first-seen order; inline ``#`` characters remain part of an identifier
+    because they are legal in DOI suffixes.
+    """
+    identifiers: List[str] = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        identifier = line.strip()
+        if not identifier or identifier.startswith("#"):
+            continue
+        identifiers.append(identifier)
+    return list(dict.fromkeys(identifiers))
 
 
 @dataclass(frozen=True)
@@ -53,14 +70,22 @@ class IdentifierCorpus:
 
     Instances are not thread-safe and are not safe to share across concurrent
     workers: they own a single :class:`random.Random`. The runner gives each
-    worker its own corpus so a seeded run stays reproducible regardless of how
-    the event loop interleaves them.
+    worker its own corpus, which makes each worker's draw sequence reproducible.
+    Aggregate single-arm assignment can still vary when faster workers claim
+    more requests; paired comparison mode therefore precomputes every batch
+    before any timed request starts.
     """
 
-    def __init__(self, config: Optional[CorpusConfig] = None, hot_pool: Optional[Sequence[str]] = None):
+    def __init__(
+        self,
+        config: Optional[CorpusConfig] = None,
+        hot_pool: Optional[Sequence[str]] = None,
+        identifier_pool: Optional[Sequence[str]] = None,
+    ):
         self.config = config or CorpusConfig()
         self._random = random.Random(self.config.seed)
         self._hot_pool = list(hot_pool or [])
+        self._identifier_pool = list(dict.fromkeys(identifier_pool or []))
         self._catalog: List[str] = []
         self._catalog_cumulative_weights: List[float] = []
 
@@ -68,6 +93,11 @@ class IdentifierCorpus:
     def hot_pool(self) -> List[str]:
         """Identifiers reused across batches to exercise a warm backend cache."""
         return list(self._hot_pool)
+
+    @property
+    def identifier_pool(self) -> List[str]:
+        """The fixed real-identifier pool, in first-seen input order."""
+        return list(self._identifier_pool)
 
     def fresh_pmid(self) -> str:
         return f"PMID:{self._random.randint(self.config.min_pmid, self.config.max_pmid)}"
@@ -108,12 +138,28 @@ class IdentifierCorpus:
         if zipf_exponent < 0:
             raise ValueError("zipf_exponent must be >= 0")
 
-        self._catalog = [self.fresh_pmid() for _ in range(size)]
+        return self.seed_catalog_from_identifiers(
+            [self.fresh_pmid() for _ in range(size)],
+            zipf_exponent,
+        )
+
+    def seed_catalog_from_identifiers(
+        self,
+        identifiers: Sequence[str],
+        zipf_exponent: float = 1.0,
+    ) -> List[str]:
+        """Use a fixed identifier pool as the popularity-ranked user catalogue."""
+        if zipf_exponent < 0:
+            raise ValueError("zipf_exponent must be >= 0")
+        self._catalog = list(dict.fromkeys(identifiers))
+        if not self._catalog:
+            raise ValueError("catalogue identifiers must not be empty")
+
         # Cumulative weights are precomputed once so each draw is a binary
         # search rather than a rebuild of the whole weight vector.
         cumulative = 0.0
         self._catalog_cumulative_weights = []
-        for rank in range(1, size + 1):
+        for rank in range(1, len(self._catalog) + 1):
             cumulative += 1.0 / (rank**zipf_exponent)
             self._catalog_cumulative_weights.append(cumulative)
         return list(self._catalog)
@@ -141,6 +187,14 @@ class IdentifierCorpus:
             k=size,
         )
         return list(dict.fromkeys(drawn))
+
+    def pool_batch(self, size: int) -> List[str]:
+        """Sample a full, duplicate-free request from the fixed identifier pool."""
+        if size < 1:
+            raise ValueError("batch size must be >= 1")
+        if len(self._identifier_pool) < size:
+            raise ValueError(f"identifier pool has {len(self._identifier_pool)} entries but batch size is {size}")
+        return self._random.sample(self._identifier_pool, size)
 
     def batch(self, size: int, pmid_ratio: float = 1.0, unique_ratio: float = 1.0) -> List[str]:
         """Build one request's identifier list.

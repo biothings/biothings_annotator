@@ -6,24 +6,31 @@ python -m benchmarks.publications --help
 import argparse
 import asyncio
 import sys
-from typing import List, Optional, Sequence, Tuple
+from pathlib import Path
+from typing import List, Optional, Sequence, Tuple, Union
 
 from benchmarks.publications.corpus import (
     DEFAULT_MAX_PMID,
     DEFAULT_MIN_PMID,
     CorpusConfig,
     IdentifierCorpus,
+    load_identifier_file,
 )
 from benchmarks.publications.metrics import SLO_THRESHOLD_MS
 from benchmarks.publications.report import render_json, render_text, slo_met
-from benchmarks.publications.runner import RunResult, run_plan, verify_pmid_pool
+from benchmarks.publications.runner import ComparisonResult, RunResult, run_comparison_plan, run_plan, verify_pmid_pool
 from benchmarks.publications.users import (
     DEFAULT_CATALOG_SIZE,
     DEFAULT_ZIPF_EXPONENT,
     UserModel,
     run_user_plan,
 )
-from benchmarks.publications.workload import DEFAULT_BATCH_SIZE, RunPlan, Workload
+from benchmarks.publications.workload import (
+    DEFAULT_BATCH_SIZE,
+    SUPPORTED_LOOKUP_STRATEGIES,
+    RunPlan,
+    Workload,
+)
 
 # CI is the deployment CCWG#15 is being validated against.
 DEFAULT_BASE_URL = "https://annotator.ci.transltr.io"
@@ -55,7 +62,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="identifiers per request; CCWG#15 caps this at 100",
     )
     parser.add_argument("--method", choices=("GET", "POST", "get", "post"), default="GET")
-    parser.add_argument("--requests", type=int, default=100, help="measured requests per stage")
+    strategy_mode = parser.add_mutually_exclusive_group()
+    strategy_mode.add_argument(
+        "--lookup-strategy",
+        choices=SUPPORTED_LOOKUP_STRATEGIES,
+        default="current",
+        help="temporary server-side lookup implementation to benchmark",
+    )
+    strategy_mode.add_argument(
+        "--compare-lookup-strategies",
+        action="store_true",
+        help=(
+            "issue balanced current/two-phase pairs against one deployment; --requests and --warmup then count pairs"
+        ),
+    )
+    parser.add_argument(
+        "--requests",
+        type=int,
+        default=100,
+        help="measured requests per stage, or request pairs in comparison mode",
+    )
     parser.add_argument("--concurrency", type=int, default=1, help="concurrent requests in flight")
     parser.add_argument(
         "--ramp",
@@ -64,7 +90,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="1,2,4,8",
         help="sweep these concurrency levels instead of a single --concurrency stage",
     )
-    parser.add_argument("--warmup", type=int, default=10, help="discarded requests before each stage")
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        default=10,
+        help="discarded requests before each stage, or request pairs in comparison mode",
+    )
     parser.add_argument(
         "--pmid-ratio",
         type=float,
@@ -83,7 +114,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=float, default=30.0, help="per-request timeout in seconds")
     parser.add_argument("--threshold-ms", type=float, default=SLO_THRESHOLD_MS, help="p90 objective")
     parser.add_argument("--seed", type=int, default=None, help="seed the identifier draw for a repeatable run")
-    parser.add_argument(
+    corpus_source = parser.add_mutually_exclusive_group()
+    corpus_source.add_argument(
+        "--identifier-file",
+        metavar="PATH",
+        help=(
+            "sample from real publication identifiers in PATH, one per nonblank, non-comment line; "
+            "duplicates are removed in first-seen order"
+        ),
+    )
+    corpus_source.add_argument(
         "--verify-corpus",
         type=int,
         default=0,
@@ -145,13 +185,34 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bool]:
-    """Build the workload, resolving a verified corpus when one was requested."""
+    """Build the workload from synthetic, file-backed, or verified identifiers."""
+    if arguments.identifier_file and arguments.verify_corpus:
+        raise SystemExit("--identifier-file cannot be combined with --verify-corpus")
+
+    identifier_pool: Tuple[str, ...] = ()
+    identifier_pool_source: Optional[str] = None
+    if arguments.identifier_file:
+        identifier_path = Path(arguments.identifier_file).expanduser()
+        try:
+            identifier_pool = tuple(load_identifier_file(identifier_path))
+        except (OSError, UnicodeError) as error:
+            raise SystemExit(f"unable to read identifier file {identifier_path}: {error}") from error
+        if len(identifier_pool) < arguments.batch_size:
+            raise SystemExit(
+                f"identifier file contains {len(identifier_pool)} unique identifiers, "
+                f"fewer than batch size {arguments.batch_size}"
+            )
+        identifier_pool_source = str(identifier_path.resolve())
+
     workload = Workload(
         batch_size=arguments.batch_size,
         method=arguments.method,
         pmid_ratio=arguments.pmid_ratio,
         unique_ratio=arguments.unique_ratio,
         hot_pool_size=arguments.hot_pool,
+        lookup_strategy=arguments.lookup_strategy,
+        identifier_pool=identifier_pool,
+        identifier_pool_source=identifier_pool_source,
     )
     if not arguments.verify_corpus:
         return workload, False
@@ -163,7 +224,12 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
         CorpusConfig(min_pmid=arguments.min_pmid, max_pmid=arguments.max_pmid, seed=arguments.seed)
     )
     candidates = [sampler.fresh_pmid() for _ in range(candidate_count)]
-    resolved = await verify_pmid_pool(arguments.base_url, candidates, arguments.timeout)
+    resolved = await verify_pmid_pool(
+        arguments.base_url,
+        candidates,
+        arguments.timeout,
+        lookup_strategy=arguments.lookup_strategy,
+    )
     if len(resolved) < arguments.batch_size:
         raise SystemExit(
             f"corpus verification resolved only {len(resolved)} identifiers, "
@@ -178,13 +244,27 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
             # identifiers, which is only meaningful with reuse enabled.
             unique_ratio=0.0,
             hot_pool_size=len(resolved),
+            lookup_strategy=arguments.lookup_strategy,
+            identifier_pool=tuple(resolved),
+            identifier_pool_source="verified PMID pool",
         ),
         True,
     )
 
 
-async def execute(arguments: argparse.Namespace) -> RunResult:
+async def execute(arguments: argparse.Namespace) -> Union[RunResult, ComparisonResult]:
+    if arguments.compare_lookup_strategies and arguments.users is not None:
+        raise SystemExit("--compare-lookup-strategies cannot be combined with --users")
+    if arguments.compare_lookup_strategies and not arguments.identifier_file:
+        raise SystemExit("--compare-lookup-strategies requires --identifier-file with real resolving identifiers")
+    if arguments.compare_lookup_strategies and (arguments.requests < 2 or arguments.requests % 2):
+        raise SystemExit("--compare-lookup-strategies requires an even --requests value of at least 2")
+
     workload, cache_primed = await _prepare_workload(arguments)
+    if arguments.compare_lookup_strategies and not any(
+        identifier.lower().startswith(("doi:", "pmc:")) for identifier in workload.identifier_pool
+    ):
+        raise SystemExit("comparison identifier file must contain at least one DOI or PMCID")
     plan = RunPlan(
         base_url=arguments.base_url,
         workload=workload,
@@ -196,6 +276,8 @@ async def execute(arguments: argparse.Namespace) -> RunResult:
         threshold_ms=arguments.threshold_ms,
         ramp=tuple(arguments.ramp or ()),
     )
+    if arguments.compare_lookup_strategies:
+        return await run_comparison_plan(plan, cache_primed=cache_primed)
     if arguments.users is None:
         return await run_plan(plan, cache_primed=cache_primed)
 

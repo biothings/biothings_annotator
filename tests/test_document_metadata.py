@@ -14,7 +14,10 @@ from biothings_annotator.annotator.document_metadata import (
 from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS
 from biothings_annotator.annotator.utils import get_elasticsearch_client
 from biothings_annotator.application.views.document_metadata import (
+    CURRENT_LOOKUP_STRATEGY,
+    PUBLICATIONS_LOOKUP_STRATEGY_HEADER,
     SUPPORTED_PUBLICATION_ID_MESSAGE,
+    TWO_PHASE_LOOKUP_STRATEGY,
     validate_publication_ids,
 )
 
@@ -474,9 +477,88 @@ async def test_publications_endpoint_returns_legacy_envelope_and_deduplicates(
     assert response.json["not_found"] == [MISSING_PMID]
     assert response.json["_meta"]["n_results"] == 1
     assert response.json["_meta"]["request_id"] == "request-123"
+    assert response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
+    assert response.headers["vary"] == PUBLICATIONS_LOOKUP_STRATEGY_HEADER
     assert isinstance(response.json["_meta"]["processing_time_ms"], int)
     assert response.json["_meta"]["processing_time_ms"] >= 0
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", response.json["_meta"]["timestamp"])
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_publications_endpoint_selects_isolated_lookup_services_per_request(
+    test_annotator: sanic.Sanic,
+    monkeypatch,
+):
+    calls = []
+
+    async def get_publications(self, publication_ids):
+        calls.append((id(self), self.two_phase_lookup, publication_ids))
+        return {PMID: FORMATTED_METADATA}, []
+
+    monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
+
+    _, default_response = await test_annotator.asgi_client.get(f"/publications?pubids={PMID}")
+    _, two_phase_response = await test_annotator.asgi_client.post(
+        "/publications",
+        json={"ids": [PMID]},
+        headers={PUBLICATIONS_LOOKUP_STRATEGY_HEADER: TWO_PHASE_LOOKUP_STRATEGY},
+    )
+    _, current_response = await test_annotator.asgi_client.get(
+        f"/publications/{PMID}",
+        headers={PUBLICATIONS_LOOKUP_STRATEGY_HEADER: CURRENT_LOOKUP_STRATEGY},
+    )
+
+    assert [call[1:] for call in calls] == [
+        (False, [PMID]),
+        (True, [PMID]),
+        (False, [PMID]),
+    ]
+    assert calls[0][0] == calls[2][0]
+    assert calls[0][0] != calls[1][0]
+    assert default_response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
+    assert two_phase_response.json["_meta"]["lookup_strategy"] == TWO_PHASE_LOOKUP_STRATEGY
+    assert current_response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize(
+    "method, path, body",
+    [
+        ("get", f"/publications?pubids={PMID}", None),
+        ("get", f"/publications/{PMID}", None),
+        ("post", "/publications", {"ids": [PMID]}),
+    ],
+)
+async def test_publication_endpoints_reject_an_invalid_lookup_strategy_before_lookup(
+    test_annotator: sanic.Sanic,
+    monkeypatch,
+    method,
+    path,
+    body,
+):
+    async def fail_lookup(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("An invalid lookup strategy must not query Elasticsearch")
+
+    monkeypatch.setattr(DocumentMetadataService, "get_publications", fail_lookup)
+    headers = {PUBLICATIONS_LOOKUP_STRATEGY_HEADER: "experimental"}
+
+    if method == "post":
+        _, response = await test_annotator.asgi_client.post(path, json=body, headers=headers)
+    else:
+        _, response = await test_annotator.asgi_client.get(path, headers=headers)
+
+    assert response.status_code == 400
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json == {
+        "endpoint": "/publications",
+        "message": (
+            f"The {PUBLICATIONS_LOOKUP_STRATEGY_HEADER} header must be either "
+            f"{CURRENT_LOOKUP_STRATEGY} or {TWO_PHASE_LOOKUP_STRATEGY}."
+        ),
+    }
 
 
 @pytest.mark.unit
