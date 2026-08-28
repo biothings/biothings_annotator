@@ -4,9 +4,12 @@ import asyncio
 import os
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from biothings_annotator.annotator.settings import DOCUMENT_METADATA_REQUEST_TIMEOUT, ELASTICSEARCH_CONNECTION
+from biothings_annotator.annotator.settings import (
+    DOCUMENT_METADATA_REQUEST_TIMEOUT,
+    DOCUMENT_METADATA_TWO_PHASE_LOOKUP,
+    ELASTICSEARCH_CONNECTION,
+)
 from biothings_annotator.annotator.utils import get_elasticsearch_client
-
 
 PUBMED_SOURCE_FIELDS = ["pubmed"]
 PUBMED_IDENTIFIER_SCOPES = ["pubmed.identifiers"]
@@ -195,6 +198,7 @@ class DocumentMetadataService:
         self,
         elasticsearch_connection: Optional[str] = None,
         request_timeout: Optional[float] = None,
+        two_phase_lookup: Optional[bool] = None,
     ):
         self.elasticsearch_connection = (
             elasticsearch_connection or os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION)
@@ -208,6 +212,15 @@ class DocumentMetadataService:
         self.request_timeout = float(configured_timeout)
         if self.request_timeout <= 0:
             raise ValueError("Document metadata request timeout must be greater than zero")
+
+        configured_two_phase = two_phase_lookup
+        if configured_two_phase is None:
+            configured_two_phase = os.environ.get("DOCUMENT_METADATA_TWO_PHASE_LOOKUP")
+            if configured_two_phase is None:
+                configured_two_phase = DOCUMENT_METADATA_TWO_PHASE_LOOKUP
+            else:
+                configured_two_phase = configured_two_phase.strip().lower() in ("1", "true", "yes", "on")
+        self.two_phase_lookup = bool(configured_two_phase)
 
     async def get_publications(self, publication_ids: Iterable[str]) -> Tuple[Dict[str, Dict[str, str]], List[str]]:
         """Return ordered publication results and missing identifiers."""
@@ -228,8 +241,9 @@ class DocumentMetadataService:
                 search_ids.append(publication_id)
 
         client = get_elasticsearch_client("pubmed", self.elasticsearch_connection)
+        fetch = self._fetch_hits_two_phase if self.two_phase_lookup else self._fetch_hits
         hits_by_id = await asyncio.wait_for(
-            self._fetch_hits(client, document_ids, search_ids),
+            fetch(client, document_ids, search_ids),
             timeout=self.request_timeout,
         )
 
@@ -273,6 +287,85 @@ class DocumentMetadataService:
                 if hit.get("notfound"):
                     continue
                 hits_by_id.setdefault(hit.get("query"), hit)
+        return hits_by_id
+
+    @staticmethod
+    async def _fetch_hits_two_phase(client, document_ids: List[str], search_ids: List[str]) -> Dict[str, Dict]:
+        """Resolve identifiers to document ``_id``s first, then fetch source once.
+
+        The one-phase path above fetches full source on both legs concurrently.
+        This one asks the ``_msearch`` only for ``_id`` -- so Elasticsearch never
+        loads a matched abstract on the search leg -- and then retrieves every
+        document, resolved and submitted alike, through a single ``_mget`` on the
+        exact-ID path.
+
+        The trade is real in both directions and is why this is a flag rather
+        than a replacement. It removes source loading from the search leg and
+        collapses two source fetches into one batched request, but it serializes
+        what the one-phase path runs concurrently: the ``_mget`` cannot start
+        until the ``_msearch`` returns. A PMID-heavy batch currently hides the
+        whole DOI lookup behind the PMID fetch and would lose that overlap, while
+        a DOI-heavy batch has little overlap to lose. Measure per workload.
+
+        Preliminary CI Elasticsearch measurements are not an endpoint latency
+        comparison, so this remains off pending the request-attributed A/B. A
+        100-identifier search that resolves every one takes 22 ms of
+        Elasticsearch wall-clock, and ``"_source": false`` removes about 1 ms
+        of that (4.5%). The 84% cut in the search leg's response size is not a
+        net byte saving either -- those bytes reappear in the larger ``_mget``,
+        plus its per-document envelope, so the strategy moves 3-8% more total
+        backend response bytes. It also adds a serial round trip and forfeits
+        the overlap that currently hides the DOI lookup behind the PMID fetch.
+        Those facts argue against adoption without a complete-path win; they do
+        not by themselves measure that path's latency.
+
+        Retained rather than deleted because the measurement is the useful part:
+        it says the identifier path is already cheap and that effort belongs
+        elsewhere. The per-identifier cost also *falls* with batch size, from
+        0.40 ms at 10 identifiers to 0.22 ms at 100, so the shard fan-out this
+        docstring previously called the dominant cost is not a practical problem
+        at these sizes either.
+        """
+        # Several submitted identifiers can name one document -- a DOI and the
+        # PMID of the same paper, or a DOI and its PMCID -- so resolution is kept
+        # as a mapping and the fetch list is deduplicated. The response has to be
+        # keyed by what the caller submitted, which is what this mapping
+        # preserves and what a bare _id lookup would lose.
+        resolved_by_submitted: Dict[str, str] = {}
+        if search_ids:
+            identifier_hits = await client.querymany_ids(
+                search_ids,
+                scopes=PUBMED_IDENTIFIER_SCOPES,
+                size=1,
+            )
+            for hit in identifier_hits:
+                if hit.get("notfound"):
+                    continue
+                document_id = hit.get("_id")
+                if document_id:
+                    resolved_by_submitted[hit.get("query")] = document_id
+
+        fetch_ids = list(dict.fromkeys([*document_ids, *resolved_by_submitted.values()]))
+        if not fetch_ids:
+            return {}
+
+        hits_by_document_id: Dict[str, Dict] = {}
+        for hit in await client.mget(fetch_ids, fields=PUBMED_SOURCE_FIELDS):
+            if hit.get("notfound"):
+                continue
+            hits_by_document_id.setdefault(hit.get("query"), hit)
+
+        # Re-key onto submitted identifiers. A PMID is already its own document
+        # _id; a DOI or PMCID has to travel back through the resolution mapping.
+        hits_by_id: Dict[str, Dict] = {}
+        for document_id in document_ids:
+            hit = hits_by_document_id.get(document_id)
+            if hit is not None:
+                hits_by_id[document_id] = hit
+        for submitted, document_id in resolved_by_submitted.items():
+            hit = hits_by_document_id.get(document_id)
+            if hit is not None:
+                hits_by_id[submitted] = hit
         return hits_by_id
 
     async def check_index_fields(self) -> Dict[str, object]:

@@ -14,10 +14,12 @@ from biothings_annotator.annotator.document_metadata import (
 from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS
 from biothings_annotator.annotator.utils import get_elasticsearch_client
 from biothings_annotator.application.views.document_metadata import (
+    CURRENT_LOOKUP_STRATEGY,
+    PUBLICATIONS_LOOKUP_STRATEGY_HEADER,
     SUPPORTED_PUBLICATION_ID_MESSAGE,
+    TWO_PHASE_LOOKUP_STRATEGY,
     validate_publication_ids,
 )
-
 
 PMID = "PMID:30690000"
 MISSING_PMID = "PMID:82374"
@@ -484,9 +486,88 @@ async def test_publications_endpoint_returns_legacy_envelope_and_deduplicates(
     assert response.json["not_found"] == [MISSING_PMID]
     assert response.json["_meta"]["n_results"] == 1
     assert response.json["_meta"]["request_id"] == "request-123"
+    assert response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
+    assert response.headers["vary"] == PUBLICATIONS_LOOKUP_STRATEGY_HEADER
     assert isinstance(response.json["_meta"]["processing_time_ms"], int)
     assert response.json["_meta"]["processing_time_ms"] >= 0
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", response.json["_meta"]["timestamp"])
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_publications_endpoint_selects_isolated_lookup_services_per_request(
+    test_annotator: sanic.Sanic,
+    monkeypatch,
+):
+    calls = []
+
+    async def get_publications(self, publication_ids):
+        calls.append((id(self), self.two_phase_lookup, publication_ids))
+        return {PMID: FORMATTED_METADATA}, []
+
+    monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
+
+    _, default_response = await test_annotator.asgi_client.get(f"/publications?pubids={PMID}")
+    _, two_phase_response = await test_annotator.asgi_client.post(
+        "/publications",
+        json={"ids": [PMID]},
+        headers={PUBLICATIONS_LOOKUP_STRATEGY_HEADER: TWO_PHASE_LOOKUP_STRATEGY},
+    )
+    _, current_response = await test_annotator.asgi_client.get(
+        f"/publications/{PMID}",
+        headers={PUBLICATIONS_LOOKUP_STRATEGY_HEADER: CURRENT_LOOKUP_STRATEGY},
+    )
+
+    assert [call[1:] for call in calls] == [
+        (False, [PMID]),
+        (True, [PMID]),
+        (False, [PMID]),
+    ]
+    assert calls[0][0] == calls[2][0]
+    assert calls[0][0] != calls[1][0]
+    assert default_response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
+    assert two_phase_response.json["_meta"]["lookup_strategy"] == TWO_PHASE_LOOKUP_STRATEGY
+    assert current_response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize(
+    "method, path, body",
+    [
+        ("get", f"/publications?pubids={PMID}", None),
+        ("get", f"/publications/{PMID}", None),
+        ("post", "/publications", {"ids": [PMID]}),
+    ],
+)
+async def test_publication_endpoints_reject_an_invalid_lookup_strategy_before_lookup(
+    test_annotator: sanic.Sanic,
+    monkeypatch,
+    method,
+    path,
+    body,
+):
+    async def fail_lookup(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("An invalid lookup strategy must not query Elasticsearch")
+
+    monkeypatch.setattr(DocumentMetadataService, "get_publications", fail_lookup)
+    headers = {PUBLICATIONS_LOOKUP_STRATEGY_HEADER: "experimental"}
+
+    if method == "post":
+        _, response = await test_annotator.asgi_client.post(path, json=body, headers=headers)
+    else:
+        _, response = await test_annotator.asgi_client.get(path, headers=headers)
+
+    assert response.status_code == 400
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json == {
+        "endpoint": "/publications",
+        "message": (
+            f"The {PUBLICATIONS_LOOKUP_STRATEGY_HEADER} header must be either "
+            f"{CURRENT_LOOKUP_STRATEGY} or {TWO_PHASE_LOOKUP_STRATEGY}."
+        ),
+    }
 
 
 @pytest.mark.unit
@@ -504,9 +585,7 @@ async def test_publication_path_endpoint_returns_one_publication(
 
     monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
 
-    _, response = await test_annotator.asgi_client.get(
-        f"/publications/{PMID}?request_id=path-request"
-    )
+    _, response = await test_annotator.asgi_client.get(f"/publications/{PMID}?request_id=path-request")
 
     assert response.status_code == 200
     assert response.content_type == "application/json"
@@ -905,8 +984,163 @@ async def test_live_index_projects_verbatim_publication_dates(live_pubmed_client
     results, not_found = await service.get_publications(list(LIVE_DATE_EXPECTATIONS))
 
     assert not_found == []
-    projected = {
-        pmid: (result["pub_year"], result["pub_month"], result["pub_day"])
-        for pmid, result in results.items()
-    }
+    projected = {pmid: (result["pub_year"], result["pub_month"], result["pub_day"]) for pmid, result in results.items()}
     assert projected == LIVE_DATE_EXPECTATIONS
+
+
+# --- TWO-PHASE IDENTIFIER LOOKUP ---
+# Resolve DOI/PMCID to document _ids with a source-free _msearch, then fetch every
+# document in one _mget. Flagged off by default; these cover the re-keying it
+# needs, which is where the strategy can silently lose or mis-attribute a result.
+TWO_PHASE_DOCUMENTS = {
+    "PMID:30690000": {"pubmed": {"title": "First"}},
+    "PMID:17284678": {"pubmed": {"title": "Second"}},
+}
+TWO_PHASE_IDENTIFIER_MAP = {
+    "doi:10.1242/jcs.03153": "PMID:17284678",
+    "PMC:PMC1904490": "PMID:17284678",
+    "doi:10.1000/other": "PMID:30690000",
+}
+
+
+class _RecordingClient:
+    """Minimal stand-in that records which lookups the strategy issued."""
+
+    index = "annotator-pubmed"
+
+    def __init__(self, documents=None, identifier_map=None):
+        self.documents = TWO_PHASE_DOCUMENTS if documents is None else documents
+        self.identifier_map = TWO_PHASE_IDENTIFIER_MAP if identifier_map is None else identifier_map
+        self.calls = []
+
+    async def querymany_ids(self, query_list, scopes, size=None):
+        self.calls.append(("querymany_ids", list(query_list)))
+        return [
+            (
+                {"query": query, "_id": self.identifier_map[query]}
+                if query in self.identifier_map
+                else {"query": query, "notfound": True}
+            )
+            for query in query_list
+        ]
+
+    async def mget(self, ids, fields=None):
+        self.calls.append(("mget", list(ids)))
+        results = []
+        for document_id in ids:
+            if document_id in self.documents:
+                hit = dict(self.documents[document_id])
+                hit.update({"_id": document_id, "query": document_id})
+                results.append(hit)
+            else:
+                results.append({"query": document_id, "notfound": True})
+        return results
+
+    def call_arguments(self, name):
+        return [arguments for called, arguments in self.calls if called == name]
+
+
+@pytest.mark.unit
+async def test_two_phase_lookup_keys_results_by_the_submitted_identifier():
+    """The response contract is keyed by what the caller sent, not by the PMID.
+
+    Resolving a DOI to a document _id and then fetching by that _id discards the
+    DOI unless the mapping is carried through, which would key the result under a
+    PMID the caller never asked about.
+    """
+    client = _RecordingClient()
+    hits = await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(
+        client, ["PMID:30690000"], ["doi:10.1242/jcs.03153"]
+    )
+    assert sorted(hits) == ["PMID:30690000", "doi:10.1242/jcs.03153"]
+    assert hits["doi:10.1242/jcs.03153"]["pubmed"]["title"] == "Second"
+
+
+@pytest.mark.unit
+async def test_two_phase_lookup_fans_one_document_out_to_every_alias():
+    """A DOI and a PMCID for the same paper resolve to one document.
+
+    The fetch must ask for it once while both submitted identifiers still receive
+    it, so deduplication cannot be allowed to drop a response key.
+    """
+    client = _RecordingClient()
+    hits = await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(
+        client, [], ["doi:10.1242/jcs.03153", "PMC:PMC1904490"]
+    )
+    assert hits["doi:10.1242/jcs.03153"]["pubmed"]["title"] == "Second"
+    assert hits["PMC:PMC1904490"]["pubmed"]["title"] == "Second"
+    assert client.call_arguments("mget") == [["PMID:17284678"]]
+
+
+@pytest.mark.unit
+async def test_two_phase_lookup_does_not_refetch_a_submitted_pmid_reached_by_doi():
+    """A DOI resolving to an already-submitted PMID must not be fetched twice."""
+    client = _RecordingClient()
+    await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(
+        client, ["PMID:30690000"], ["doi:10.1000/other"]
+    )
+    assert client.call_arguments("mget") == [["PMID:30690000"]]
+
+
+@pytest.mark.unit
+async def test_two_phase_lookup_omits_identifiers_that_resolve_to_nothing():
+    client = _RecordingClient()
+    hits = await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(
+        client, [], ["doi:10.9999/absent"]
+    )
+    assert hits == {}
+    # Nothing resolved, so there is no document to fetch and no request to make.
+    assert client.call_arguments("mget") == []
+
+
+@pytest.mark.unit
+async def test_two_phase_lookup_skips_the_search_when_only_pmids_were_submitted():
+    """A PMID-only batch must stay on the single exact-ID request."""
+    client = _RecordingClient()
+    await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(client, ["PMID:30690000"], [])
+    assert client.call_arguments("querymany_ids") == []
+    assert client.call_arguments("mget") == [["PMID:30690000"]]
+
+
+@pytest.mark.unit
+async def test_two_phase_and_one_phase_agree_on_the_same_batch():
+    """The flag must change only how the lookup is issued, never the result."""
+    submitted_documents = ["PMID:30690000"]
+    submitted_searches = ["doi:10.1242/jcs.03153", "PMC:PMC1904490", "doi:10.9999/absent"]
+
+    class OnePhaseClient(_RecordingClient):
+        async def querymany(self, query_list, scopes, fields=None, size=None):
+            results = []
+            for query in query_list:
+                document_id = self.identifier_map.get(query)
+                if document_id is None:
+                    results.append({"query": query, "notfound": True})
+                    continue
+                hit = dict(self.documents[document_id])
+                hit.update({"_id": document_id, "query": query})
+                results.append(hit)
+            return results
+
+    service = DocumentMetadataService(two_phase_lookup=True)
+    two_phase = await service._fetch_hits_two_phase(_RecordingClient(), submitted_documents, submitted_searches)
+    one_phase = await service._fetch_hits(OnePhaseClient(), submitted_documents, submitted_searches)
+
+    assert sorted(two_phase) == sorted(one_phase)
+    for key in two_phase:
+        assert two_phase[key]["pubmed"] == one_phase[key]["pubmed"]
+
+
+@pytest.mark.unit
+def test_two_phase_lookup_is_off_unless_enabled():
+    assert DocumentMetadataService().two_phase_lookup is False
+    assert DocumentMetadataService(two_phase_lookup=True).two_phase_lookup is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "value, expected",
+    [("1", True), ("true", True), ("TRUE", True), ("on", True), ("0", False), ("false", False), ("", False)],
+)
+def test_two_phase_lookup_reads_the_environment(monkeypatch, value: str, expected: bool):
+    monkeypatch.setenv("DOCUMENT_METADATA_TWO_PHASE_LOOKUP", value)
+    assert DocumentMetadataService().two_phase_lookup is expected

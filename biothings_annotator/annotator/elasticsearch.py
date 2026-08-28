@@ -16,6 +16,7 @@ class ElasticsearchAnnotatorClient:
     subset the annotator calls today:
 
     * querymany(query_list, scopes, fields=None, size=None)
+    * querymany_ids(query_list, scopes, size=None)
     * mget(query_list, fields=None)
     * query(query, fields=None, fetch_all=False, size=None, skip=0)
     * field_capabilities(fields)
@@ -69,6 +70,57 @@ class ElasticsearchAnnotatorClient:
         results = []
         for query_batch in self._iter_batches(query_list, self.query_batch_size):
             results.extend(await self._querymany_batch(query_batch, scopes=scopes, fields=fields, size=query_size))
+
+        return results
+
+    async def querymany_ids(
+        self,
+        query_list: List[str],
+        scopes: Union[str, List[str]],
+        size: Optional[int] = None,
+    ) -> List[Dict]:
+        """Resolve identifiers to document ``_id`` values without fetching source.
+
+        Distinct from ``querymany(fields=[])``: an empty source filter still has
+        Elasticsearch load the stored ``_source`` and then filter it away, while
+        ``"_source": false`` skips loading it altogether. For this index that is
+        the difference between decompressing every matched abstract and touching
+        none of them, which is the whole point of resolving identifiers before
+        fetching documents.
+        """
+        query_list = list(query_list)
+        if not query_list:
+            return []
+
+        results: List[Dict] = []
+        query_size = self.query_size if size is None else size
+        for batch in self._iter_batches(query_list, self.query_batch_size):
+            lines = []
+            for query_id in batch:
+                lines.append({})
+                lines.append(
+                    {
+                        "size": query_size,
+                        "_source": False,
+                        "query": self._scope_query(query_id, scopes),
+                    }
+                )
+
+            response = await self._post_ndjson("_msearch", lines)
+            responses = response.json().get("responses", [])
+            if len(responses) != len(batch):
+                raise RuntimeError(
+                    f"Elasticsearch msearch returned {len(responses)} responses for {len(batch)} queries"
+                )
+
+            for query_id, query_response in zip(batch, responses):
+                if "error" in query_response:
+                    raise RuntimeError(f"Elasticsearch query failed for {query_id}: {query_response['error']}")
+                hits = query_response.get("hits", {}).get("hits", [])
+                if not hits:
+                    results.append({"query": query_id, "notfound": True})
+                    continue
+                results.append({"query": query_id, "_id": hits[0].get("_id")})
 
         return results
 
