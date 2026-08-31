@@ -180,11 +180,11 @@ async def test_document_metadata_service_uses_only_pubmed_mget(monkeypatch):
         get_fake_client,
     )
 
-    service = DocumentMetadataService(elasticsearch_connection="ci")
+    service = DocumentMetadataService(elasticsearch_connection="in_cluster")
     results, not_found = await service.get_publications([PMID, MISSING_PMID])
 
     assert calls == [
-        {"node_type": "pubmed", "elasticsearch_connection": "ci"},
+        {"node_type": "pubmed", "elasticsearch_connection": "in_cluster"},
         {"query_list": [PMID, MISSING_PMID], "fields": ["pubmed"]},
     ]
     assert results == {PMID: FORMATTED_METADATA}
@@ -240,7 +240,7 @@ async def test_document_metadata_service_splits_exact_ids_from_scoped_lookups(mo
         lambda node_type, elasticsearch_connection: FakePubMedClient(),
     )
 
-    service = DocumentMetadataService(elasticsearch_connection="ci")
+    service = DocumentMetadataService(elasticsearch_connection="in_cluster")
     results, not_found = await service.get_publications([DOI, PMID, MISSING_DOI])
 
     assert calls == [
@@ -280,7 +280,7 @@ async def test_document_metadata_service_skips_the_scoped_lookup_for_pmid_only_r
         lambda node_type, elasticsearch_connection: FakePubMedClient(),
     )
 
-    service = DocumentMetadataService(elasticsearch_connection="ci")
+    service = DocumentMetadataService(elasticsearch_connection="in_cluster")
     results, not_found = await service.get_publications([f"PMID:{index}" for index in range(1, 101)])
 
     assert calls == ["mget"]
@@ -317,7 +317,7 @@ async def test_document_metadata_service_canonicalizes_the_pmid_prefix_for_exact
         lambda node_type, elasticsearch_connection: FakePubMedClient(),
     )
 
-    service = DocumentMetadataService(elasticsearch_connection="ci")
+    service = DocumentMetadataService(elasticsearch_connection="in_cluster")
     submitted = [PMID, PMID.lower(), "Pmid:30690000"]
     results, not_found = await service.get_publications(submitted)
 
@@ -379,7 +379,7 @@ async def test_check_index_fields_reports_multi_identifier_capability(monkeypatc
         lambda node_type, elasticsearch_connection: FakePubMedClient(),
     )
 
-    report = await DocumentMetadataService(elasticsearch_connection="ci").check_index_fields()
+    report = await DocumentMetadataService(elasticsearch_connection="in_cluster").check_index_fields()
 
     assert report["index"] == "annotator-pubmed"
     assert report["multi_identifier_lookup"] is expected["multi_identifier_lookup"]
@@ -411,7 +411,7 @@ async def test_check_index_fields_treats_an_unsearchable_identifier_field_as_unu
         lambda node_type, elasticsearch_connection: FakePubMedClient(),
     )
 
-    report = await DocumentMetadataService(elasticsearch_connection="ci").check_index_fields()
+    report = await DocumentMetadataService(elasticsearch_connection="in_cluster").check_index_fields()
 
     # Present in the mapping, but still reported as missing for lookup purposes.
     assert report["fields"]["pubmed.identifiers"] is True
@@ -437,7 +437,7 @@ async def test_check_index_fields_does_not_raise_when_the_field_is_absent(monkey
         lambda node_type, elasticsearch_connection: FakePubMedClient(),
     )
 
-    report = await DocumentMetadataService(elasticsearch_connection="ci").check_index_fields()
+    report = await DocumentMetadataService(elasticsearch_connection="in_cluster").check_index_fields()
 
     assert report["multi_identifier_lookup"] is False
 
@@ -455,7 +455,7 @@ async def test_document_metadata_service_enforces_short_request_deadline(monkeyp
         lambda node_type, elasticsearch_connection: SlowPubMedClient(),
     )
 
-    service = DocumentMetadataService(elasticsearch_connection="ci", request_timeout=0.001)
+    service = DocumentMetadataService(elasticsearch_connection="in_cluster", request_timeout=0.001)
     with pytest.raises(asyncio.TimeoutError):
         await service.get_publications([PMID])
 
@@ -888,7 +888,7 @@ def _live_service(lookup_strategy: str = CURRENT_LOOKUP_STRATEGY) -> DocumentMet
     return DocumentMetadataService(
         elasticsearch_connection=os.environ.get(
             "PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION",
-            "ci_local_forward",
+            "ci_forward",
         ),
         request_timeout=float(os.environ.get("PUBMED_INTEGRATION_REQUEST_TIMEOUT", "30")),
         lookup_strategy=lookup_strategy,
@@ -965,7 +965,7 @@ async def test_live_index_bounds_identifier_cardinality(live_pubmed_client):
     """A record with many identifiers means the export predates pubmed2db PR #7."""
     client = get_elasticsearch_client(
         "pubmed",
-        os.environ.get("PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION", "ci_local_forward"),
+        os.environ.get("PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION", "ci_forward"),
     )
 
     hits = await client.mget([LIVE_PMID], fields=["pubmed.identifiers"])
@@ -1142,7 +1142,7 @@ async def test_bulk_lookup_preserves_result_and_not_found_order(monkeypatch):
     submitted = [MISSING_DOI, PMID, DOI, "doi:10.9999/also-absent"]
 
     results, not_found = await DocumentMetadataService(
-        elasticsearch_connection="ci",
+        elasticsearch_connection="in_cluster",
         lookup_strategy=BULK_SEARCH_LOOKUP_STRATEGY,
     ).get_publications(submitted)
 

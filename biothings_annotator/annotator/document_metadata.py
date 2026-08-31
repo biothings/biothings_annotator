@@ -6,7 +6,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from biothings_annotator.annotator.settings import (
     DOCUMENT_METADATA_REQUEST_TIMEOUT,
-    ELASTICSEARCH_CONNECTION,
+    DEFAULT_ELASTICSEARCH_CONNECTION,
 )
 from biothings_annotator.annotator.utils import get_elasticsearch_client
 
@@ -208,7 +208,7 @@ class DocumentMetadataService:
         lookup_strategy: str = CURRENT_LOOKUP_STRATEGY,
     ):
         self.elasticsearch_connection = (
-            elasticsearch_connection or os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION)
+            elasticsearch_connection or os.environ.get("ELASTICSEARCH_CONNECTION", DEFAULT_ELASTICSEARCH_CONNECTION)
         ).strip()
         configured_timeout = request_timeout
         if configured_timeout is None:
