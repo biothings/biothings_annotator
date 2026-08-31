@@ -163,6 +163,8 @@ async def test_elasticsearch_querymany_formats_biothings_style_hits():
             json={
                 "responses": [
                     {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
                         "hits": {
                             "hits": [
                                 {
@@ -171,9 +173,13 @@ async def test_elasticsearch_querymany_formats_biothings_style_hits():
                                     "_source": {"symbol": "CDK2"},
                                 }
                             ]
-                        }
+                        },
                     },
-                    {"hits": {"hits": []}},
+                    {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
+                        "hits": {"hits": []},
+                    },
                 ]
             },
         )
@@ -323,6 +329,8 @@ async def test_elasticsearch_querymany_uses_mapped_uniprot_leaf_fields():
             json={
                 "responses": [
                     {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
                         "hits": {
                             "hits": [
                                 {
@@ -330,7 +338,7 @@ async def test_elasticsearch_querymany_uses_mapped_uniprot_leaf_fields():
                                     "_source": {"symbol": "EVC2"},
                                 }
                             ]
-                        }
+                        },
                     }
                 ]
             },
@@ -376,6 +384,8 @@ async def test_elasticsearch_querymany_exact_queries_only_the_confirmed_root_fie
             json={
                 "responses": [
                     {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
                         "hits": {
                             "hits": [
                                 {
@@ -384,9 +394,13 @@ async def test_elasticsearch_querymany_exact_queries_only_the_confirmed_root_fie
                                     "_source": {"pubmed": {"identifiers": ["PMC:PMC10492916"]}},
                                 }
                             ]
-                        }
+                        },
                     },
-                    {"hits": {"hits": []}},
+                    {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
+                        "hits": {"hits": []},
+                    },
                 ]
             },
         )
@@ -414,6 +428,38 @@ async def test_elasticsearch_querymany_exact_queries_only_the_confirmed_root_fie
         },
         {"query": "doi:missing", "notfound": True},
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query_response",
+    [
+        {"timed_out": True, "hits": {"hits": []}},
+        {"timed_out": False, "_shards": {"failed": 1}, "hits": {"hits": []}},
+        {},
+    ],
+    ids=["timed-out", "failed-shard", "malformed"],
+)
+async def test_elasticsearch_querymany_exact_rejects_partial_or_malformed_responses(query_response):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/annotator-pubmed/_msearch"
+        return httpx.Response(200, json={"responses": [query_response]})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+        with pytest.raises(RuntimeError, match="Elasticsearch query"):
+            await client.querymany_exact(
+                ["doi:10.1242/jcs.03153"],
+                field="pubmed.identifiers",
+                fields=["pubmed"],
+                size=1,
+            )
 
 
 @pytest.mark.unit
@@ -524,138 +570,10 @@ async def test_elasticsearch_search_terms_uses_one_bounded_exact_search_and_repo
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_elasticsearch_search_ids_or_terms_combines_both_exact_paths_in_one_search():
-    document_ids = ["PMID:16954148"]
-    alternate_ids = ["pmc:pmc1904490", "doi:10.1242/jcs.03153"]
-    requests = []
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(
-            {
-                "method": request.method,
-                "path": request.url.path,
-                "body": json.loads(request.content),
-            }
-        )
-        return httpx.Response(
-            200,
-            json={
-                "took": 3,
-                "timed_out": False,
-                "_shards": {"total": 1, "successful": 1, "failed": 0},
-                "hits": {
-                    "total": {"value": 2, "relation": "eq"},
-                    "max_score": 1.0,
-                    "hits": [
-                        {
-                            "_id": "PMID:16954148",
-                            "_score": 1.0,
-                            "matched_queries": ["document_ids"],
-                            "_source": {"pubmed": {"title": "PMID-only"}},
-                        },
-                        {
-                            "_id": "PMID:17284678",
-                            "_score": 1.0,
-                            "matched_queries": ["alternative_identifiers"],
-                            "_source": {
-                                "pubmed": {
-                                    "identifiers": [
-                                        "PMC:PMC1904490",
-                                        "doi:10.1242/jcs.03153",
-                                    ]
-                                }
-                            },
-                        },
-                    ],
-                },
-            },
-        )
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        client = ElasticsearchAnnotatorClient(
-            "http://localhost:9200",
-            "annotator-pubmed",
-            http_client=http_client,
-        )
-        result = await client.search_ids_or_terms(
-            document_ids,
-            alternate_ids,
-            field="pubmed.identifiers",
-            fields=["pubmed"],
-            size=3,
-        )
-
-    assert requests == [
-        {
-            "method": "POST",
-            "path": "/annotator-pubmed/_search",
-            "body": {
-                "size": 3,
-                "track_total_hits": True,
-                "_source": ["pubmed"],
-                "query": {
-                    "constant_score": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "ids": {
-                                            "values": document_ids,
-                                            "_name": "document_ids",
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            "pubmed.identifiers": alternate_ids,
-                                            "_name": "alternative_identifiers",
-                                        }
-                                    },
-                                ],
-                                "minimum_should_match": 1,
-                            }
-                        }
-                    }
-                },
-            },
-        }
-    ]
-    assert result == {
-        "took": 3,
-        "timed_out": False,
-        "terminated_early": False,
-        "failed_shards": 0,
-        "total": 2,
-        "total_relation": "eq",
-        "max_score": 1.0,
-        "hits": [
-            {
-                "pubmed": {"title": "PMID-only"},
-                "_id": "PMID:16954148",
-                "_score": 1.0,
-                "_matched_queries": ["document_ids"],
-            },
-            {
-                "pubmed": {
-                    "identifiers": [
-                        "PMC:PMC1904490",
-                        "doi:10.1242/jcs.03153",
-                    ]
-                },
-                "_id": "PMID:17284678",
-                "_score": 1.0,
-                "_matched_queries": ["alternative_identifiers"],
-            },
-        ],
-    }
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_elasticsearch_search_ids_or_terms_preserves_an_incomplete_envelope_for_fallback():
+async def test_elasticsearch_search_terms_preserves_an_incomplete_envelope_for_fallback():
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/annotator-pubmed/_search"
-        return httpx.Response(200, json={"timed_out": False, "_shards": {}, "hits": {}})
+        return httpx.Response(200, json={})
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http_client:
@@ -664,15 +582,14 @@ async def test_elasticsearch_search_ids_or_terms_preserves_an_incomplete_envelop
             "annotator-pubmed",
             http_client=http_client,
         )
-        result = await client.search_ids_or_terms(
-            ["PMID:16954148"],
-            [],
+        result = await client.search_terms(
+            ["doi:10.1242/jcs.03153"],
             field="pubmed.identifiers",
             fields=["pubmed"],
             size=1,
         )
 
-    assert result["timed_out"] is False
+    assert result["timed_out"] is None
     assert result["failed_shards"] is None
     assert result["total"] is None
     assert result["total_relation"] is None

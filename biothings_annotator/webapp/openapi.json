@@ -95,7 +95,7 @@
       "get": {
         "operationId": "get~legacy_document_metadata_endpoint",
         "summary": "Retrieve metadata for a comma-separated list of publications",
-        "description": "Legacy-compatible batch multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve against alternate identifiers in pubmed.identifiers and cost one search per identifier, so a PMID-only request stays on the single-request fast path.",
+        "description": "Legacy-compatible batch lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve together through one terms search against pubmed.identifiers. Mixed requests start both backend calls concurrently, while a PMID-only request stays on the single-request fast path.",
         "tags": ["metadata"],
         "parameters": [
           {
@@ -149,7 +149,7 @@
       "post": {
         "operationId": "post~batch_document_metadata_endpoint",
         "summary": "Retrieve metadata for publication IDs in a JSON request body",
-        "description": "Batch multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve against alternate identifiers in pubmed.identifiers and cost one search per identifier, so a PMID-only request stays on the single-request fast path.",
+        "description": "Batch lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve together through one terms search against pubmed.identifiers. Mixed requests start both backend calls concurrently, while a PMID-only request stays on the single-request fast path.",
         "tags": ["metadata"],
         "parameters": [
           {

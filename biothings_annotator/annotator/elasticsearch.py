@@ -19,7 +19,6 @@ class ElasticsearchAnnotatorClient:
     * querymany_exact(query_list, field, fields=None, size=None)
     * mget(query_list, fields=None)
     * search_terms(query_list, field, fields=None, size=None)
-    * search_ids_or_terms(document_ids, query_list, field, fields=None, size=None)
     * query(query, fields=None, fetch_all=False, size=None, skip=0)
     * field_capabilities(fields)
 
@@ -194,131 +193,27 @@ class ElasticsearchAnnotatorClient:
             },
         )
         payload = response.json()
-        hits_section = payload.get("hits", {})
-        shards = payload.get("_shards", {})
-        total = hits_section.get("total", 0)
-        total_relation = "eq"
-        if isinstance(total, dict):
-            total_relation = total.get("relation", "eq")
-            total = total.get("value", 0)
-
-        return {
-            "took": payload.get("took"),
-            "timed_out": payload.get("timed_out", False),
-            "failed_shards": shards.get("failed", 0) if isinstance(shards, dict) else None,
-            "total": total,
-            "total_relation": total_relation,
-            "max_score": hits_section.get("max_score"),
-            "hits": [self._format_hit(hit) for hit in hits_section.get("hits", [])],
-        }
-
-    async def search_ids_or_terms(
-        self,
-        document_ids: Iterable[str],
-        query_list: Iterable[str],
-        field: str,
-        fields: Optional[Union[str, List[str]]] = None,
-        size: Optional[int] = None,
-    ) -> Dict:
-        """Resolve document IDs or exact field values with one OR search.
-
-        The named clauses let a reverse-mapping caller distinguish a valid
-        PMID-only hit whose source has no alternate identifiers from a hit that
-        matched the alternate-identifier clause. Exact totals and Elasticsearch
-        partial-result signals are retained for the same reason.
-        """
-        document_ids = list(document_ids)
-        query_list = list(query_list)
-        if not document_ids and not query_list:
-            return {
-                "took": None,
-                "timed_out": False,
-                "terminated_early": False,
-                "failed_shards": 0,
-                "total": 0,
-                "total_relation": "eq",
-                "max_score": None,
-                "hits": [],
-            }
-
-        should_queries = []
-        if document_ids:
-            should_queries.append(
-                {
-                    "ids": {
-                        "values": document_ids,
-                        "_name": "document_ids",
-                    }
-                }
-            )
-        if query_list:
-            should_queries.append(
-                {
-                    "terms": {
-                        field: query_list,
-                        "_name": "alternative_identifiers",
-                    }
-                }
-            )
-
-        query_size = len(document_ids) + len(query_list) if size is None else size
-        response = await self._post_json(
-            "_search",
-            {
-                "size": query_size,
-                "track_total_hits": True,
-                "_source": self._source_filter(fields),
-                "query": {
-                    "constant_score": {
-                        "filter": {
-                            "bool": {
-                                "should": should_queries,
-                                "minimum_should_match": 1,
-                            }
-                        }
-                    }
-                },
-            },
-        )
-        payload = response.json()
         if not isinstance(payload, dict):
-            return {
-                "took": None,
-                "timed_out": None,
-                "terminated_early": None,
-                "failed_shards": None,
-                "total": None,
-                "total_relation": None,
-                "max_score": None,
-                "hits": None,
-            }
+            payload = {}
         hits_section = payload.get("hits")
         shards = payload.get("_shards")
         total = hits_section.get("total") if isinstance(hits_section, dict) else None
-        total_relation = None
+        total_relation = "eq" if isinstance(total, int) and not isinstance(total, bool) else None
         if isinstance(total, dict):
             total_relation = total.get("relation")
             total = total.get("value")
 
         raw_hits = hits_section.get("hits") if isinstance(hits_section, dict) else None
-        formatted_hits = raw_hits
+        formatted_hits = None
         if isinstance(raw_hits, list):
-            formatted_hits = []
-            for hit in raw_hits:
-                if not isinstance(hit, dict):
-                    formatted_hits.append(hit)
-                    continue
-                source = hit.get("_source")
-                formatted_hit = self._format_hit(hit) if isinstance(source, dict) else {"_id": hit.get("_id")}
-                formatted_hit["_matched_queries"] = hit.get("matched_queries")
-                if "_index" in hit:
-                    formatted_hit["_index"] = hit["_index"]
-                formatted_hits.append(formatted_hit)
+            formatted_hits = [self._format_hit(hit) if isinstance(hit, dict) else hit for hit in raw_hits]
 
         return {
             "took": payload.get("took"),
+            # Missing completeness signals stay missing. The publication
+            # service treats anything other than an explicit healthy envelope
+            # as unsafe and uses its exact-search fallback.
             "timed_out": payload.get("timed_out"),
-            "terminated_early": payload.get("terminated_early", False),
             "failed_shards": shards.get("failed") if isinstance(shards, dict) else None,
             "total": total,
             "total_relation": total_relation,
@@ -412,10 +307,22 @@ class ElasticsearchAnnotatorClient:
 
         results = []
         for query_id, query_response in zip(query_list, responses):
+            if not isinstance(query_response, dict):
+                raise RuntimeError(f"Elasticsearch query returned a malformed response for {query_id}")
             if "error" in query_response:
                 raise RuntimeError(f"Elasticsearch query failed for {query_id}: {query_response['error']}")
+            if query_response.get("timed_out") is not False:
+                raise RuntimeError(f"Elasticsearch query timed out for {query_id}")
 
-            hits = query_response.get("hits", {}).get("hits", [])
+            shards = query_response.get("_shards")
+            failed_shards = shards.get("failed") if isinstance(shards, dict) else None
+            if not isinstance(failed_shards, int) or isinstance(failed_shards, bool) or failed_shards != 0:
+                raise RuntimeError(f"Elasticsearch query had failed shards for {query_id}")
+
+            hits_section = query_response.get("hits")
+            hits = hits_section.get("hits") if isinstance(hits_section, dict) else None
+            if not isinstance(hits, list):
+                raise RuntimeError(f"Elasticsearch query returned malformed hits for {query_id}")
             if not hits:
                 results.append({"query": query_id, "notfound": True})
                 continue

@@ -5,25 +5,14 @@ import os
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from biothings_annotator.annotator.settings import (
-    DOCUMENT_METADATA_REQUEST_TIMEOUT,
     DEFAULT_ELASTICSEARCH_CONNECTION,
+    DOCUMENT_METADATA_REQUEST_TIMEOUT,
 )
 from biothings_annotator.annotator.utils import get_elasticsearch_client
 
 PUBMED_SOURCE_FIELDS = ["pubmed"]
 PUBMED_IDENTIFIER_FIELD = "pubmed.identifiers"
 PMID_PREFIX = "PMID"
-CURRENT_LOOKUP_STRATEGY = "current"
-BULK_SEARCH_LOOKUP_STRATEGY = "bulk-search"
-COMBINED_SEARCH_LOOKUP_STRATEGY = "combined-search"
-DOCUMENT_METADATA_LOOKUP_STRATEGIES = (
-    CURRENT_LOOKUP_STRATEGY,
-    BULK_SEARCH_LOOKUP_STRATEGY,
-    COMBINED_SEARCH_LOOKUP_STRATEGY,
-)
-COMBINED_SEARCH_MAX_HITS = 100
-DOCUMENT_IDS_MATCH = "document_ids"
-ALTERNATIVE_IDENTIFIERS_MATCH = "alternative_identifiers"
 # Multi-identifier lookup cannot work at all without the identifiers field, so
 # its absence is a capability gap. pubdate_raw only changes how precisely a date
 # is projected and has a working fallback, so its absence is informational.
@@ -59,13 +48,8 @@ def _canonical_lookup_id(publication_id: str) -> str:
 
 
 async def _empty_hits() -> List[Dict]:
-    """Supply an awaitable empty lookup so both strategy legs share one gather."""
+    """Supply an awaitable empty lookup so both lookup legs share one gather."""
     return []
-
-
-async def _empty_lookup_execution() -> Tuple[List[Dict], bool]:
-    """Supply an empty hit list and a no-fallback execution marker."""
-    return [], False
 
 
 def _is_bare_year_range(value: str) -> bool:
@@ -218,7 +202,6 @@ class DocumentMetadataService:
         self,
         elasticsearch_connection: Optional[str] = None,
         request_timeout: Optional[float] = None,
-        lookup_strategy: str = CURRENT_LOOKUP_STRATEGY,
     ):
         self.elasticsearch_connection = (
             elasticsearch_connection or os.environ.get("ELASTICSEARCH_CONNECTION", DEFAULT_ELASTICSEARCH_CONNECTION)
@@ -232,28 +215,12 @@ class DocumentMetadataService:
         self.request_timeout = float(configured_timeout)
         if self.request_timeout <= 0:
             raise ValueError("Document metadata request timeout must be greater than zero")
-        if lookup_strategy not in DOCUMENT_METADATA_LOOKUP_STRATEGIES:
-            raise ValueError(f"lookup_strategy must be one of {DOCUMENT_METADATA_LOOKUP_STRATEGIES}")
-        self.lookup_strategy = lookup_strategy
 
     async def get_publications(self, publication_ids: Iterable[str]) -> Tuple[Dict[str, Dict[str, str]], List[str]]:
-        """Return ordered publication results and missing identifiers.
-
-        The historical two-tuple stays stable for non-HTTP callers. The view
-        uses :meth:`get_publications_with_metadata` to expose per-request lookup
-        execution metadata without storing mutable state on this shared service.
-        """
-        results, not_found, _ = await self.get_publications_with_metadata(publication_ids)
-        return results, not_found
-
-    async def get_publications_with_metadata(
-        self,
-        publication_ids: Iterable[str],
-    ) -> Tuple[Dict[str, Dict[str, str]], List[str], bool]:
-        """Return publication results plus whether a speculative lookup fell back."""
+        """Return ordered publication results and missing identifiers."""
         publication_ids = list(publication_ids)
         if not publication_ids:
-            return {}, [], False
+            return {}, []
 
         # Two spellings of one PMID collapse to a single lookup but stay separate
         # response keys, so the backend is never asked for the same _id twice.
@@ -268,15 +235,8 @@ class DocumentMetadataService:
                 search_ids.append(publication_id)
 
         client = get_elasticsearch_client("pubmed", self.elasticsearch_connection)
-        if self.lookup_strategy == COMBINED_SEARCH_LOOKUP_STRATEGY:
-            fetch = self._fetch_hits_combined_search_execution
-        elif self.lookup_strategy == BULK_SEARCH_LOOKUP_STRATEGY:
-            fetch = self._fetch_hits_bulk_search_execution
-        else:
-            fetch = self._fetch_hits_execution
-
-        hits_by_id, lookup_fallback = await asyncio.wait_for(
-            fetch(client, document_ids, search_ids), timeout=self.request_timeout
+        hits_by_id = await asyncio.wait_for(
+            self._fetch_hits(client, document_ids, search_ids), timeout=self.request_timeout
         )
 
         results: Dict[str, Dict[str, str]] = {}
@@ -287,69 +247,14 @@ class DocumentMetadataService:
                 not_found.append(publication_id)
                 continue
             results[publication_id] = format_publication_metadata(metadata)
-        return results, not_found, lookup_fallback
+        return results, not_found
 
     @staticmethod
-    async def _fetch_hits(client, document_ids: List[str], search_ids: List[str]) -> Dict[str, Dict]:
-        """Resolve hits by submitted identifier, keeping PMIDs on the exact-ID path.
-
-        PMIDs are the document ``_id``, so they keep the single-request ``mget``
-        fast path that the service's latency budget is built around. Only DOI and
-        PMCID pay for the scoped lookup, which costs one ``_msearch`` entry per
-        identifier. Both calls echo the submitted identifier back as ``query``,
-        which is what maps a DOI hit to its request key rather than to the PMID
-        the document is stored under.
-
-        The PubMed mapping is known: ``pubmed.identifiers`` is itself a
-        case-normalized ``keyword`` field.  The exact helper therefore queries
-        only that root field instead of also sending the generic adapter's
-        ``.keyword`` compatibility clause, which cannot exist beneath a keyword
-        field.
-        """
-        lookups = []
-        if document_ids:
-            lookups.append(client.mget(document_ids, fields=PUBMED_SOURCE_FIELDS))
-        if search_ids:
-            lookups.append(
-                client.querymany_exact(
-                    search_ids,
-                    field=PUBMED_IDENTIFIER_FIELD,
-                    fields=PUBMED_SOURCE_FIELDS,
-                    size=1,
-                )
-            )
-
-        hits_by_id: Dict[str, Dict] = {}
-        for hits in await asyncio.gather(*lookups):
-            for hit in hits:
-                if hit.get("notfound"):
-                    continue
-                hits_by_id.setdefault(hit.get("query"), hit)
-        return hits_by_id
-
-    @staticmethod
-    async def _fetch_hits_execution(
+    async def _fetch_hits(
         client,
         document_ids: List[str],
         search_ids: List[str],
-    ) -> Tuple[Dict[str, Dict], bool]:
-        return await DocumentMetadataService._fetch_hits(client, document_ids, search_ids), False
-
-    @staticmethod
-    async def _fetch_hits_bulk_search(client, document_ids: List[str], search_ids: List[str]) -> Dict[str, Dict]:
-        hits_by_id, _ = await DocumentMetadataService._fetch_hits_bulk_search_execution(
-            client,
-            document_ids,
-            search_ids,
-        )
-        return hits_by_id
-
-    @staticmethod
-    async def _fetch_hits_bulk_search_execution(
-        client,
-        document_ids: List[str],
-        search_ids: List[str],
-    ) -> Tuple[Dict[str, Dict], bool]:
+    ) -> Dict[str, Dict]:
         """Run ``_mget`` and one alternative-identifier ``terms`` search together.
 
         Elasticsearch returns documents, not the submitted terms that matched
@@ -360,34 +265,25 @@ class DocumentMetadataService:
         search: both normal-path backend requests start concurrently.
         """
         document_lookup = client.mget(document_ids, fields=PUBMED_SOURCE_FIELDS) if document_ids else _empty_hits()
-        search_lookup = (
-            DocumentMetadataService._fetch_bulk_search_hits_execution(client, search_ids)
-            if search_ids
-            else _empty_lookup_execution()
-        )
-        document_hits, (search_hits, lookup_fallback) = await asyncio.gather(document_lookup, search_lookup)
+        search_lookup = DocumentMetadataService._fetch_search_hits(client, search_ids) if search_ids else _empty_hits()
+        document_hits, search_hits = await asyncio.gather(document_lookup, search_lookup)
 
         hits_by_id: Dict[str, Dict] = {}
         for hit in [*document_hits, *search_hits]:
             if hit.get("notfound"):
                 continue
             hits_by_id.setdefault(hit.get("query"), hit)
-        return hits_by_id, lookup_fallback
+        return hits_by_id
 
     @staticmethod
-    async def _fetch_bulk_search_hits(client, search_ids: List[str]) -> List[Dict]:
-        hits, _ = await DocumentMetadataService._fetch_bulk_search_hits_execution(client, search_ids)
-        return hits
-
-    @staticmethod
-    async def _fetch_bulk_search_hits_execution(client, search_ids: List[str]) -> Tuple[List[Dict], bool]:
+    async def _fetch_search_hits(client, search_ids: List[str]) -> List[Dict]:
         """Return bulk hits keyed onto every submitted alternative identifier."""
         # The deployed keyword normalizer lowercases identifiers. Python and
         # Lucene agree for the ASCII identifiers used by PubMed; unusual Unicode
         # DOI suffixes take the proven exact-msearch path instead of relying on
         # subtly different Unicode case tables.
         if any(not identifier.isascii() for identifier in search_ids):
-            return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids), False
+            return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids)
 
         submitted_by_normalized: Dict[str, List[str]] = {}
         for submitted in search_ids:
@@ -401,195 +297,59 @@ class DocumentMetadataService:
             size=len(normalized_ids),
         )
         hits = response.get("hits")
-        if (
-            response.get("timed_out", False) is not False
-            or response.get("failed_shards", 0) != 0
-            or response.get("total_relation") != "eq"
-            or not isinstance(response.get("total"), int)
-            or not isinstance(hits, list)
-            or response.get("total") != len(hits)
-        ):
-            return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids), True
-
-        owners: Dict[str, str] = {}
-        rekeyed: List[Dict] = []
-        for hit in hits:
-            if not isinstance(hit, dict) or not isinstance(hit.get("_id"), str):
-                return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids), True
-            pubmed = hit.get("pubmed")
-            identifiers = pubmed.get("identifiers") if isinstance(pubmed, dict) else None
-            if not isinstance(identifiers, list) or not all(isinstance(value, str) for value in identifiers):
-                return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids), True
-
-            matched = {
-                value.lower() for value in identifiers if value.isascii() and value.lower() in submitted_by_normalized
-            }
-            if not matched:
-                return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids), True
-
-            for normalized in matched:
-                previous_owner = owners.setdefault(normalized, hit["_id"])
-                if previous_owner != hit["_id"]:
-                    return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids), True
-                for submitted in submitted_by_normalized[normalized]:
-                    rekeyed.append({**hit, "query": submitted})
-        return rekeyed, False
-
-    @staticmethod
-    async def _fetch_exact_search_hits(client, search_ids: List[str]) -> List[Dict]:
-        return await client.querymany_exact(
-            search_ids,
-            field=PUBMED_IDENTIFIER_FIELD,
-            fields=PUBMED_SOURCE_FIELDS,
-            size=1,
-        )
-
-    @staticmethod
-    async def _fetch_hits_combined_search(
-        client,
-        document_ids: List[str],
-        search_ids: List[str],
-    ) -> Dict[str, Dict]:
-        hits_by_id, _ = await DocumentMetadataService._fetch_hits_combined_search_execution(
-            client,
-            document_ids,
-            search_ids,
-        )
-        return hits_by_id
-
-    @staticmethod
-    async def _fetch_hits_combined_search_execution(
-        client,
-        document_ids: List[str],
-        search_ids: List[str],
-    ) -> Tuple[Dict[str, Dict], bool]:
-        """Resolve PMIDs, DOI, and PMCID values with one ordinary search.
-
-        The normal path sends one OR query containing an ``ids`` clause for
-        canonical PMIDs and one exact ``terms`` clause for normalized alternate
-        identifiers. Elasticsearch returns documents rather than submitted
-        values, so every hit is reverse-mapped to all request spellings it owns.
-        Any result shape that cannot prove that mapping complete and unambiguous
-        falls back for the whole request to the current mget + exact-msearch path.
-        """
-        # With no PMID clause this is byte-for-byte the existing bulk strategy.
-        # Keeping that arm identical provides a true 0/100 control in the A/B
-        # matrix instead of measuring a gratuitous bool/named-query wrapper.
-        if not document_ids:
-            return await DocumentMetadataService._fetch_hits_bulk_search_execution(client, [], search_ids)
-
-        if any(not identifier.isascii() for identifier in search_ids):
-            return await DocumentMetadataService._fetch_hits(client, document_ids, search_ids), False
-
-        submitted_by_normalized: Dict[str, List[str]] = {}
-        for submitted in search_ids:
-            submitted_by_normalized.setdefault(submitted.lower(), []).append(submitted)
-        normalized_ids = list(submitted_by_normalized)
-        requested_hit_capacity = len(document_ids) + len(normalized_ids)
-
-        response = await client.search_ids_or_terms(
-            document_ids,
-            normalized_ids,
-            field=PUBMED_IDENTIFIER_FIELD,
-            fields=PUBMED_SOURCE_FIELDS,
-            size=min(requested_hit_capacity, COMBINED_SEARCH_MAX_HITS),
-        )
-        hits_by_id = DocumentMetadataService._reverse_combined_search_hits(
-            response,
-            document_ids,
-            submitted_by_normalized,
-        )
-        if hits_by_id is None:
-            return await DocumentMetadataService._fetch_hits(client, document_ids, search_ids), True
-        return hits_by_id, False
-
-    @staticmethod
-    def _reverse_combined_search_hits(
-        response: object,
-        document_ids: List[str],
-        submitted_by_normalized: Dict[str, List[str]],
-    ) -> Optional[Dict[str, Dict]]:
-        """Return a proven identifier-to-hit mapping, or ``None`` if unsafe."""
-        if not isinstance(response, dict):
-            return None
-        hits = response.get("hits")
-        total = response.get("total")
         failed_shards = response.get("failed_shards")
+        total = response.get("total")
         if (
             response.get("timed_out") is not False
-            or response.get("terminated_early", False) is not False
             or not isinstance(failed_shards, int)
             or isinstance(failed_shards, bool)
             or failed_shards != 0
             or response.get("total_relation") != "eq"
             or not isinstance(total, int)
             or isinstance(total, bool)
-            or total < 0
             or not isinstance(hits, list)
             or total != len(hits)
         ):
-            return None
+            return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids)
 
-        requested_document_ids = set(document_ids)
-        alternate_owners: Dict[str, str] = {}
-        seen_hit_ids = set()
-        hits_by_id: Dict[str, Dict] = {}
+        owners: Dict[str, str] = {}
+        rekeyed: List[Dict] = []
         for hit in hits:
-            if not isinstance(hit, dict):
-                return None
-            hit_id = hit.get("_id")
+            if not isinstance(hit, dict) or not isinstance(hit.get("_id"), str):
+                return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids)
             pubmed = hit.get("pubmed")
-            matched_queries = hit.get("_matched_queries")
-            if (
-                not isinstance(hit_id, str)
-                or hit_id in seen_hit_ids
-                or not isinstance(pubmed, dict)
-                or not isinstance(matched_queries, list)
-                or not all(isinstance(query_name, str) for query_name in matched_queries)
-            ):
-                return None
-            seen_hit_ids.add(hit_id)
+            identifiers = pubmed.get("identifiers") if isinstance(pubmed, dict) else None
+            if not isinstance(identifiers, list) or not all(isinstance(value, str) for value in identifiers):
+                return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids)
 
-            matched_query_names = set(matched_queries)
-            if not matched_query_names or not matched_query_names.issubset(
-                {DOCUMENT_IDS_MATCH, ALTERNATIVE_IDENTIFIERS_MATCH}
-            ):
-                return None
+            matched = {
+                value.lower() for value in identifiers if value.isascii() and value.lower() in submitted_by_normalized
+            }
+            if not matched:
+                return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids)
 
-            assigned = False
-            if DOCUMENT_IDS_MATCH in matched_query_names:
-                if hit_id not in requested_document_ids:
-                    return None
-                hits_by_id[hit_id] = hit
-                assigned = True
-            elif hit_id in requested_document_ids:
-                # Named-query attribution must agree with the exact hit ID. A
-                # mismatch here means the response cannot be audited safely.
-                return None
+            for normalized in matched:
+                previous_owner = owners.setdefault(normalized, hit["_id"])
+                if previous_owner != hit["_id"]:
+                    return await DocumentMetadataService._fetch_exact_search_hits(client, search_ids)
+                for submitted in submitted_by_normalized[normalized]:
+                    rekeyed.append({**hit, "query": submitted})
+        return rekeyed
 
-            if ALTERNATIVE_IDENTIFIERS_MATCH in matched_query_names:
-                identifiers = pubmed.get("identifiers")
-                if not isinstance(identifiers, list) or not all(isinstance(value, str) for value in identifiers):
-                    return None
-                matched_identifiers = {
-                    value.lower()
-                    for value in identifiers
-                    if value.isascii() and value.lower() in submitted_by_normalized
-                }
-                if not matched_identifiers:
-                    return None
+    @staticmethod
+    async def _fetch_exact_search_hits(client, search_ids: List[str]) -> List[Dict]:
+        """Use exact per-identifier queries when bulk results cannot be trusted.
 
-                for normalized in matched_identifiers:
-                    previous_owner = alternate_owners.setdefault(normalized, hit_id)
-                    if previous_owner != hit_id:
-                        return None
-                    for submitted in submitted_by_normalized[normalized]:
-                        hits_by_id[submitted] = hit
-                assigned = True
-
-            if not assigned:
-                return None
-        return hits_by_id
+        ``pubmed.identifiers`` is itself a case-normalized ``keyword`` field, so
+        the fallback queries only that root field rather than a nonexistent
+        ``.keyword`` subfield.
+        """
+        return await client.querymany_exact(
+            search_ids,
+            field=PUBMED_IDENTIFIER_FIELD,
+            fields=PUBMED_SOURCE_FIELDS,
+            size=1,
+        )
 
     async def check_index_fields(self) -> Dict[str, object]:
         """Report whether the live index mapping can support multi-identifier lookup.

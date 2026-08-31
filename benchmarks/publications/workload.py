@@ -13,17 +13,10 @@ from benchmarks.publications.corpus import CorpusConfig, IdentifierCorpus
 from benchmarks.publications.metrics import SLO_THRESHOLD_MS
 
 PUBLICATIONS_PATH = "/publications"
-LOOKUP_STRATEGY_HEADER = "X-Publications-Lookup-Strategy"
 # CCWG#15: "Expect up to 100 pubids in request". This is the headline case, so it
 # is the default batch size rather than something the caller has to opt into.
 DEFAULT_BATCH_SIZE = 100
 SUPPORTED_METHODS = ("GET", "POST")
-DEFAULT_LOOKUP_STRATEGY = "current"
-SUPPORTED_LOOKUP_STRATEGIES = (DEFAULT_LOOKUP_STRATEGY, "bulk-search", "combined-search")
-# Keep the original paired benchmark as the default and as the meaning of the
-# backwards-compatible ``--compare-lookup-strategies`` shorthand.  Callers can
-# select any other distinct pair explicitly.
-DEFAULT_COMPARISON_STRATEGIES = ("current", "bulk-search")
 
 
 @dataclass(frozen=True)
@@ -33,20 +26,17 @@ class Workload:
     batch_size: int = DEFAULT_BATCH_SIZE
     method: str = "GET"
     # Fraction of each batch drawn as PMIDs. PMIDs resolve through one batched
-    # _mget; PMCIDs and DOIs cost one _msearch entry each, so lowering this
-    # measures the expensive lookup path.
+    # _mget; PMCIDs and DOIs are grouped into one bulk _search, so lowering this
+    # exercises more of the alternative-identifier lookup path.
     pmid_ratio: float = 1.0
     # Fraction of each batch drawn fresh. 1.0 keeps every lookup a first-time
     # lookup (cold backend cache, the pessimistic bound); lowering it replays
     # identifiers from the hot pool (warm cache, the optimistic bound).
     unique_ratio: float = 1.0
     hot_pool_size: int = 1_000
-    # Temporary benchmark selector. Every response must attribute itself to the
-    # same strategy before its latency is admitted into the measured sample.
-    lookup_strategy: str = DEFAULT_LOOKUP_STRATEGY
     # Optional curated real identifiers. When present this replaces synthesized
-    # and hot-pool sampling entirely, so both A/B treatments receive identical,
-    # resolving batches under the same seed.
+    # and hot-pool sampling entirely, allowing repeatable resolving batches
+    # under the same seed.
     identifier_pool: Tuple[str, ...] = ()
     identifier_pool_source: Optional[str] = None
 
@@ -61,8 +51,6 @@ class Workload:
             raise ValueError("unique_ratio must be within [0.0, 1.0]")
         if self.unique_ratio < 1.0 and self.hot_pool_size < 1:
             raise ValueError("a hot pool is required when unique_ratio is below 1.0")
-        if self.lookup_strategy not in SUPPORTED_LOOKUP_STRATEGIES:
-            raise ValueError(f"lookup_strategy must be one of {SUPPORTED_LOOKUP_STRATEGIES}")
         normalized_pool = tuple(dict.fromkeys(self.identifier_pool))
         object.__setattr__(self, "identifier_pool", normalized_pool)
         if normalized_pool and len(normalized_pool) < self.batch_size:
@@ -91,7 +79,6 @@ class Workload:
             parts.append(f"{self.pmid_ratio:.0%} PMID / {1 - self.pmid_ratio:.0%} PMC+DOI")
         if not self.uses_identifier_pool:
             parts.append("cold cache" if self.unique_ratio >= 1.0 else f"{1 - self.unique_ratio:.0%} replayed")
-        parts.append(f"{self.lookup_strategy} lookup")
         return ", ".join(parts)
 
     def build_corpus(self, seed: Optional[int]) -> IdentifierCorpus:
@@ -116,14 +103,10 @@ class Workload:
         DocumentMetadataAPI clients send today. POST uses the JSON body, which is
         the only form able to carry a DOI whose suffix contains a comma.
         """
-        request_headers = {LOOKUP_STRATEGY_HEADER: self.lookup_strategy}
         if self.normalized_method == "GET":
             query = urllib.parse.urlencode({"pubids": ",".join(identifiers), "request_id": request_id})
-            return f"{PUBLICATIONS_PATH}?{query}", {"headers": request_headers}
-        return PUBLICATIONS_PATH, {
-            "json": {"ids": identifiers, "request_id": request_id},
-            "headers": request_headers,
-        }
+            return f"{PUBLICATIONS_PATH}?{query}", {}
+        return PUBLICATIONS_PATH, {"json": {"ids": identifiers, "request_id": request_id}}
 
 
 @dataclass(frozen=True)
