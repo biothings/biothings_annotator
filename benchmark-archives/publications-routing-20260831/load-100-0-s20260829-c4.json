@@ -1,0 +1,327 @@
+{
+  "mode": "paired_lookup_strategy_comparison",
+  "target": "https://annotator.ci.transltr.io",
+  "objective": {
+    "source": "NCATSTranslator/Core-Components-Working-Group#15",
+    "threshold_ms": 150.0,
+    "quantile": 0.9
+  },
+  "workload": {
+    "description": "100 ids, POST, 900 real ids from corpus-100-pmid-0-alt.txt, paired bulk-search vs combined-search",
+    "batch_size": 100,
+    "method": "POST",
+    "lookup_strategies": [
+      "bulk-search",
+      "combined-search"
+    ],
+    "pmid_ratio": null,
+    "unique_ratio": null,
+    "identifier_pool": {
+      "source": "corpus-100-pmid-0-alt.txt",
+      "size": 900
+    }
+  },
+  "load": {
+    "pairs_per_stage": 200,
+    "http_requests_per_stage": 400,
+    "warmup_pairs": 20,
+    "timeout_seconds": 30.0,
+    "stages": [
+      4
+    ],
+    "seed": 20260829,
+    "max_http_concurrency": 4
+  },
+  "integrity": {
+    "valid": true,
+    "request_id_mismatches": 0,
+    "lookup_strategy_mismatches": 0,
+    "lookup_fallback_samples": 0,
+    "lookup_fallback_attribution_missing": 0,
+    "semantic_mismatches": 0,
+    "unresolved_pairs": 0,
+    "unresolved_identifiers": 0,
+    "invalid_pairs": 0
+  },
+  "caveats": [
+    "each pair is sequential, so its second request can benefit from Elasticsearch state warmed by its first; balanced bulk-search-first/combined-search-first ordering controls first-order bias but cannot produce two cold observations on one shared deployment",
+    "the two implementations share one mixed load during this run, so its wall time is not a standalone capacity measurement; use single-strategy --ramp runs for absolute capacity",
+    "pairs sample repeatedly from a fixed pool of 900 real identifiers, so the backend continues to warm during the run",
+    "network overhead adds up to 91 ms at p90 from this vantage point; use server latency for the implementation decision",
+    "c=4 has zero or opposite-signed median server deltas between bulk-search-first and combined-search-first pairs; the result is order/cache-sensitive, so do not declare a winner"
+  ],
+  "stages": [
+    {
+      "label": "c=4",
+      "concurrency": 4,
+      "wall_seconds": 7.006,
+      "pairs": 200,
+      "valid_pairs": 200,
+      "invalid_pairs": 0,
+      "order_counts": {
+        "bulk_search_first": 100,
+        "combined_search_first": 100
+      },
+      "order_balanced": true,
+      "changed_path_pairs": 200,
+      "changed_path_order_counts": {
+        "bulk_search_first": 100,
+        "combined_search_first": 100
+      },
+      "changed_path_order_balanced": true,
+      "alternative_order_counts": {
+        "bulk_search_first": 0,
+        "combined_search_first": 0
+      },
+      "alternative_order_balanced": true,
+      "alternative_identifiers": 0,
+      "pairs_with_alternative_identifiers": 0,
+      "integrity": {
+        "request_id_mismatches": 0,
+        "lookup_strategy_mismatches": 0,
+        "lookup_fallback_samples": 0,
+        "lookup_fallback_attribution_missing": 0,
+        "semantic_mismatches": 0,
+        "unresolved_pairs": 0,
+        "unresolved_identifiers": 0
+      },
+      "arms": {
+        "bulk-search": {
+          "requests": 200,
+          "successful": 200,
+          "success_rate": 1.0,
+          "status_counts": {
+            "200": 200
+          },
+          "lookup_strategy_counts": {
+            "bulk-search": 200
+          },
+          "lookup_fallback_counts": {
+            "false": 200
+          },
+          "identifiers": {
+            "requests": 200,
+            "identifiers_requested": 20000,
+            "identifiers_found": 20000,
+            "found_ratio": 1.0,
+            "mean_batch_size": 100.0,
+            "mean_response_kb": 175.0
+          },
+          "client_latency": {
+            "count": 200,
+            "min_ms": 40.9,
+            "p50_ms": 57.46,
+            "p90_ms": 117.35,
+            "p95_ms": 132.67,
+            "p99_ms": 148.9,
+            "max_ms": 152.9,
+            "mean_ms": 66.1
+          },
+          "server_latency": {
+            "count": 200,
+            "min_ms": 22.0,
+            "p50_ms": 31.0,
+            "p90_ms": 38.0,
+            "p95_ms": 40.0,
+            "p99_ms": 42.0,
+            "max_ms": 43.0,
+            "mean_ms": 31.33
+          },
+          "network_overhead": {
+            "count": 200,
+            "min_ms": 17.47,
+            "p50_ms": 24.25,
+            "p90_ms": 85.13,
+            "p95_ms": 102.46,
+            "p99_ms": 118.87,
+            "max_ms": 121.02,
+            "mean_ms": 34.77
+          },
+          "slo": {
+            "client": {
+              "basis": "client",
+              "met": true,
+              "threshold_ms": 150.0,
+              "quantile": 0.9,
+              "p90_ms": 117.35,
+              "fraction_under_threshold": 0.99,
+              "headroom_ms": 32.65,
+              "sample_count": 200
+            },
+            "server": {
+              "basis": "server",
+              "met": true,
+              "threshold_ms": 150.0,
+              "quantile": 0.9,
+              "p90_ms": 38.0,
+              "fraction_under_threshold": 1.0,
+              "headroom_ms": 112.0,
+              "sample_count": 200
+            }
+          }
+        },
+        "combined-search": {
+          "requests": 200,
+          "successful": 200,
+          "success_rate": 1.0,
+          "status_counts": {
+            "200": 200
+          },
+          "lookup_strategy_counts": {
+            "combined-search": 200
+          },
+          "lookup_fallback_counts": {
+            "false": 200
+          },
+          "identifiers": {
+            "requests": 200,
+            "identifiers_requested": 20000,
+            "identifiers_found": 20000,
+            "found_ratio": 1.0,
+            "mean_batch_size": 100.0,
+            "mean_response_kb": 175.0
+          },
+          "client_latency": {
+            "count": 200,
+            "min_ms": 42.63,
+            "p50_ms": 56.98,
+            "p90_ms": 122.57,
+            "p95_ms": 133.89,
+            "p99_ms": 147.55,
+            "max_ms": 149.41,
+            "mean_ms": 67.05
+          },
+          "server_latency": {
+            "count": 200,
+            "min_ms": 24.0,
+            "p50_ms": 31.0,
+            "p90_ms": 38.0,
+            "p95_ms": 40.0,
+            "p99_ms": 43.0,
+            "max_ms": 47.0,
+            "mean_ms": 31.93
+          },
+          "network_overhead": {
+            "count": 200,
+            "min_ms": 17.63,
+            "p50_ms": 23.8,
+            "p90_ms": 90.59,
+            "p95_ms": 104.28,
+            "p99_ms": 113.41,
+            "max_ms": 122.55,
+            "mean_ms": 35.12
+          },
+          "slo": {
+            "client": {
+              "basis": "client",
+              "met": true,
+              "threshold_ms": 150.0,
+              "quantile": 0.9,
+              "p90_ms": 122.57,
+              "fraction_under_threshold": 1.0,
+              "headroom_ms": 27.43,
+              "sample_count": 200
+            },
+            "server": {
+              "basis": "server",
+              "met": true,
+              "threshold_ms": 150.0,
+              "quantile": 0.9,
+              "p90_ms": 38.0,
+              "fraction_under_threshold": 1.0,
+              "headroom_ms": 112.0,
+              "sample_count": 200
+            }
+          }
+        }
+      },
+      "p90_difference_ms": {
+        "meaning": "combined-search minus bulk-search; negative is faster",
+        "server": 0.0,
+        "client": 5.22
+      },
+      "p90_difference_percent": {
+        "meaning": "combined-search minus bulk-search; negative is faster",
+        "server": 0.0,
+        "client": 4.45
+      },
+      "paired_delta_ms": {
+        "meaning": "combined-search minus bulk-search; negative is faster",
+        "first_strategy": "bulk-search",
+        "second_strategy": "combined-search",
+        "control_strategy": "bulk-search",
+        "experiment_strategy": "combined-search",
+        "server": {
+          "all": {
+            "count": 200,
+            "min_ms": -14.0,
+            "p50_ms": 0.0,
+            "p90_ms": 9.0,
+            "p95_ms": 11.0,
+            "p99_ms": 17.0,
+            "max_ms": 18.0,
+            "mean_ms": 0.6,
+            "combined_search_faster_fraction": 0.45
+          },
+          "bulk_search_first": {
+            "count": 100,
+            "min_ms": -12.0,
+            "p50_ms": 0.0,
+            "p90_ms": 9.0,
+            "p95_ms": 10.0,
+            "p99_ms": 16.0,
+            "max_ms": 18.0,
+            "mean_ms": 0.47,
+            "combined_search_faster_fraction": 0.49
+          },
+          "combined_search_first": {
+            "count": 100,
+            "min_ms": -14.0,
+            "p50_ms": 1.0,
+            "p90_ms": 9.0,
+            "p95_ms": 11.0,
+            "p99_ms": 17.0,
+            "max_ms": 18.0,
+            "mean_ms": 0.74,
+            "combined_search_faster_fraction": 0.41
+          }
+        },
+        "client": {
+          "all": {
+            "count": 200,
+            "min_ms": -96.16,
+            "p50_ms": -0.72,
+            "p90_ms": 63.12,
+            "p95_ms": 77.26,
+            "p99_ms": 92.53,
+            "max_ms": 102.86,
+            "mean_ms": 0.95,
+            "combined_search_faster_fraction": 0.535
+          },
+          "bulk_search_first": {
+            "count": 100,
+            "min_ms": -96.16,
+            "p50_ms": -2.79,
+            "p90_ms": 67.92,
+            "p95_ms": 77.83,
+            "p99_ms": 92.53,
+            "max_ms": 102.86,
+            "mean_ms": 2.49,
+            "combined_search_faster_fraction": 0.54
+          },
+          "combined_search_first": {
+            "count": 100,
+            "min_ms": -94.22,
+            "p50_ms": -0.51,
+            "p90_ms": 53.72,
+            "p95_ms": 73.75,
+            "p99_ms": 91.6,
+            "max_ms": 94.45,
+            "mean_ms": -0.58,
+            "combined_search_faster_fraction": 0.53
+          }
+        }
+      }
+    }
+  ]
+}
