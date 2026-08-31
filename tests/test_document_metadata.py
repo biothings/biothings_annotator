@@ -1447,7 +1447,7 @@ async def test_combined_lookup_preserves_result_and_not_found_order(monkeypatch)
     submitted = [MISSING_DOI, "pmid:30690000", DOI, "doi:10.9999/also-absent", PMCID]
 
     results, not_found = await DocumentMetadataService(
-        elasticsearch_connection="ci",
+        elasticsearch_connection="in_cluster",
         lookup_strategy=COMBINED_SEARCH_LOOKUP_STRATEGY,
     ).get_publications(submitted)
 
@@ -1648,7 +1648,7 @@ async def test_lookup_execution_metadata_reports_no_fallback_for_normal_routes(
     )
 
     results, not_found, lookup_fallback = await DocumentMetadataService(
-        elasticsearch_connection="ci",
+        elasticsearch_connection="in_cluster",
         lookup_strategy=lookup_strategy,
     ).get_publications_with_metadata(publication_ids)
 
@@ -1680,7 +1680,7 @@ async def test_lookup_execution_metadata_does_not_label_deterministic_non_ascii_
     )
 
     _, not_found, lookup_fallback = await DocumentMetadataService(
-        elasticsearch_connection="ci",
+        elasticsearch_connection="in_cluster",
         lookup_strategy=lookup_strategy,
     ).get_publications_with_metadata(publication_ids)
 
@@ -1706,7 +1706,7 @@ async def test_lookup_execution_metadata_marks_rejected_speculative_responses_as
     )
 
     results, not_found, lookup_fallback = await DocumentMetadataService(
-        elasticsearch_connection="ci",
+        elasticsearch_connection="in_cluster",
         lookup_strategy=lookup_strategy,
     ).get_publications_with_metadata([PMID, DOI])
 
@@ -1739,7 +1739,7 @@ async def test_lookup_fallback_metadata_stays_bound_to_overlapping_requests(monk
         lambda node_type, elasticsearch_connection: client,
     )
     service = DocumentMetadataService(
-        elasticsearch_connection="ci",
+        elasticsearch_connection="in_cluster",
         lookup_strategy=BULK_SEARCH_LOOKUP_STRATEGY,
     )
 

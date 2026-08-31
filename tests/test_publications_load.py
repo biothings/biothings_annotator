@@ -383,6 +383,30 @@ def test_workload_rejects_an_unknown_lookup_strategy():
 
 
 @pytest.mark.unit
+def test_legacy_pair_accessors_report_when_their_strategy_is_absent():
+    sample = Sample(client_ms=1.0)
+    no_current = PairedObservation(
+        index=0,
+        first_strategy="bulk-search",
+        identifiers=("PMID:1",),
+        samples={"bulk-search": sample, "combined-search": sample},
+        strategies=("bulk-search", "combined-search"),
+    )
+    no_bulk_search = PairedObservation(
+        index=0,
+        first_strategy="current",
+        identifiers=("PMID:1",),
+        samples={"current": sample, "combined-search": sample},
+        strategies=("current", "combined-search"),
+    )
+
+    with pytest.raises(ValueError, match="'current' is not part of this pair"):
+        _ = no_current.current
+    with pytest.raises(ValueError, match="'bulk-search' is not part of this pair"):
+        _ = no_bulk_search.bulk_search
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_matching_response_strategy_is_attributed_to_the_sample():
     async def respond(request: httpx.Request) -> httpx.Response:

@@ -141,11 +141,11 @@ class PairedObservation:
     # current-vs-bulk callers while the generic mapping supports any pair.
     @property
     def current(self) -> Sample:
-        return self.samples["current"]
+        return self.sample_for("current")
 
     @property
     def bulk_search(self) -> Sample:
-        return self.samples["bulk-search"]
+        return self.sample_for("bulk-search")
 
     @property
     def order_label(self) -> str:
