@@ -15,6 +15,7 @@ from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS
 from biothings_annotator.annotator.utils import get_elasticsearch_client
 from biothings_annotator.application.views.document_metadata import (
     BULK_SEARCH_LOOKUP_STRATEGY,
+    COMBINED_SEARCH_LOOKUP_STRATEGY,
     CURRENT_LOOKUP_STRATEGY,
     PUBLICATIONS_LOOKUP_STRATEGY_HEADER,
     SUPPORTED_PUBLICATION_ID_MESSAGE,
@@ -471,9 +472,9 @@ async def test_publications_endpoint_returns_legacy_envelope_and_deduplicates(
     async def get_publications(self, publication_ids):
         del self
         calls.append(publication_ids)
-        return {PMID: FORMATTED_METADATA}, [MISSING_PMID]
+        return {PMID: FORMATTED_METADATA}, [MISSING_PMID], False
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", get_publications)
 
     _, response = await test_annotator.asgi_client.get(
         f"/publications?pubids={PMID},{MISSING_PMID},{PMID}&request_id=request-123"
@@ -487,6 +488,7 @@ async def test_publications_endpoint_returns_legacy_envelope_and_deduplicates(
     assert response.json["_meta"]["n_results"] == 1
     assert response.json["_meta"]["request_id"] == "request-123"
     assert response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
+    assert response.json["_meta"]["lookup_fallback"] is False
     assert response.headers["vary"] == PUBLICATIONS_LOOKUP_STRATEGY_HEADER
     assert isinstance(response.json["_meta"]["processing_time_ms"], int)
     assert response.json["_meta"]["processing_time_ms"] >= 0
@@ -503,15 +505,20 @@ async def test_publications_endpoint_selects_isolated_lookup_services_per_reques
 
     async def get_publications(self, publication_ids):
         calls.append((id(self), self.lookup_strategy, publication_ids))
-        return {PMID: FORMATTED_METADATA}, []
+        return {PMID: FORMATTED_METADATA}, [], False
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", get_publications)
 
     _, default_response = await test_annotator.asgi_client.get(f"/publications?pubids={PMID}")
     _, bulk_search_response = await test_annotator.asgi_client.post(
         "/publications",
         json={"ids": [PMID]},
         headers={PUBLICATIONS_LOOKUP_STRATEGY_HEADER: BULK_SEARCH_LOOKUP_STRATEGY},
+    )
+    _, combined_search_response = await test_annotator.asgi_client.post(
+        "/publications",
+        json={"ids": [PMID]},
+        headers={PUBLICATIONS_LOOKUP_STRATEGY_HEADER: COMBINED_SEARCH_LOOKUP_STRATEGY},
     )
     _, current_response = await test_annotator.asgi_client.get(
         f"/publications/{PMID}",
@@ -521,13 +528,45 @@ async def test_publications_endpoint_selects_isolated_lookup_services_per_reques
     assert [call[1:] for call in calls] == [
         (CURRENT_LOOKUP_STRATEGY, [PMID]),
         (BULK_SEARCH_LOOKUP_STRATEGY, [PMID]),
+        (COMBINED_SEARCH_LOOKUP_STRATEGY, [PMID]),
         (CURRENT_LOOKUP_STRATEGY, [PMID]),
     ]
-    assert calls[0][0] == calls[2][0]
+    assert calls[0][0] == calls[3][0]
     assert calls[0][0] != calls[1][0]
+    assert calls[0][0] != calls[2][0]
+    assert calls[1][0] != calls[2][0]
     assert default_response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
     assert bulk_search_response.json["_meta"]["lookup_strategy"] == BULK_SEARCH_LOOKUP_STRATEGY
+    assert combined_search_response.json["_meta"]["lookup_strategy"] == COMBINED_SEARCH_LOOKUP_STRATEGY
     assert current_response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
+    assert default_response.json["_meta"]["lookup_fallback"] is False
+    assert bulk_search_response.json["_meta"]["lookup_fallback"] is False
+    assert combined_search_response.json["_meta"]["lookup_fallback"] is False
+    assert current_response.json["_meta"]["lookup_fallback"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_publications_endpoint_exposes_a_per_request_lookup_fallback_marker(
+    test_annotator: sanic.Sanic,
+    monkeypatch,
+):
+    calls = 0
+
+    async def get_publications(self, publication_ids):
+        nonlocal calls
+        del self, publication_ids
+        calls += 1
+        return {PMID: FORMATTED_METADATA}, [], calls == 1
+
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", get_publications)
+    headers = {PUBLICATIONS_LOOKUP_STRATEGY_HEADER: BULK_SEARCH_LOOKUP_STRATEGY}
+
+    _, fallback_response = await test_annotator.asgi_client.post("/publications", json={"ids": [PMID]}, headers=headers)
+    _, normal_response = await test_annotator.asgi_client.post("/publications", json={"ids": [PMID]}, headers=headers)
+
+    assert fallback_response.json["_meta"]["lookup_fallback"] is True
+    assert normal_response.json["_meta"]["lookup_fallback"] is False
 
 
 @pytest.mark.unit
@@ -551,7 +590,7 @@ async def test_publication_endpoints_reject_an_invalid_lookup_strategy_before_lo
         del args, kwargs
         raise AssertionError("An invalid lookup strategy must not query Elasticsearch")
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", fail_lookup)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", fail_lookup)
     headers = {PUBLICATIONS_LOOKUP_STRATEGY_HEADER: "experimental"}
 
     if method == "post":
@@ -564,8 +603,9 @@ async def test_publication_endpoints_reject_an_invalid_lookup_strategy_before_lo
     assert response.json == {
         "endpoint": "/publications",
         "message": (
-            f"The {PUBLICATIONS_LOOKUP_STRATEGY_HEADER} header must be either "
-            f"{CURRENT_LOOKUP_STRATEGY} or {BULK_SEARCH_LOOKUP_STRATEGY}."
+            f"The {PUBLICATIONS_LOOKUP_STRATEGY_HEADER} header must be one of "
+            f"{CURRENT_LOOKUP_STRATEGY}, {BULK_SEARCH_LOOKUP_STRATEGY}, or "
+            f"{COMBINED_SEARCH_LOOKUP_STRATEGY}."
         ),
     }
 
@@ -581,9 +621,9 @@ async def test_publication_path_endpoint_returns_one_publication(
     async def get_publications(self, publication_ids):
         del self
         calls.append(publication_ids)
-        return {PMID: FORMATTED_METADATA}, []
+        return {PMID: FORMATTED_METADATA}, [], False
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", get_publications)
 
     _, response = await test_annotator.asgi_client.get(f"/publications/{PMID}?request_id=path-request")
 
@@ -610,9 +650,9 @@ async def test_publication_path_endpoint_accepts_doi_and_pmcid(
     async def get_publications(self, publication_ids):
         del self
         calls.append(publication_ids)
-        return {publication_ids[0]: FORMATTED_METADATA}, []
+        return {publication_ids[0]: FORMATTED_METADATA}, [], False
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", get_publications)
 
     _, response = await test_annotator.asgi_client.get(f"/publications/{publication_id}")
 
@@ -632,9 +672,9 @@ async def test_publications_batch_forms_accept_mixed_prefixes(
     async def get_publications(self, publication_ids):
         del self
         calls.append(publication_ids)
-        return {publication_ids[0]: FORMATTED_METADATA}, list(publication_ids[1:])
+        return {publication_ids[0]: FORMATTED_METADATA}, list(publication_ids[1:]), False
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", get_publications)
 
     _, query_response = await test_annotator.asgi_client.get(f"/publications?pubids={PMID},{PMCID}")
     _, post_response = await test_annotator.asgi_client.post("/publications", json={"ids": [PMID, PMCID, DOI]})
@@ -657,9 +697,9 @@ async def test_publications_post_accepts_object_and_bare_list_bodies(
         calls.append(publication_ids)
         results = {publication_id: FORMATTED_METADATA for publication_id in publication_ids if publication_id == PMID}
         not_found = [publication_id for publication_id in publication_ids if publication_id != PMID]
-        return results, not_found
+        return results, not_found, False
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", get_publications)
 
     _, object_response = await test_annotator.asgi_client.post(
         "/publications?request_id=query-request",
@@ -715,7 +755,7 @@ async def test_publications_endpoint_rejects_invalid_requests_before_lookup(
         del args, kwargs
         raise AssertionError("Invalid requests must not query Elasticsearch")
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", fail_lookup)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", fail_lookup)
 
     _, response = await test_annotator.asgi_client.get(f"/publications{query}")
 
@@ -745,7 +785,7 @@ async def test_publication_path_endpoint_rejects_invalid_ids_before_lookup(
         del args, kwargs
         raise AssertionError("Invalid requests must not query Elasticsearch")
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", fail_lookup)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", fail_lookup)
 
     _, response = await test_annotator.asgi_client.get(f"/publications/{publication_id}")
 
@@ -782,7 +822,7 @@ async def test_publications_post_rejects_invalid_bodies_before_lookup(
         del args, kwargs
         raise AssertionError("Invalid requests must not query Elasticsearch")
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", fail_lookup)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", fail_lookup)
 
     _, response = await test_annotator.asgi_client.post("/publications", json=body)
 
@@ -802,7 +842,7 @@ async def test_publications_post_returns_document_metadata_error_for_malformed_j
         del args, kwargs
         raise AssertionError("Invalid requests must not query Elasticsearch")
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", fail_lookup)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", fail_lookup)
 
     _, response = await test_annotator.asgi_client.post(
         "/publications",
@@ -839,7 +879,7 @@ async def test_publication_endpoints_return_sanitized_server_error(
         del args, kwargs
         raise RuntimeError("sensitive Elasticsearch details")
 
-    monkeypatch.setattr(DocumentMetadataService, "get_publications", fail_lookup)
+    monkeypatch.setattr(DocumentMetadataService, "get_publications_with_metadata", fail_lookup)
 
     if method == "post":
         _, response = await test_annotator.asgi_client.post(path, json=body)
@@ -921,7 +961,10 @@ async def test_live_index_exposes_the_multi_identifier_field(live_pubmed_client)
     os.environ.get("RUN_PUBMED_ES_INTEGRATION") != "1",
     reason="Set RUN_PUBMED_ES_INTEGRATION=1 to query the live PubMed Elasticsearch alias.",
 )
-@pytest.mark.parametrize("lookup_strategy", [CURRENT_LOOKUP_STRATEGY, BULK_SEARCH_LOOKUP_STRATEGY])
+@pytest.mark.parametrize(
+    "lookup_strategy",
+    [CURRENT_LOOKUP_STRATEGY, BULK_SEARCH_LOOKUP_STRATEGY, COMBINED_SEARCH_LOOKUP_STRATEGY],
+)
 async def test_live_index_resolves_a_publication_by_every_identifier_type(live_pubmed_client, lookup_strategy):
     service = _live_service(lookup_strategy)
 
@@ -944,7 +987,7 @@ async def test_live_index_resolves_a_publication_by_every_identifier_type(live_p
     "lookup_strategy, identifier",
     [
         (strategy, identifier)
-        for strategy in (CURRENT_LOOKUP_STRATEGY, BULK_SEARCH_LOOKUP_STRATEGY)
+        for strategy in (CURRENT_LOOKUP_STRATEGY, BULK_SEARCH_LOOKUP_STRATEGY, COMBINED_SEARCH_LOOKUP_STRATEGY)
         for identifier in ("DOI:10.1242/JCS.03153", "doi:10.1242/JCS.03153", "pmc:PMC1904490")
     ],
 )
@@ -953,6 +996,34 @@ async def test_live_index_matches_identifiers_case_insensitively(live_pubmed_cli
 
     assert not_found == []
     assert results[identifier]["article_title"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.environ.get("RUN_PUBMED_ES_INTEGRATION") != "1",
+    reason="Set RUN_PUBMED_ES_INTEGRATION=1 to query the live PubMed Elasticsearch alias.",
+)
+async def test_live_combined_search_agrees_with_current_on_mixed_hits_and_misses(live_pubmed_client):
+    publication_ids = [
+        "pmid:16954148",
+        "DOI:10.1242/JCS.03153",
+        "pmc:PMC1904490",
+        "PMID:999999999999",
+        "doi:10.999999999999/not-a-real-publication",
+    ]
+
+    current_results, current_not_found = await _live_service(CURRENT_LOOKUP_STRATEGY).get_publications(publication_ids)
+    # The fixture clears the cached client between tests, but both calls in this
+    # test intentionally share the server-style client and event loop.
+    combined_results, combined_not_found, lookup_fallback = await _live_service(
+        COMBINED_SEARCH_LOOKUP_STRATEGY
+    ).get_publications_with_metadata(publication_ids)
+
+    assert combined_results == current_results
+    assert list(combined_results) == publication_ids[:3]
+    assert combined_not_found == current_not_found == publication_ids[3:]
+    assert lookup_fallback is False
 
 
 @pytest.mark.integration
@@ -1025,10 +1096,11 @@ class _RecordingClient:
 
     index = "annotator-pubmed"
 
-    def __init__(self, documents=None, identifier_map=None, bulk_response=None):
+    def __init__(self, documents=None, identifier_map=None, bulk_response=None, combined_response=None):
         self.documents = BULK_DOCUMENTS if documents is None else documents
         self.identifier_map = BULK_IDENTIFIER_MAP if identifier_map is None else identifier_map
         self.bulk_response = bulk_response
+        self.combined_response = combined_response
         self.calls = []
 
     def _hit(self, document_id, query=None):
@@ -1067,6 +1139,54 @@ class _RecordingClient:
         )
         hits = [self._hit(document_id) for document_id in reversed(document_ids)]
         return {"total": len(hits), "total_relation": "eq", "hits": hits}
+
+    async def search_ids_or_terms(self, document_ids, query_list, field, fields=None, size=None):
+        self.calls.append(
+            (
+                "search_ids_or_terms",
+                {
+                    "document_ids": list(document_ids),
+                    "query_list": list(query_list),
+                    "field": field,
+                    "fields": fields,
+                    "size": size,
+                },
+            )
+        )
+        if self.combined_response is not None:
+            return self.combined_response
+
+        requested_documents = set(document_ids)
+        requested_alternatives = set(query_list)
+        matching_document_ids = []
+        for document_id, document in self.documents.items():
+            identifiers = document.get("pubmed", {}).get("identifiers", [])
+            normalized_identifiers = {identifier.lower() for identifier in identifiers if isinstance(identifier, str)}
+            if document_id in requested_documents or normalized_identifiers & requested_alternatives:
+                matching_document_ids.append(document_id)
+
+        hits = []
+        for document_id in reversed(matching_document_ids):
+            hit = self._hit(document_id)
+            matched_queries = []
+            if document_id in requested_documents:
+                matched_queries.append("document_ids")
+            identifiers = hit.get("pubmed", {}).get("identifiers", [])
+            if any(
+                isinstance(identifier, str) and identifier.lower() in requested_alternatives
+                for identifier in identifiers
+            ):
+                matched_queries.append("alternative_identifiers")
+            hit["_matched_queries"] = matched_queries
+            hits.append(hit)
+        return {
+            "timed_out": False,
+            "terminated_early": False,
+            "failed_shards": 0,
+            "total": len(hits),
+            "total_relation": "eq",
+            "hits": hits,
+        }
 
     def call_arguments(self, name):
         return [arguments for called, arguments in self.calls if called == name]
@@ -1252,12 +1372,398 @@ async def test_bulk_and_current_lookup_agree_on_a_mixed_batch():
         assert bulk[key]["pubmed"] == current[key]["pubmed"]
 
 
+# --- ONE-REQUEST COMBINED LOOKUP ---
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_combined_lookup_uses_one_search_and_fans_out_every_identifier_spelling():
+    client = _RecordingClient()
+    document_ids = ["PMID:30690000"]
+    search_ids = [
+        "DOI:10.1000/FIRST",
+        "doi:10.1000/first",
+        "DOI:10.1242/JCS.03153",
+        "pmc:PMC1904490",
+    ]
+
+    hits = await DocumentMetadataService._fetch_hits_combined_search(client, document_ids, search_ids)
+
+    assert client.call_arguments("search_ids_or_terms") == [
+        {
+            "document_ids": document_ids,
+            "query_list": [
+                "doi:10.1000/first",
+                "doi:10.1242/jcs.03153",
+                "pmc:pmc1904490",
+            ],
+            "field": "pubmed.identifiers",
+            "fields": ["pubmed"],
+            "size": 4,
+        }
+    ]
+    assert client.call_arguments("mget") == []
+    assert client.call_arguments("querymany_exact") == []
+    assert set(hits) == {"PMID:30690000", *search_ids}
+    assert hits["PMID:30690000"]["_id"] == "PMID:30690000"
+    assert hits["DOI:10.1000/FIRST"]["_id"] == "PMID:30690000"
+    assert {hits[identifier]["_id"] for identifier in search_ids[2:]} == {"PMID:17284678"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_combined_lookup_accepts_a_pmid_only_hit_without_alternate_identifiers():
+    document_id = "PMID:30690000"
+    client = _RecordingClient(documents={document_id: {"pubmed": PUBMED_METADATA}}, identifier_map={})
+
+    hits = await DocumentMetadataService._fetch_hits_combined_search(client, [document_id], [])
+
+    assert hits[document_id]["pubmed"] == PUBMED_METADATA
+    assert client.call_arguments("search_ids_or_terms")[0]["size"] == 1
+    assert client.call_arguments("mget") == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_combined_lookup_reuses_the_bulk_strategy_for_an_all_alternate_batch():
+    client = _RecordingClient()
+    search_ids = ["DOI:10.1242/JCS.03153", "pmc:PMC1904490"]
+
+    hits = await DocumentMetadataService._fetch_hits_combined_search(client, [], search_ids)
+
+    assert set(hits) == set(search_ids)
+    assert client.call_arguments("search_terms") == [["doi:10.1242/jcs.03153", "pmc:pmc1904490"]]
+    assert client.call_arguments("search_ids_or_terms") == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_combined_lookup_preserves_result_and_not_found_order(monkeypatch):
+    client = _RecordingClient()
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: client,
+    )
+    submitted = [MISSING_DOI, "pmid:30690000", DOI, "doi:10.9999/also-absent", PMCID]
+
+    results, not_found = await DocumentMetadataService(
+        elasticsearch_connection="ci",
+        lookup_strategy=COMBINED_SEARCH_LOOKUP_STRATEGY,
+    ).get_publications(submitted)
+
+    assert list(results) == ["pmid:30690000", DOI, PMCID]
+    assert not_found == [MISSING_DOI, "doi:10.9999/also-absent"]
+    assert len(client.call_arguments("search_ids_or_terms")) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_combined_lookup_caps_the_search_window_at_the_endpoint_limit():
+    client = _RecordingClient(documents={}, identifier_map={})
+    document_ids = [f"PMID:{index}" for index in range(1, 102)]
+
+    hits = await DocumentMetadataService._fetch_hits_combined_search(client, document_ids, [])
+
+    assert hits == {}
+    assert client.call_arguments("search_ids_or_terms")[0]["size"] == 100
+
+
+def _combined_hit(document_id, matched_queries, pubmed=None):
+    return {
+        "_id": document_id,
+        "pubmed": BULK_DOCUMENTS[document_id]["pubmed"] if pubmed is None else pubmed,
+        "_matched_queries": matched_queries,
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "combined_response",
+    [
+        {
+            "total": 2,
+            "total_relation": "eq",
+            "hits": [_combined_hit("PMID:30690000", ["document_ids"])],
+        },
+        {
+            "total": 1,
+            "total_relation": "gte",
+            "hits": [_combined_hit("PMID:30690000", ["document_ids"])],
+        },
+        {
+            "timed_out": True,
+            "total": 1,
+            "total_relation": "eq",
+            "hits": [_combined_hit("PMID:30690000", ["document_ids"])],
+        },
+        {
+            "terminated_early": True,
+            "total": 1,
+            "total_relation": "eq",
+            "hits": [_combined_hit("PMID:30690000", ["document_ids"])],
+        },
+        {
+            "failed_shards": 1,
+            "total": 1,
+            "total_relation": "eq",
+            "hits": [_combined_hit("PMID:30690000", ["document_ids"])],
+        },
+        {
+            "total": 1,
+            "total_relation": "eq",
+            "hits": [_combined_hit("PMID:30690000", None)],
+        },
+        {
+            "total": 1,
+            "total_relation": "eq",
+            "hits": [
+                _combined_hit(
+                    "PMID:17284678",
+                    ["alternative_identifiers"],
+                    pubmed={"identifiers": "doi:10.1242/jcs.03153"},
+                )
+            ],
+        },
+        {
+            "total": 1,
+            "total_relation": "eq",
+            "hits": [_combined_hit("PMID:17284678", ["unknown_clause"])],
+        },
+    ],
+    ids=[
+        "truncated",
+        "inexact-total",
+        "timed-out",
+        "terminated-early",
+        "failed-shard",
+        "missing-attribution",
+        "malformed-identifiers",
+        "unknown-attribution",
+    ],
+)
+async def test_combined_lookup_falls_back_for_the_whole_request_when_results_are_unsafe(combined_response):
+    client = _RecordingClient(combined_response=combined_response)
+
+    hits = await DocumentMetadataService._fetch_hits_combined_search(client, [PMID], [DOI])
+
+    assert hits[PMID]["_id"] == PMID
+    assert hits[DOI]["_id"] == "PMID:17284678"
+    assert client.call_arguments("mget") == [[PMID]]
+    assert client.call_arguments("querymany_exact") == [[DOI]]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_combined_lookup_falls_back_when_one_alternate_identifier_has_two_owners():
+    collision = "doi:10.1000/collision"
+    documents = {
+        "PMID:1": {"pubmed": {"title": "Wrong", "identifiers": [collision]}},
+        "PMID:2": {"pubmed": {"title": "Right", "identifiers": [collision]}},
+    }
+    combined_response = {
+        "total": 2,
+        "total_relation": "eq",
+        "timed_out": False,
+        "failed_shards": 0,
+        "hits": [
+            {
+                **documents["PMID:1"],
+                "_id": "PMID:1",
+                "_matched_queries": ["document_ids", "alternative_identifiers"],
+            },
+            {
+                **documents["PMID:2"],
+                "_id": "PMID:2",
+                "_matched_queries": ["alternative_identifiers"],
+            },
+        ],
+    }
+    client = _RecordingClient(
+        documents=documents,
+        identifier_map={collision: "PMID:2"},
+        combined_response=combined_response,
+    )
+
+    hits = await DocumentMetadataService._fetch_hits_combined_search(client, ["PMID:1"], [collision])
+
+    assert hits[collision]["_id"] == "PMID:2"
+    assert client.call_arguments("mget") == [["PMID:1"]]
+    assert client.call_arguments("querymany_exact") == [[collision]]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_combined_lookup_uses_current_strategy_for_non_ascii_alternates():
+    identifier = "doi:10.1000/café"
+    client = _RecordingClient(identifier_map={identifier: "PMID:30690000"})
+
+    hits = await DocumentMetadataService._fetch_hits_combined_search(client, [PMID], [identifier])
+
+    assert hits[PMID]["_id"] == PMID
+    assert hits[identifier]["_id"] == "PMID:30690000"
+    assert client.call_arguments("search_ids_or_terms") == []
+    assert client.call_arguments("mget") == [[PMID]]
+    assert client.call_arguments("querymany_exact") == [[identifier]]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_combined_and_current_lookup_agree_on_a_mixed_batch():
+    document_ids = ["PMID:30690000"]
+    search_ids = [DOI, PMCID, MISSING_DOI]
+
+    current = await DocumentMetadataService._fetch_hits(_RecordingClient(), document_ids, search_ids)
+    combined = await DocumentMetadataService._fetch_hits_combined_search(
+        _RecordingClient(),
+        document_ids,
+        search_ids,
+    )
+
+    assert sorted(combined) == sorted(current)
+    for key in combined:
+        assert combined[key]["pubmed"] == current[key]["pubmed"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "lookup_strategy, publication_ids",
+    [
+        (CURRENT_LOOKUP_STRATEGY, [PMID, DOI]),
+        (BULK_SEARCH_LOOKUP_STRATEGY, [PMID, DOI]),
+        (COMBINED_SEARCH_LOOKUP_STRATEGY, [PMID, DOI]),
+        (COMBINED_SEARCH_LOOKUP_STRATEGY, [DOI, PMCID]),
+    ],
+)
+async def test_lookup_execution_metadata_reports_no_fallback_for_normal_routes(
+    monkeypatch,
+    lookup_strategy,
+    publication_ids,
+):
+    client = _RecordingClient()
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: client,
+    )
+
+    results, not_found, lookup_fallback = await DocumentMetadataService(
+        elasticsearch_connection="ci",
+        lookup_strategy=lookup_strategy,
+    ).get_publications_with_metadata(publication_ids)
+
+    assert set(results) == set(publication_ids)
+    assert not_found == []
+    assert lookup_fallback is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "lookup_strategy, publication_ids",
+    [
+        (BULK_SEARCH_LOOKUP_STRATEGY, ["doi:10.1000/café"]),
+        (COMBINED_SEARCH_LOOKUP_STRATEGY, ["doi:10.1000/café"]),
+        (COMBINED_SEARCH_LOOKUP_STRATEGY, [PMID, "doi:10.1000/café"]),
+    ],
+)
+async def test_lookup_execution_metadata_does_not_label_deterministic_non_ascii_routing_as_fallback(
+    monkeypatch,
+    lookup_strategy,
+    publication_ids,
+):
+    identifier = "doi:10.1000/café"
+    client = _RecordingClient(identifier_map={identifier: PMID})
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: client,
+    )
+
+    _, not_found, lookup_fallback = await DocumentMetadataService(
+        elasticsearch_connection="ci",
+        lookup_strategy=lookup_strategy,
+    ).get_publications_with_metadata(publication_ids)
+
+    assert not_found == []
+    assert lookup_fallback is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lookup_strategy", [BULK_SEARCH_LOOKUP_STRATEGY, COMBINED_SEARCH_LOOKUP_STRATEGY])
+async def test_lookup_execution_metadata_marks_rejected_speculative_responses_as_fallback(
+    monkeypatch,
+    lookup_strategy,
+):
+    unsafe_response = {"total": 1, "total_relation": "gte", "hits": []}
+    client = _RecordingClient(
+        bulk_response=unsafe_response,
+        combined_response=unsafe_response,
+    )
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: client,
+    )
+
+    results, not_found, lookup_fallback = await DocumentMetadataService(
+        elasticsearch_connection="ci",
+        lookup_strategy=lookup_strategy,
+    ).get_publications_with_metadata([PMID, DOI])
+
+    assert set(results) == {PMID, DOI}
+    assert not_found == []
+    assert lookup_fallback is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_lookup_fallback_metadata_stays_bound_to_overlapping_requests(monkeypatch):
+    both_started = asyncio.Event()
+    arrivals = 0
+
+    class OverlapClient(_RecordingClient):
+        async def search_terms(self, query_list, field, fields=None, size=None):
+            nonlocal arrivals
+            self.calls.append(("search_terms", list(query_list)))
+            arrivals += 1
+            if arrivals == 2:
+                both_started.set()
+            await asyncio.wait_for(both_started.wait(), timeout=0.1)
+            if query_list == [DOI]:
+                return {"total": 1, "total_relation": "gte", "hits": []}
+            return await super().search_terms(query_list, field, fields, size)
+
+    client = OverlapClient()
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: client,
+    )
+    service = DocumentMetadataService(
+        elasticsearch_connection="ci",
+        lookup_strategy=BULK_SEARCH_LOOKUP_STRATEGY,
+    )
+
+    fallback_result, normal_result = await asyncio.gather(
+        service.get_publications_with_metadata([DOI]),
+        service.get_publications_with_metadata(["doi:10.1000/first"]),
+    )
+
+    assert fallback_result[2] is True
+    assert normal_result[2] is False
+    assert set(fallback_result[0]) == {DOI}
+    assert set(normal_result[0]) == {"doi:10.1000/first"}
+
+
 @pytest.mark.unit
 def test_document_metadata_lookup_strategy_defaults_and_validation():
     assert DocumentMetadataService().lookup_strategy == CURRENT_LOOKUP_STRATEGY
     assert (
         DocumentMetadataService(lookup_strategy=BULK_SEARCH_LOOKUP_STRATEGY).lookup_strategy
         == BULK_SEARCH_LOOKUP_STRATEGY
+    )
+    assert (
+        DocumentMetadataService(lookup_strategy=COMBINED_SEARCH_LOOKUP_STRATEGY).lookup_strategy
+        == COMBINED_SEARCH_LOOKUP_STRATEGY
     )
     with pytest.raises(ValueError, match="lookup_strategy"):
         DocumentMetadataService(lookup_strategy="unknown")

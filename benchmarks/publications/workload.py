@@ -18,7 +18,11 @@ LOOKUP_STRATEGY_HEADER = "X-Publications-Lookup-Strategy"
 # is the default batch size rather than something the caller has to opt into.
 DEFAULT_BATCH_SIZE = 100
 SUPPORTED_METHODS = ("GET", "POST")
-SUPPORTED_LOOKUP_STRATEGIES = ("current", "bulk-search")
+SUPPORTED_LOOKUP_STRATEGIES = ("current", "bulk-search", "combined-search")
+# Keep the original paired benchmark as the default and as the meaning of the
+# backwards-compatible ``--compare-lookup-strategies`` shorthand.  Callers can
+# select any other distinct pair explicitly.
+DEFAULT_COMPARISON_STRATEGIES = ("current", "bulk-search")
 
 
 @dataclass(frozen=True)

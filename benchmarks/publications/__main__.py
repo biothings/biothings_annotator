@@ -27,6 +27,7 @@ from benchmarks.publications.users import (
 )
 from benchmarks.publications.workload import (
     DEFAULT_BATCH_SIZE,
+    DEFAULT_COMPARISON_STRATEGIES,
     SUPPORTED_LOOKUP_STRATEGIES,
     RunPlan,
     Workload,
@@ -73,7 +74,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--compare-lookup-strategies",
         action="store_true",
         help=(
-            "issue balanced current/bulk-search pairs against one deployment; --requests and --warmup then count pairs"
+            "backwards-compatible shorthand for --compare-strategies current bulk-search; "
+            "--requests and --warmup then count pairs"
+        ),
+    )
+    strategy_mode.add_argument(
+        "--compare-strategies",
+        nargs=2,
+        choices=SUPPORTED_LOOKUP_STRATEGIES,
+        metavar=("CONTROL", "EXPERIMENT"),
+        help=(
+            "issue balanced pairs for two explicitly selected strategies; reports EXPERIMENT minus CONTROL, "
+            "so a negative delta favors EXPERIMENT"
         ),
     )
     parser.add_argument(
@@ -253,18 +265,22 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
 
 
 async def execute(arguments: argparse.Namespace) -> Union[RunResult, ComparisonResult]:
-    if arguments.compare_lookup_strategies and arguments.users is not None:
-        raise SystemExit("--compare-lookup-strategies cannot be combined with --users")
-    if arguments.compare_lookup_strategies and not arguments.identifier_file:
-        raise SystemExit("--compare-lookup-strategies requires --identifier-file with real resolving identifiers")
-    if arguments.compare_lookup_strategies and (arguments.requests < 2 or arguments.requests % 2):
-        raise SystemExit("--compare-lookup-strategies requires an even --requests value of at least 2")
+    comparison_strategies: Optional[Tuple[str, str]] = None
+    if arguments.compare_lookup_strategies:
+        comparison_strategies = DEFAULT_COMPARISON_STRATEGIES
+    elif arguments.compare_strategies:
+        comparison_strategies = tuple(arguments.compare_strategies)
+
+    if comparison_strategies and comparison_strategies[0] == comparison_strategies[1]:
+        raise SystemExit("--compare-strategies requires two distinct lookup strategies")
+    if comparison_strategies and arguments.users is not None:
+        raise SystemExit("paired strategy comparison cannot be combined with --users")
+    if comparison_strategies and not arguments.identifier_file:
+        raise SystemExit("paired strategy comparison requires --identifier-file with real resolving identifiers")
+    if comparison_strategies and (arguments.requests < 2 or arguments.requests % 2):
+        raise SystemExit("paired strategy comparison requires an even --requests value of at least 2")
 
     workload, cache_primed = await _prepare_workload(arguments)
-    if arguments.compare_lookup_strategies and not any(
-        identifier.lower().startswith(("doi:", "pmc:")) for identifier in workload.identifier_pool
-    ):
-        raise SystemExit("comparison identifier file must contain at least one DOI or PMCID")
     plan = RunPlan(
         base_url=arguments.base_url,
         workload=workload,
@@ -276,8 +292,12 @@ async def execute(arguments: argparse.Namespace) -> Union[RunResult, ComparisonR
         threshold_ms=arguments.threshold_ms,
         ramp=tuple(arguments.ramp or ()),
     )
-    if arguments.compare_lookup_strategies:
-        return await run_comparison_plan(plan, cache_primed=cache_primed)
+    if comparison_strategies:
+        return await run_comparison_plan(
+            plan,
+            cache_primed=cache_primed,
+            strategies=comparison_strategies,
+        )
     if arguments.users is None:
         return await run_plan(plan, cache_primed=cache_primed)
 

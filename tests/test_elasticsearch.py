@@ -522,6 +522,163 @@ async def test_elasticsearch_search_terms_uses_one_bounded_exact_search_and_repo
     }
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_elasticsearch_search_ids_or_terms_combines_both_exact_paths_in_one_search():
+    document_ids = ["PMID:16954148"]
+    alternate_ids = ["pmc:pmc1904490", "doi:10.1242/jcs.03153"]
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "body": json.loads(request.content),
+            }
+        )
+        return httpx.Response(
+            200,
+            json={
+                "took": 3,
+                "timed_out": False,
+                "_shards": {"total": 1, "successful": 1, "failed": 0},
+                "hits": {
+                    "total": {"value": 2, "relation": "eq"},
+                    "max_score": 1.0,
+                    "hits": [
+                        {
+                            "_id": "PMID:16954148",
+                            "_score": 1.0,
+                            "matched_queries": ["document_ids"],
+                            "_source": {"pubmed": {"title": "PMID-only"}},
+                        },
+                        {
+                            "_id": "PMID:17284678",
+                            "_score": 1.0,
+                            "matched_queries": ["alternative_identifiers"],
+                            "_source": {
+                                "pubmed": {
+                                    "identifiers": [
+                                        "PMC:PMC1904490",
+                                        "doi:10.1242/jcs.03153",
+                                    ]
+                                }
+                            },
+                        },
+                    ],
+                },
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+        result = await client.search_ids_or_terms(
+            document_ids,
+            alternate_ids,
+            field="pubmed.identifiers",
+            fields=["pubmed"],
+            size=3,
+        )
+
+    assert requests == [
+        {
+            "method": "POST",
+            "path": "/annotator-pubmed/_search",
+            "body": {
+                "size": 3,
+                "track_total_hits": True,
+                "_source": ["pubmed"],
+                "query": {
+                    "constant_score": {
+                        "filter": {
+                            "bool": {
+                                "should": [
+                                    {
+                                        "ids": {
+                                            "values": document_ids,
+                                            "_name": "document_ids",
+                                        }
+                                    },
+                                    {
+                                        "terms": {
+                                            "pubmed.identifiers": alternate_ids,
+                                            "_name": "alternative_identifiers",
+                                        }
+                                    },
+                                ],
+                                "minimum_should_match": 1,
+                            }
+                        }
+                    }
+                },
+            },
+        }
+    ]
+    assert result == {
+        "took": 3,
+        "timed_out": False,
+        "terminated_early": False,
+        "failed_shards": 0,
+        "total": 2,
+        "total_relation": "eq",
+        "max_score": 1.0,
+        "hits": [
+            {
+                "pubmed": {"title": "PMID-only"},
+                "_id": "PMID:16954148",
+                "_score": 1.0,
+                "_matched_queries": ["document_ids"],
+            },
+            {
+                "pubmed": {
+                    "identifiers": [
+                        "PMC:PMC1904490",
+                        "doi:10.1242/jcs.03153",
+                    ]
+                },
+                "_id": "PMID:17284678",
+                "_score": 1.0,
+                "_matched_queries": ["alternative_identifiers"],
+            },
+        ],
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_elasticsearch_search_ids_or_terms_preserves_an_incomplete_envelope_for_fallback():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/annotator-pubmed/_search"
+        return httpx.Response(200, json={"timed_out": False, "_shards": {}, "hits": {}})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+        result = await client.search_ids_or_terms(
+            ["PMID:16954148"],
+            [],
+            field="pubmed.identifiers",
+            fields=["pubmed"],
+            size=1,
+        )
+
+    assert result["timed_out"] is False
+    assert result["failed_shards"] is None
+    assert result["total"] is None
+    assert result["total_relation"] is None
+    assert result["hits"] is None
+
+
 @pytest.mark.asyncio
 async def test_elasticsearch_client_supports_configured_headers():
     requests = []

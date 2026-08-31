@@ -485,41 +485,61 @@ python -m benchmarks.publications --method POST --compare-lookup-strategies \
   --identifier-file real-publication-ids.txt --concurrency 1 \
   --requests 200 --warmup 20 --seed 2026
 
+# Explicit ordered comparison: deltas are experiment minus control.
+python -m benchmarks.publications --method POST \
+  --compare-strategies bulk-search combined-search \
+  --identifier-file real-publication-ids.txt --concurrency 1 \
+  --requests 200 --warmup 20 --seed 2026
+
 # A single arm remains available for an absolute load-bearing sweep.
-python -m benchmarks.publications --lookup-strategy bulk-search --ramp 1,4,8,16 --requests 200
+python -m benchmarks.publications --lookup-strategy combined-search --ramp 1,4,8,16 --requests 200
 
 # Machine-readable output; exit status is 0 only if every stage met the objective.
 python -m benchmarks.publications --json --slo-basis server
 ```
 
 `--lookup-strategy` sends the undocumented `X-Publications-Lookup-Strategy` benchmark header. The
-endpoint defaults to `current`, holds independent current and bulk-search service instances, and echoes
-the selection as `_meta.lookup_strategy`. The harness rejects a missing or mismatched attribution rather
-than admitting that latency into the result. `--compare-lookup-strategies` performs the A/B in one
-invocation: it precomputes each batch, sends that exact batch to both implementations, and balances
-current-first/bulk-search-first order after the batches are known. In comparison mode, `--requests` and
+endpoint defaults to `current`, holds independent `current`, `bulk-search`, and `combined-search` service
+instances, and echoes the selection as `_meta.lookup_strategy`. The harness rejects a missing or mismatched
+attribution rather than admitting that latency into the result. The endpoint also reports
+`_meta.lookup_fallback`; comparison mode requires it to be the boolean `false` for both arms. A true marker
+means the requested strategy fell back after rejecting its speculative Elasticsearch response, while a
+missing marker usually means the deployment is stale or mixed. Either case invalidates the pair, so the
+reported deltas measure only the requested normal paths. `--compare-strategies CONTROL EXPERIMENT` selects
+any two distinct implementations in an explicit order. Every reported delta is experiment minus control,
+so a negative value favors the experiment. The existing bare `--compare-lookup-strategies` flag remains
+shorthand for `--compare-strategies current bulk-search`.
+
+One comparison invocation precomputes each batch, sends that exact batch to both implementations, and
+balances which strategy runs first after the batches are known. In comparison mode, `--requests` and
 `--warmup` count pairs, so 200 measured pairs produce 400 HTTP requests. The measured pair count must be
 even and at least two, ensuring both request orders are represented. `--concurrency` remains the maximum
 number of HTTP requests in flight; the two members of a pair are sequential rather than doubling the
 offered load.
 
-The paired report keeps current-first and bulk-search-first deltas separate as well as combined. That is
-necessary because the second request can benefit from Elasticsearch state warmed by the first. Balanced
-ordering is applied separately to pairs containing DOI/PMCID identifiers and to PMID-only controls, so
-the changed path is represented in both orders. This controls first-order bias, but one shared deployment
-cannot give both treatments a cold first lookup. If the order strata disagree in direction, treat the run
-as cache/order-sensitive rather than declaring a winner. The mixed A/B wall time is not a standalone
-capacity measurement; use the existing single-strategy mode with `--ramp` for that. Comparison mode is
-intentionally closed-loop and cannot be combined with `--users`. The selector is temporary measurement
-scaffolding and should be removed with the losing implementation after the A/B.
+The paired report labels both arms dynamically and keeps control-first and experiment-first deltas separate
+as well as combined. That is necessary because the second request can benefit from Elasticsearch state
+warmed by the first. Ordering is also balanced within the batches that exercise code differing between the
+selected pair: DOI/PMCID batches for `current` versus `bulk-search`, PMID-containing batches for
+`bulk-search` versus `combined-search`, and every nonempty batch for `current` versus `combined-search`.
+Any batch containing a non-ASCII alternative identifier is a no-change control because all strategies use
+the exact-search fallback. Alternative-identifier counts remain visible as workload information, while the
+pair-specific changed-path count says whether the selected implementations actually differed. A stage with
+zero changed-path pairs may retain an integrity pass, but its report explicitly says that it cannot select a
+winner. This controls first-order bias, but one shared deployment cannot give both treatments a cold first
+lookup. If the order strata disagree in direction, treat the run as cache/order-sensitive rather than
+declaring a winner. The mixed A/B wall time is not a standalone capacity measurement; use the existing
+single-strategy mode with `--ramp` for that. Comparison mode is intentionally closed-loop and cannot be
+combined with `--users`. The selector is temporary measurement scaffolding and should be removed with the
+losing implementation after the A/B.
 
-Comparison mode requires `--identifier-file` with one real, resolving identifier per line, at least one
-batch's worth of identifiers, and at least one DOI or PMCID; blank lines and lines beginning with `#` are
-ignored. Prefer one identifier per distinct document and enough DOI/PMCID entries for the reported mix to
-represent the traffic being decided. Synthesized DOI values mostly miss, while an all-PMID corpus sends
-both implementations down the same `_mget` path, so neither can decide whether the bulk alternative-ID
-search is faster. Any identifier reported as `not_found` by either arm invalidates its pair and makes the
-comparison exit nonzero.
+Comparison mode requires `--identifier-file` with one real, resolving identifier per line and at least one
+batch's worth of identifiers; blank lines and lines beginning with `#` are ignored. Prefer one identifier
+per distinct document and a mix representing the traffic being decided. A 100%-PMID corpus is valid and is
+the direct changed-path case for `bulk-search` versus `combined-search`; for `current` versus `bulk-search`
+it is a useful no-change control. Synthesized DOI values mostly miss, so use real alternatives when the
+alternative path matters. Any identifier reported as `not_found` by either arm invalidates its pair and
+makes the comparison exit nonzero.
 
 ###### Reading the numbers
 

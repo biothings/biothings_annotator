@@ -28,6 +28,7 @@ import httpx
 
 from benchmarks.publications.metrics import Sample, StageReport
 from benchmarks.publications.workload import (
+    DEFAULT_COMPARISON_STRATEGIES,
     LOOKUP_STRATEGY_HEADER,
     SUPPORTED_LOOKUP_STRATEGIES,
     RunPlan,
@@ -44,6 +45,35 @@ _WORKER_SEED_STRIDE = 1_000_003
 # Let in-flight work drain between ramp stages so one stage's queue does not
 # land in the next stage's latencies.
 _STAGE_COOLDOWN_SECONDS = 1.0
+
+
+def _exercises_changed_path(identifiers: Tuple[str, ...], strategies: Tuple[str, str]) -> bool:
+    """Whether this batch reaches code that differs between the selected arms.
+
+    The selector implementations deliberately overlap: current and bulk-search
+    differ only for alternative IDs; bulk-search and combined-search differ
+    when a PMID is present; current and combined-search differ for every
+    nonempty normal-path request. A non-ASCII alternative makes every strategy
+    use the exact fallback. The classification is independent of arm order.
+    """
+    strategy_set = frozenset(strategies)
+    search_ids = tuple(identifier for identifier in identifiers if not identifier.lower().startswith("pmid:"))
+    # A single non-ASCII alternative identifier makes every implementation use
+    # the current exact-search fallback for the whole request. Classifying a
+    # mixed batch by its PMID or ASCII alternatives in that case would claim a
+    # treatment difference that the service deliberately did not execute.
+    if any(not identifier.isascii() for identifier in search_ids):
+        return False
+
+    has_pmid = len(search_ids) < len(identifiers)
+    has_alternative = any(identifier.lower().startswith(("doi:", "pmc:")) for identifier in identifiers)
+    if strategy_set == frozenset(("current", "bulk-search")):
+        return has_alternative
+    if strategy_set == frozenset(("bulk-search", "combined-search")):
+        return has_pmid
+    if strategy_set == frozenset(("current", "combined-search")):
+        return bool(identifiers)
+    return False
 
 
 class _Budget:
@@ -83,16 +113,39 @@ class RunResult:
 
 @dataclass(frozen=True)
 class PairedObservation:
-    """Both lookup treatments applied to one identical identifier batch."""
+    """Both selected lookup treatments applied to one identical batch."""
 
     index: int
     first_strategy: str
     identifiers: Tuple[str, ...]
-    current: Sample
-    bulk_search: Sample
+    samples: Dict[str, Sample]
+    strategies: Tuple[str, str] = DEFAULT_COMPARISON_STRATEGIES
     request_id_mismatches: int = 0
     lookup_strategy_mismatches: int = 0
     semantic_match: Optional[bool] = None
+
+    def __post_init__(self) -> None:
+        if len(self.strategies) != 2 or self.strategies[0] == self.strategies[1]:
+            raise ValueError("paired observations require two distinct strategies")
+        if self.first_strategy not in self.strategies:
+            raise ValueError("first_strategy must be one of the paired strategies")
+        if set(self.samples) != set(self.strategies):
+            raise ValueError("samples must contain exactly the paired strategies")
+
+    def sample_for(self, strategy: str) -> Sample:
+        if strategy not in self.strategies:
+            raise ValueError(f"strategy {strategy!r} is not part of this pair")
+        return self.samples[strategy]
+
+    # These properties preserve the small Python API used by existing
+    # current-vs-bulk callers while the generic mapping supports any pair.
+    @property
+    def current(self) -> Sample:
+        return self.samples["current"]
+
+    @property
+    def bulk_search(self) -> Sample:
+        return self.samples["bulk-search"]
 
     @property
     def order_label(self) -> str:
@@ -101,6 +154,10 @@ class PairedObservation:
     @property
     def alternative_identifier_count(self) -> int:
         return sum(identifier.lower().startswith(("doi:", "pmc:")) for identifier in self.identifiers)
+
+    @property
+    def exercises_changed_path(self) -> bool:
+        return _exercises_changed_path(self.identifiers, self.strategies)
 
     @staticmethod
     def _unresolved_for(sample: Sample) -> int:
@@ -116,7 +173,7 @@ class PairedObservation:
         # Both arms receive the same batch and semantic equality is checked
         # separately. Count unresolved identifiers once per pair, not once per
         # treatment.
-        return max(self._unresolved_for(self.current), self._unresolved_for(self.bulk_search))
+        return max(self._unresolved_for(self.sample_for(strategy)) for strategy in self.strategies)
 
     @property
     def fully_resolved(self) -> bool:
@@ -126,31 +183,48 @@ class PairedObservation:
     def valid(self) -> bool:
         """Whether this pair can support a like-for-like latency delta."""
         return (
-            self.current.ok
-            and self.bulk_search.ok
+            all(self.sample_for(strategy).ok for strategy in self.strategies)
+            and all(self.sample_for(strategy).lookup_fallback is False for strategy in self.strategies)
             and not self.request_id_mismatches
             and not self.lookup_strategy_mismatches
             and self.semantic_match is True
             and self.fully_resolved
         )
 
+    @property
+    def lookup_fallback_samples(self) -> int:
+        return sum(
+            self.sample_for(strategy).status == 200 and self.sample_for(strategy).lookup_fallback is True
+            for strategy in self.strategies
+        )
+
+    @property
+    def lookup_fallback_attribution_missing(self) -> int:
+        return sum(
+            self.sample_for(strategy).status == 200 and self.sample_for(strategy).lookup_fallback is None
+            for strategy in self.strategies
+        )
+
 
 @dataclass
 class ComparisonStage:
-    """One concurrency stage from a paired current/bulk-search comparison."""
+    """One concurrency stage from a paired lookup-strategy comparison."""
 
     label: str
     concurrency: int
     wall_seconds: float
+    strategies: Tuple[str, str] = DEFAULT_COMPARISON_STRATEGIES
     pairs: List[PairedObservation] = field(default_factory=list)
     cache_primed: bool = False
 
+    @staticmethod
+    def order_key(strategy: str) -> str:
+        return f"{strategy.replace('-', '_')}_first"
+
     def samples_for(self, strategy: str) -> List[Sample]:
-        if strategy == "current":
-            return [pair.current for pair in self.pairs]
-        if strategy == "bulk-search":
-            return [pair.bulk_search for pair in self.pairs]
-        raise ValueError(f"unknown lookup strategy: {strategy}")
+        if strategy not in self.strategies:
+            raise ValueError(f"strategy {strategy!r} is not part of this comparison")
+        return [pair.sample_for(strategy) for pair in self.pairs]
 
     def arm_report(self, strategy: str) -> StageReport:
         """Reuse the ordinary latency accounting without its capacity claims."""
@@ -173,13 +247,14 @@ class ComparisonStage:
     @property
     def order_counts(self) -> Dict[str, int]:
         return {
-            "current_first": sum(pair.first_strategy == "current" for pair in self.pairs),
-            "bulk_search_first": sum(pair.first_strategy == "bulk-search" for pair in self.pairs),
+            self.order_key(strategy): sum(pair.first_strategy == strategy for pair in self.pairs)
+            for strategy in self.strategies
         }
 
     @property
     def order_balanced(self) -> bool:
-        return self.order_counts["current_first"] == self.order_counts["bulk_search_first"] > 0
+        counts = list(self.order_counts.values())
+        return len(counts) == 2 and counts[0] == counts[1] > 0
 
     @property
     def alternative_identifier_count(self) -> int:
@@ -191,21 +266,42 @@ class ComparisonStage:
         return sum(pair.alternative_identifier_count > 0 for pair in self.pairs)
 
     @property
-    def changed_path_order_counts(self) -> Dict[str, int]:
-        changed_pairs = [pair for pair in self.pairs if pair.alternative_identifier_count > 0]
+    def alternative_order_counts(self) -> Dict[str, int]:
+        alternative_pairs = [pair for pair in self.pairs if pair.alternative_identifier_count > 0]
         return {
-            "current_first": sum(pair.first_strategy == "current" for pair in changed_pairs),
-            "bulk_search_first": sum(pair.first_strategy == "bulk-search" for pair in changed_pairs),
+            self.order_key(strategy): sum(pair.first_strategy == strategy for pair in alternative_pairs)
+            for strategy in self.strategies
+        }
+
+    @property
+    def alternative_order_balanced(self) -> bool:
+        counts = list(self.alternative_order_counts.values())
+        # An all-PMID comparison has no alternative-ID stratum to balance; its
+        # global pair order is still required to be exactly balanced.
+        if not any(counts):
+            return True
+        return len(counts) == 2 and all(count > 0 for count in counts) and abs(counts[0] - counts[1]) <= 1
+
+    # The changed-path stratum depends on the selected implementations, while
+    # alternative-ID counts above remain workload information.
+    @property
+    def changed_path_pair_count(self) -> int:
+        return sum(pair.exercises_changed_path for pair in self.pairs)
+
+    @property
+    def changed_path_order_counts(self) -> Dict[str, int]:
+        changed_pairs = [pair for pair in self.pairs if pair.exercises_changed_path]
+        return {
+            self.order_key(strategy): sum(pair.first_strategy == strategy for pair in changed_pairs)
+            for strategy in self.strategies
         }
 
     @property
     def changed_path_order_balanced(self) -> bool:
-        counts = self.changed_path_order_counts
-        return (
-            counts["current_first"] > 0
-            and counts["bulk_search_first"] > 0
-            and abs(counts["current_first"] - counts["bulk_search_first"]) <= 1
-        )
+        counts = list(self.changed_path_order_counts.values())
+        if not any(counts):
+            return True
+        return len(counts) == 2 and all(count > 0 for count in counts) and abs(counts[0] - counts[1]) <= 1
 
     @property
     def unresolved_pairs(self) -> int:
@@ -215,12 +311,21 @@ class ComparisonStage:
     def unresolved_identifiers(self) -> int:
         return sum(pair.unresolved_identifier_count for pair in self.pairs)
 
+    @property
+    def lookup_fallback_samples(self) -> int:
+        return sum(pair.lookup_fallback_samples for pair in self.pairs)
+
+    @property
+    def lookup_fallback_attribution_missing(self) -> int:
+        return sum(pair.lookup_fallback_attribution_missing for pair in self.pairs)
+
 
 @dataclass
 class ComparisonResult:
-    """A single-deployment, paired current-vs-bulk-search benchmark run."""
+    """A single-deployment benchmark of an explicitly ordered strategy pair."""
 
     plan: RunPlan
+    strategies: Tuple[str, str] = DEFAULT_COMPARISON_STRATEGIES
     stages: List[ComparisonStage] = field(default_factory=list)
 
     @property
@@ -244,6 +349,14 @@ class ComparisonResult:
         return sum(stage.unresolved_identifiers for stage in self.stages)
 
     @property
+    def lookup_fallback_samples(self) -> int:
+        return sum(stage.lookup_fallback_samples for stage in self.stages)
+
+    @property
+    def lookup_fallback_attribution_missing(self) -> int:
+        return sum(stage.lookup_fallback_attribution_missing for stage in self.stages)
+
+    @property
     def invalid_pairs(self) -> int:
         """Pairs excluded because either arm failed or integrity was uncertain."""
         return sum(len(stage.pairs) - len(stage.valid_pairs) for stage in self.stages)
@@ -253,6 +366,7 @@ class ComparisonResult:
         return bool(self.stages) and all(
             bool(stage.pairs)
             and len(stage.valid_pairs) == len(stage.pairs)
+            and stage.strategies == self.strategies
             and stage.order_balanced
             and stage.changed_path_order_balanced
             for stage in self.stages
@@ -279,6 +393,7 @@ def _parse_response(
         "request_id_matched": True,
         "lookup_strategy": None,
         "lookup_strategy_matched": True,
+        "lookup_fallback": None,
         "semantic_signature": None,
         "error": None,
     }
@@ -302,6 +417,14 @@ def _parse_response(
         if not parsed["lookup_strategy_matched"]:
             observed_label = observed_lookup_strategy if observed_lookup_strategy is not None else "<missing>"
             parsed["error"] = f"lookup-strategy-mismatch:expected={expected_lookup_strategy},observed={observed_label}"
+        observed_lookup_fallback = meta.get("lookup_fallback")
+        if isinstance(observed_lookup_fallback, bool):
+            parsed["lookup_fallback"] = observed_lookup_fallback
+        if capture_semantics and observed_lookup_fallback is not False:
+            fallback_error = (
+                "lookup-fallback" if observed_lookup_fallback is True else "lookup-fallback-attribution-missing"
+            )
+            parsed["error"] = f"{parsed['error']};{fallback_error}" if parsed["error"] else fallback_error
         if capture_semantics:
             semantic_body = {
                 "results": results,
@@ -351,6 +474,7 @@ async def _issue_request(
         not_found=parsed["not_found"],
         response_bytes=len(response.content),
         lookup_strategy=parsed["lookup_strategy"],
+        lookup_fallback=parsed["lookup_fallback"],
         semantic_signature=parsed["semantic_signature"],
         error=parsed["error"],
     )
@@ -497,15 +621,19 @@ def _comparison_cases(
     seed: Optional[int],
     seed_offset: int,
     order_offset: int,
+    strategies: Tuple[str, str] = DEFAULT_COMPARISON_STRATEGIES,
 ) -> List[_ComparisonCase]:
     """Draw every batch, then balance order within changed/control strata."""
+    if len(strategies) != 2 or strategies[0] == strategies[1]:
+        raise ValueError("paired comparison requires two distinct strategies")
+    if any(strategy not in SUPPORTED_LOOKUP_STRATEGIES for strategy in strategies):
+        raise ValueError(f"comparison strategies must be chosen from {SUPPORTED_LOOKUP_STRATEGIES}")
+
     corpus_seed = None if seed is None else seed + seed_offset
     corpus = workload.build_corpus(corpus_seed)
     batches = [tuple(workload.next_batch(corpus)) for _ in range(total_pairs)]
     changed_indexes = [
-        index
-        for index, identifiers in enumerate(batches)
-        if any(identifier.lower().startswith(("doi:", "pmc:")) for identifier in identifiers)
+        index for index, identifiers in enumerate(batches) if _exercises_changed_path(identifiers, strategies)
     ]
     changed_index_set = set(changed_indexes)
     control_indexes = [index for index in range(total_pairs) if index not in changed_index_set]
@@ -513,31 +641,31 @@ def _comparison_cases(
     # The measured pair count is even, so this is exact globally. Supporting an
     # odd warmup count costs nothing and keeps that discarded traffic balanced
     # within one request too.
-    global_starts_current = order_offset % 2 == 0
-    target_current = (total_pairs + 1) // 2 if global_starts_current else total_pairs // 2
-    changed_current = (len(changed_indexes) + 1) // 2 if global_starts_current else len(changed_indexes) // 2
-    control_current = target_current - changed_current
+    global_starts_first = order_offset % 2 == 0
+    target_first = (total_pairs + 1) // 2 if global_starts_first else total_pairs // 2
+    changed_first = (len(changed_indexes) + 1) // 2 if global_starts_first else len(changed_indexes) // 2
+    control_first = target_first - changed_first
 
     orders: Dict[int, str] = {}
 
-    def assign(indexes: List[int], current_count: int, starts_current: bool) -> None:
+    def assign(indexes: List[int], first_count: int, starts_first: bool) -> None:
         if not indexes:
             return
         lower = len(indexes) // 2
         upper = (len(indexes) + 1) // 2
-        if current_count not in (lower, upper):
+        if first_count not in (lower, upper):
             raise AssertionError("comparison order allocation is not balanced")
         if lower == upper:
-            first_is_current = starts_current
+            first_arm_leads = starts_first
         else:
-            first_is_current = current_count == upper
+            first_arm_leads = first_count == upper
         for position, index in enumerate(indexes):
-            is_current = first_is_current if position % 2 == 0 else not first_is_current
-            orders[index] = "current" if is_current else "bulk-search"
+            first_arm_is_first = first_arm_leads if position % 2 == 0 else not first_arm_leads
+            orders[index] = strategies[0] if first_arm_is_first else strategies[1]
 
-    assign(changed_indexes, changed_current, global_starts_current)
-    control_starts_current = global_starts_current if not changed_indexes else not global_starts_current
-    assign(control_indexes, control_current, control_starts_current)
+    assign(changed_indexes, changed_first, global_starts_first)
+    control_starts_first = global_starts_first if not changed_indexes else not global_starts_first
+    assign(control_indexes, control_first, control_starts_first)
     return [
         _ComparisonCase(
             index=index,
@@ -552,6 +680,7 @@ async def _comparison_worker(
     client: httpx.AsyncClient,
     queue: _CaseQueue,
     workloads: Dict[str, Workload],
+    strategies: Tuple[str, str],
     collected: List[PairedObservation],
 ) -> None:
     while True:
@@ -559,7 +688,7 @@ async def _comparison_worker(
         if case is None:
             return
 
-        second_strategy = "bulk-search" if case.first_strategy == "current" else "current"
+        second_strategy = strategies[1] if case.first_strategy == strategies[0] else strategies[0]
         samples: Dict[str, Sample] = {}
         request_id_mismatches = 0
         lookup_strategy_mismatches = 0
@@ -574,18 +703,18 @@ async def _comparison_worker(
             request_id_mismatches += int(not request_id_matched)
             lookup_strategy_mismatches += int(not lookup_strategy_matched)
 
-        current = samples["current"]
-        bulk_search = samples["bulk-search"]
+        first_sample = samples[strategies[0]]
+        second_sample = samples[strategies[1]]
         semantic_match = None
-        if current.semantic_signature is not None and bulk_search.semantic_signature is not None:
-            semantic_match = current.semantic_signature == bulk_search.semantic_signature
+        if first_sample.semantic_signature is not None and second_sample.semantic_signature is not None:
+            semantic_match = first_sample.semantic_signature == second_sample.semantic_signature
         collected.append(
             PairedObservation(
                 index=case.index,
                 first_strategy=case.first_strategy,
                 identifiers=case.identifiers,
-                current=current,
-                bulk_search=bulk_search,
+                samples=samples,
+                strategies=strategies,
                 request_id_mismatches=request_id_mismatches,
                 lookup_strategy_mismatches=lookup_strategy_mismatches,
                 semantic_match=semantic_match,
@@ -600,21 +729,36 @@ async def _run_comparison_stage(
     total_pairs: int,
     seed_offset: int,
     order_offset: int,
+    strategies: Tuple[str, str] = DEFAULT_COMPARISON_STRATEGIES,
 ) -> Tuple[List[PairedObservation], float]:
-    cases = _comparison_cases(plan.workload, total_pairs, plan.seed, seed_offset, order_offset)
+    cases = _comparison_cases(
+        plan.workload,
+        total_pairs,
+        plan.seed,
+        seed_offset,
+        order_offset,
+        strategies=strategies,
+    )
     queue = _CaseQueue(cases)
     collected: List[PairedObservation] = []
-    workloads = {strategy: replace(plan.workload, lookup_strategy=strategy) for strategy in SUPPORTED_LOOKUP_STRATEGIES}
+    workloads = {strategy: replace(plan.workload, lookup_strategy=strategy) for strategy in strategies}
 
     started_at = time.perf_counter()
     await asyncio.gather(
-        *(_comparison_worker(client, queue, workloads, collected) for _ in range(min(concurrency, total_pairs)))
+        *(
+            _comparison_worker(client, queue, workloads, strategies, collected)
+            for _ in range(min(concurrency, total_pairs))
+        )
     )
     return sorted(collected, key=lambda pair: pair.index), time.perf_counter() - started_at
 
 
-async def run_comparison_plan(plan: RunPlan, cache_primed: bool = False) -> ComparisonResult:
-    """Run a balanced, paired current-vs-bulk-search comparison on one deployment.
+async def run_comparison_plan(
+    plan: RunPlan,
+    cache_primed: bool = False,
+    strategies: Tuple[str, str] = DEFAULT_COMPARISON_STRATEGIES,
+) -> ComparisonResult:
+    """Run a balanced comparison of two lookup strategies on one deployment.
 
     ``concurrency`` remains the maximum number of HTTP requests in flight. A
     worker issues the two members of its pair sequentially; starting both at
@@ -626,10 +770,12 @@ async def run_comparison_plan(plan: RunPlan, cache_primed: bool = False) -> Comp
         raise ValueError("paired comparison requires an even --requests value of at least 2")
     if not plan.workload.uses_identifier_pool:
         raise ValueError("paired comparison requires a real --identifier-file corpus")
-    if not any(identifier.lower().startswith(("doi:", "pmc:")) for identifier in plan.workload.identifier_pool):
-        raise ValueError("paired comparison identifier pool must contain at least one DOI or PMCID")
+    if len(strategies) != 2 or strategies[0] == strategies[1]:
+        raise ValueError("paired comparison requires two distinct strategies")
+    if any(strategy not in SUPPORTED_LOOKUP_STRATEGIES for strategy in strategies):
+        raise ValueError(f"comparison strategies must be chosen from {SUPPORTED_LOOKUP_STRATEGIES}")
 
-    result = ComparisonResult(plan=plan)
+    result = ComparisonResult(plan=plan, strategies=strategies)
     peak_concurrency = max(plan.stages)
     limits = httpx.Limits(
         max_connections=peak_concurrency,
@@ -654,6 +800,7 @@ async def run_comparison_plan(plan: RunPlan, cache_primed: bool = False) -> Comp
                     total_pairs=plan.warmup_requests,
                     seed_offset=-(stage_index + 1),
                     order_offset=stage_index + 1,
+                    strategies=strategies,
                 )
 
             pairs, wall_seconds = await _run_comparison_stage(
@@ -663,11 +810,13 @@ async def run_comparison_plan(plan: RunPlan, cache_primed: bool = False) -> Comp
                 total_pairs=plan.requests,
                 seed_offset=stage_index,
                 order_offset=stage_index,
+                strategies=strategies,
             )
             stage = ComparisonStage(
                 label=f"c={concurrency}",
                 concurrency=concurrency,
                 wall_seconds=wall_seconds,
+                strategies=strategies,
                 pairs=pairs,
                 cache_primed=cache_primed,
             )

@@ -39,7 +39,13 @@ from benchmarks.publications import (
 )
 from benchmarks.publications.__main__ import _prepare_workload, build_parser
 from benchmarks.publications.report import MIN_CEILING_SUCCESS_RATE, sustained_ceiling
-from benchmarks.publications.runner import RunResult, _comparison_cases, _issue_request, _run_comparison_stage
+from benchmarks.publications.runner import (
+    RunResult,
+    _comparison_cases,
+    _exercises_changed_path,
+    _issue_request,
+    _run_comparison_stage,
+)
 from benchmarks.publications.users import UserModel, capacity_table, run_user_plan, supported_users
 
 LIVE_BASE_URL = os.environ.get("PUBLICATIONS_LOAD_TEST_BASE_URL", "https://annotator.ci.transltr.io")
@@ -231,17 +237,22 @@ def test_post_requests_carry_identifiers_in_the_json_body():
 
 
 @pytest.mark.unit
-def test_lookup_strategy_is_selected_from_the_cli_and_sent_as_a_header():
-    arguments = build_parser().parse_args(["--lookup-strategy", "bulk-search"])
+@pytest.mark.parametrize("strategy", ["bulk-search", "combined-search"])
+def test_lookup_strategy_is_selected_from_the_cli_and_sent_as_a_header(strategy):
+    arguments = build_parser().parse_args(["--lookup-strategy", strategy])
     workload = Workload(lookup_strategy=arguments.lookup_strategy)
     _, kwargs = workload.build_request(["PMID:1"], "rid")
-    assert kwargs["headers"] == {LOOKUP_STRATEGY_HEADER: "bulk-search"}
+    assert kwargs["headers"] == {LOOKUP_STRATEGY_HEADER: strategy}
 
 
 @pytest.mark.unit
 def test_paired_mode_is_mutually_exclusive_with_a_single_lookup_strategy():
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--compare-lookup-strategies", "--lookup-strategy", "bulk-search"])
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            ["--compare-strategies", "bulk-search", "combined-search", "--lookup-strategy", "current"]
+        )
 
 
 @pytest.mark.unit
@@ -256,7 +267,7 @@ async def test_paired_mode_rejects_the_user_population_model():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_paired_mode_requires_a_real_corpus_with_alternative_identifiers(tmp_path):
+async def test_paired_mode_requires_a_real_corpus_but_accepts_an_all_pmid_control(tmp_path, monkeypatch):
     from benchmarks.publications.__main__ import execute
 
     missing_file = build_parser().parse_args(["--compare-lookup-strategies", "--requests", "2"])
@@ -276,8 +287,59 @@ async def test_paired_mode_requires_a_real_corpus_with_alternative_identifiers(t
             "2",
         ]
     )
-    with pytest.raises(SystemExit, match="at least one DOI or PMCID"):
-        await execute(all_pmids)
+    calls = []
+
+    async def fake_run(plan, cache_primed, strategies):
+        calls.append((plan, cache_primed, strategies))
+        return "paired-result"
+
+    monkeypatch.setattr("benchmarks.publications.__main__.run_comparison_plan", fake_run)
+
+    assert await execute(all_pmids) == "paired-result"
+    assert calls[0][2] == ("current", "bulk-search")
+    assert calls[0][0].workload.identifier_pool == ("PMID:1", "PMID:2")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_explicit_strategy_pair_is_ordered_control_then_experiment(tmp_path, monkeypatch):
+    from benchmarks.publications.__main__ import execute
+
+    identifier_file = tmp_path / "pmids.txt"
+    identifier_file.write_text("PMID:1\nPMID:2\n", encoding="utf-8")
+    arguments = build_parser().parse_args(
+        [
+            "--compare-strategies",
+            "bulk-search",
+            "combined-search",
+            "--identifier-file",
+            str(identifier_file),
+            "--batch-size",
+            "2",
+            "--requests",
+            "2",
+        ]
+    )
+    calls = []
+
+    async def fake_run(plan, cache_primed, strategies):
+        calls.append((plan, cache_primed, strategies))
+        return "paired-result"
+
+    monkeypatch.setattr("benchmarks.publications.__main__.run_comparison_plan", fake_run)
+
+    assert await execute(arguments) == "paired-result"
+    assert calls[0][2] == ("bulk-search", "combined-search")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_explicit_strategy_pair_must_be_distinct():
+    from benchmarks.publications.__main__ import execute
+
+    arguments = build_parser().parse_args(["--compare-strategies", "bulk-search", "bulk-search", "--requests", "2"])
+    with pytest.raises(SystemExit, match="two distinct"):
+        await execute(arguments)
 
 
 @pytest.mark.unit
@@ -320,6 +382,7 @@ async def test_matching_response_strategy_is_attributed_to_the_sample():
                     "processing_time_ms": 8,
                     "request_id": request.url.params["request_id"],
                     "lookup_strategy": "bulk-search",
+                    "lookup_fallback": False,
                 },
                 "results": {"PMID:1": {}},
                 "not_found": [],
@@ -340,8 +403,95 @@ async def test_matching_response_strategy_is_attributed_to_the_sample():
     assert request_id_matched
     assert lookup_strategy_matched
     assert sample.lookup_strategy == "bulk-search"
+    assert sample.lookup_fallback is False
     assert sample.semantic_signature is not None
     assert sample.ok
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("marker", "expected_error", "fallback_samples", "missing_samples"),
+    [
+        (True, "lookup-fallback", 1, 0),
+        (None, "lookup-fallback-attribution-missing", 0, 1),
+    ],
+)
+async def test_paired_response_rejects_fallback_or_missing_attribution(
+    marker,
+    expected_error,
+    fallback_samples,
+    missing_samples,
+):
+    async def respond(request: httpx.Request) -> httpx.Response:
+        meta = {
+            "processing_time_ms": 8,
+            "request_id": request.url.params["request_id"],
+            "lookup_strategy": "bulk-search",
+        }
+        if marker is not None:
+            meta["lookup_fallback"] = marker
+        return httpx.Response(
+            200,
+            json={
+                "_meta": meta,
+                "results": {"PMID:1": {}},
+                "not_found": [],
+            },
+        )
+
+    async with httpx.AsyncClient(
+        base_url="https://example.invalid",
+        transport=httpx.MockTransport(respond),
+    ) as client:
+        sample, request_id_matched, lookup_strategy_matched = await _issue_request(
+            client,
+            Workload(batch_size=1, lookup_strategy="bulk-search"),
+            ["PMID:1"],
+            capture_semantics=True,
+        )
+
+    assert request_id_matched
+    assert lookup_strategy_matched
+    assert sample.lookup_fallback is marker
+    assert sample.error == expected_error
+    assert not sample.ok
+
+    current = Sample(
+        client_ms=7.0,
+        status=200,
+        server_ms=7,
+        requested=1,
+        found=1,
+        lookup_strategy="current",
+        lookup_fallback=False,
+        semantic_signature=sample.semantic_signature,
+    )
+    pair = PairedObservation(
+        index=0,
+        first_strategy="current",
+        identifiers=("PMID:1",),
+        samples={"current": current, "bulk-search": sample},
+        semantic_match=True,
+    )
+    plan = RunPlan(
+        base_url="https://example.invalid",
+        workload=Workload(batch_size=1),
+        requests=1,
+        warmup_requests=0,
+    )
+    result = ComparisonResult(
+        plan=plan,
+        stages=[ComparisonStage(label="c=1", concurrency=1, wall_seconds=0.1, pairs=[pair])],
+    )
+    report = as_dict(result)
+
+    assert not pair.valid
+    assert result.lookup_fallback_samples == fallback_samples
+    assert result.lookup_fallback_attribution_missing == missing_samples
+    assert report["integrity"]["lookup_fallback_samples"] == fallback_samples
+    assert report["integrity"]["lookup_fallback_attribution_missing"] == missing_samples
+    assert expected_error.replace("-", " ") in render_text(result)
 
 
 @pytest.mark.unit
@@ -402,6 +552,126 @@ def test_paired_cases_balance_order_within_changed_and_control_paths():
 
 
 @pytest.mark.unit
+def test_changed_path_balance_tracks_the_selected_strategy_pair():
+    class FixedWorkload:
+        batches = [
+            ["PMID:1"],
+            ["doi:10.1000/control-a"],
+            ["PMID:2"],
+            ["PMC:PMC3"],
+        ]
+
+        def build_corpus(self, seed):
+            return iter(self.batches)
+
+        @staticmethod
+        def next_batch(corpus):
+            return next(corpus)
+
+    cases = _comparison_cases(
+        FixedWorkload(),
+        total_pairs=4,
+        seed=17,
+        seed_offset=0,
+        order_offset=0,
+        strategies=("bulk-search", "combined-search"),
+    )
+
+    pmid_orders = [case.first_strategy for case in cases if case.identifiers[0].startswith("PMID:")]
+    alternative_orders = [case.first_strategy for case in cases if not case.identifiers[0].startswith("PMID:")]
+    assert pmid_orders == ["bulk-search", "combined-search"]
+    assert alternative_orders == ["combined-search", "bulk-search"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "strategies",
+    [
+        ("current", "bulk-search"),
+        ("bulk-search", "combined-search"),
+        ("current", "combined-search"),
+    ],
+)
+def test_non_ascii_alternative_forces_the_shared_exact_fallback(strategies):
+    assert not _exercises_changed_path(("PMID:1", "doi:10.1000/café"), strategies)
+
+
+def _paired_changed_path_result(strategies, identifier_batches):
+    def sample(strategy: str, server_ms: int) -> Sample:
+        return Sample(
+            client_ms=float(server_ms + 1),
+            status=200,
+            server_ms=server_ms,
+            requested=len(identifier_batches[0]),
+            found=len(identifier_batches[0]),
+            lookup_strategy=strategy,
+            semantic_signature="same",
+        )
+
+    pairs = []
+    for index, identifiers in enumerate(identifier_batches):
+        first_strategy = strategies[index % 2]
+        pairs.append(
+            PairedObservation(
+                index=index,
+                first_strategy=first_strategy,
+                identifiers=tuple(identifiers),
+                samples={
+                    strategies[0]: sample(strategies[0], 20),
+                    strategies[1]: sample(strategies[1], 10),
+                },
+                strategies=strategies,
+                semantic_match=True,
+            )
+        )
+
+    plan = RunPlan(
+        base_url="https://example.invalid",
+        workload=Workload(batch_size=len(identifier_batches[0])),
+        requests=len(pairs),
+        warmup_requests=0,
+    )
+    stage = ComparisonStage(
+        label="c=1",
+        concurrency=1,
+        wall_seconds=0.1,
+        strategies=strategies,
+        pairs=pairs,
+    )
+    return ComparisonResult(plan=plan, strategies=strategies, stages=[stage])
+
+
+@pytest.mark.unit
+def test_all_alternative_bulk_vs_combined_is_an_explicit_no_change_control():
+    result = _paired_changed_path_result(
+        ("bulk-search", "combined-search"),
+        [("doi:10.1000/a",), ("PMC:PMC2",)],
+    )
+
+    assert result.integrity_ok
+    assert result.stages[0].changed_path_pair_count == 0
+    assert as_dict(result)["stages"][0]["changed_path_pairs"] == 0
+    rendered = render_text(result)
+    assert "zero pairs that exercise code differing" in rendered
+    assert "no-change control and cannot select a winner" in rendered
+
+
+@pytest.mark.unit
+def test_all_pmid_current_vs_combined_is_changed_without_an_identifier_mix_warning():
+    result = _paired_changed_path_result(
+        ("current", "combined-search"),
+        [("PMID:1",), ("PMID:2",)],
+    )
+
+    assert result.integrity_ok
+    assert result.stages[0].changed_path_pair_count == 2
+    rendered = render_text(result)
+    assert "zero pairs that exercise code differing" not in rendered
+    assert "PMID-only pairs" not in rendered
+    assert "cannot select a winner" not in rendered
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_paired_stage_uses_identical_batches_without_doubling_http_concurrency():
     active = 0
@@ -416,15 +686,16 @@ async def test_paired_stage_uses_identical_batches_without_doubling_http_concurr
             strategy = request.headers[LOOKUP_STRATEGY_HEADER]
             # Unequal treatment latency must not change which identifiers the
             # other treatment receives.
-            await asyncio.sleep(0.004 if strategy == "bulk-search" else 0.001)
+            await asyncio.sleep(0.004 if strategy == "combined-search" else 0.001)
             identifiers = payload["ids"]
             return httpx.Response(
                 200,
                 json={
                     "_meta": {
-                        "processing_time_ms": 20 if strategy == "bulk-search" else 10,
+                        "processing_time_ms": 20 if strategy == "combined-search" else 10,
                         "request_id": payload["request_id"],
                         "lookup_strategy": strategy,
+                        "lookup_fallback": False,
                     },
                     "results": {identifier: {"title": identifier} for identifier in identifiers},
                     "not_found": [],
@@ -457,12 +728,30 @@ async def test_paired_stage_uses_identical_batches_without_doubling_http_concurr
             total_pairs=8,
             seed_offset=0,
             order_offset=0,
+            strategies=("bulk-search", "combined-search"),
         )
 
     assert max_active == 3
     assert [pair.index for pair in pairs] == list(range(8))
     assert all(pair.semantic_match and pair.valid for pair in pairs)
-    assert {pair.order_label for pair in pairs} == {"current-first", "bulk-search-first"}
+    assert {pair.order_label for pair in pairs} == {"bulk-search-first", "combined-search-first"}
+    assert all(pair.strategies == ("bulk-search", "combined-search") for pair in pairs)
+    stage = ComparisonStage(
+        label="c=3",
+        concurrency=3,
+        wall_seconds=0.1,
+        strategies=("bulk-search", "combined-search"),
+        pairs=pairs,
+    )
+    result = ComparisonResult(
+        plan=plan,
+        strategies=("bulk-search", "combined-search"),
+        stages=[stage],
+    )
+    assert stage.alternative_identifier_count == 0
+    assert stage.changed_path_order_counts == {"bulk_search_first": 4, "combined_search_first": 4}
+    assert result.integrity_ok
+    assert slo_met(result, "server")
 
 
 @pytest.mark.unit
@@ -483,6 +772,7 @@ async def test_paired_stage_rejects_semantically_different_results():
                     "processing_time_ms": 10,
                     "request_id": payload["request_id"],
                     "lookup_strategy": strategy,
+                    "lookup_fallback": False,
                 },
                 "results": result,
                 "not_found": not_found,
@@ -534,6 +824,7 @@ async def test_paired_stage_rejects_identical_all_miss_doi_responses():
                     "processing_time_ms": 2,
                     "request_id": payload["request_id"],
                     "lookup_strategy": strategy,
+                    "lookup_fallback": False,
                 },
                 "results": {},
                 "not_found": payload["ids"],
@@ -599,18 +890,24 @@ def test_paired_report_has_per_arm_latency_and_order_split_deltas():
     pairs = [
         PairedObservation(
             index=0,
-            first_strategy="current",
+            first_strategy="bulk-search",
             identifiers=("PMID:1", "doi:10.1000/example"),
-            current=sample("current", 10),
-            bulk_search=sample("bulk-search", 20),
+            samples={
+                "bulk-search": sample("bulk-search", 10),
+                "combined-search": sample("combined-search", 20),
+            },
+            strategies=("bulk-search", "combined-search"),
             semantic_match=True,
         ),
         PairedObservation(
             index=1,
-            first_strategy="bulk-search",
+            first_strategy="combined-search",
             identifiers=("PMID:3", "PMC:PMC4"),
-            current=sample("current", 30),
-            bulk_search=sample("bulk-search", 20),
+            samples={
+                "bulk-search": sample("bulk-search", 30),
+                "combined-search": sample("combined-search", 20),
+            },
+            strategies=("bulk-search", "combined-search"),
             semantic_match=True,
         ),
     ]
@@ -622,26 +919,38 @@ def test_paired_report_has_per_arm_latency_and_order_split_deltas():
     )
     result = ComparisonResult(
         plan=plan,
-        stages=[ComparisonStage(label="c=1", concurrency=1, wall_seconds=0.2, pairs=pairs)],
+        strategies=("bulk-search", "combined-search"),
+        stages=[
+            ComparisonStage(
+                label="c=1",
+                concurrency=1,
+                wall_seconds=0.2,
+                strategies=("bulk-search", "combined-search"),
+                pairs=pairs,
+            )
+        ],
     )
 
     report = as_dict(result)
     stage = report["stages"][0]
     assert report["mode"] == "paired_lookup_strategy_comparison"
     assert report["integrity"]["valid"] is True
-    assert stage["arms"]["current"]["server_latency"]["p50_ms"] == 10
-    assert stage["arms"]["bulk-search"]["server_latency"]["p90_ms"] == 20
-    assert stage["paired_delta_ms"]["server"]["current_first"]["p50_ms"] == 10
-    assert stage["paired_delta_ms"]["server"]["bulk_search_first"]["p50_ms"] == -10
+    assert report["workload"]["lookup_strategies"] == ["bulk-search", "combined-search"]
+    assert stage["arms"]["bulk-search"]["server_latency"]["p50_ms"] == 10
+    assert stage["arms"]["combined-search"]["server_latency"]["p90_ms"] == 20
+    assert stage["paired_delta_ms"]["meaning"] == "combined-search minus bulk-search; negative is faster"
+    assert stage["paired_delta_ms"]["server"]["bulk_search_first"]["p50_ms"] == 10
+    assert stage["paired_delta_ms"]["server"]["combined_search_first"]["p50_ms"] == -10
     assert stage["p90_difference_percent"]["server"] == pytest.approx(-33.33)
-    assert stage["order_counts"] == {"current_first": 1, "bulk_search_first": 1}
+    assert stage["order_counts"] == {"bulk_search_first": 1, "combined_search_first": 1}
     assert stage["order_balanced"] is True
-    assert stage["changed_path_order_counts"] == {"current_first": 1, "bulk_search_first": 1}
+    assert stage["changed_path_order_counts"] == {"bulk_search_first": 1, "combined_search_first": 1}
     assert stage["changed_path_order_balanced"] is True
     assert stage["alternative_identifiers"] == 2
     rendered = render_text(result)
     assert "paired lookup-strategy benchmark" in rendered
-    assert "bulk-search minus current" in rendered
+    assert "combined-search minus bulk-search" in rendered
+    assert "combined-search faster" in rendered
     assert "do not declare a winner" in rendered
 
 
@@ -661,8 +970,7 @@ def test_paired_result_fails_when_one_arm_is_incomplete():
         index=0,
         first_strategy="current",
         identifiers=("PMID:1",),
-        current=current,
-        bulk_search=timed_out,
+        samples={"current": current, "bulk-search": timed_out},
     )
     plan = RunPlan(
         base_url="https://example.invalid",
@@ -706,8 +1014,7 @@ def test_paired_result_requires_both_request_orders():
         index=0,
         first_strategy="current",
         identifiers=("doi:10.1000/example",),
-        current=current,
-        bulk_search=bulk_search,
+        samples={"current": current, "bulk-search": bulk_search},
         semantic_match=True,
     )
     plan = RunPlan(

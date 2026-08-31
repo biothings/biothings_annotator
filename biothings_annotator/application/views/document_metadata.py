@@ -14,6 +14,7 @@ from sanic.views import HTTPMethodView
 
 from biothings_annotator.annotator.document_metadata import (
     BULK_SEARCH_LOOKUP_STRATEGY,
+    COMBINED_SEARCH_LOOKUP_STRATEGY,
     CURRENT_LOOKUP_STRATEGY,
     DOCUMENT_METADATA_LOOKUP_STRATEGIES,
     DocumentMetadataService,
@@ -93,11 +94,12 @@ class DocumentMetadataView(HTTPMethodView):
     """Serve publication metadata without entering the generic annotation path."""
 
     # HTTPMethodView constructs a view object for every request, so these live on
-    # the class to provide exactly two fixed service instances per worker.
-    # Mutating one shared service's strategy would race when current and bulk
+    # the class to provide one fixed service instance per strategy per worker.
+    # Mutating one shared service's strategy would race when different A/B
     # requests overlap in the same worker.
     document_metadata = DocumentMetadataService(lookup_strategy=CURRENT_LOOKUP_STRATEGY)
     bulk_search_document_metadata = DocumentMetadataService(lookup_strategy=BULK_SEARCH_LOOKUP_STRATEGY)
+    combined_search_document_metadata = DocumentMetadataService(lookup_strategy=COMBINED_SEARCH_LOOKUP_STRATEGY)
 
     @staticmethod
     def _lookup_strategy(request: Request) -> str:
@@ -106,13 +108,16 @@ class DocumentMetadataView(HTTPMethodView):
             CURRENT_LOOKUP_STRATEGY,
         )
         if lookup_strategy not in PUBLICATIONS_LOOKUP_STRATEGIES:
+            supported = ", ".join(PUBLICATIONS_LOOKUP_STRATEGIES[:-1])
             raise DocumentMetadataRequestError(
-                f"The {PUBLICATIONS_LOOKUP_STRATEGY_HEADER} header must be either "
-                f"{CURRENT_LOOKUP_STRATEGY} or {BULK_SEARCH_LOOKUP_STRATEGY}."
+                f"The {PUBLICATIONS_LOOKUP_STRATEGY_HEADER} header must be one of "
+                f"{supported}, or {PUBLICATIONS_LOOKUP_STRATEGIES[-1]}."
             )
         return lookup_strategy
 
     def _service_for_lookup_strategy(self, lookup_strategy: str) -> DocumentMetadataService:
+        if lookup_strategy == COMBINED_SEARCH_LOOKUP_STRATEGY:
+            return self.combined_search_document_metadata
         if lookup_strategy == BULK_SEARCH_LOOKUP_STRATEGY:
             return self.bulk_search_document_metadata
         return self.document_metadata
@@ -137,7 +142,9 @@ class DocumentMetadataView(HTTPMethodView):
     ):
         document_metadata = self._service_for_lookup_strategy(lookup_strategy)
         try:
-            results, not_found = await document_metadata.get_publications(publication_ids)
+            results, not_found, lookup_fallback = await document_metadata.get_publications_with_metadata(
+                publication_ids
+            )
         except Exception:
             logger.exception("Unable to retrieve PubMed document metadata")
             return sanic.json(
@@ -158,6 +165,7 @@ class DocumentMetadataView(HTTPMethodView):
                     "request_id": request_id,
                     "processing_time_ms": processing_time_ms,
                     "lookup_strategy": lookup_strategy,
+                    "lookup_fallback": lookup_fallback,
                 },
                 "results": results,
                 "not_found": not_found,
