@@ -24,7 +24,7 @@ _COLUMNS = (
 
 _COMPARISON_COLUMNS = (
     ("stage", 7),
-    ("strategy", 12),
+    ("strategy", 17),
     ("ok", 9),
     ("found", 7),
     ("resp kB", 9),
@@ -83,7 +83,7 @@ def _comparison_arm_row(stage: ComparisonStage, strategy: str) -> str:
 
 
 def _pair_latency(pair: PairedObservation, strategy: str, basis: str) -> Optional[float]:
-    sample = pair.current if strategy == "current" else pair.bulk_search
+    sample = pair.sample_for(strategy)
     if basis == "client":
         return sample.client_ms
     if basis == "server":
@@ -97,63 +97,60 @@ def _paired_delta_values(
     first_strategy: Optional[str] = None,
 ) -> List[float]:
     values: List[float] = []
+    first, second = stage.strategies
     for pair in stage.valid_pairs:
         if first_strategy is not None and pair.first_strategy != first_strategy:
             continue
-        current = _pair_latency(pair, "current", basis)
-        bulk_search = _pair_latency(pair, "bulk-search", basis)
-        if current is not None and bulk_search is not None:
-            values.append(bulk_search - current)
+        first_latency = _pair_latency(pair, first, basis)
+        second_latency = _pair_latency(pair, second, basis)
+        if first_latency is not None and second_latency is not None:
+            values.append(second_latency - first_latency)
     return values
 
 
-def _delta_summary(values: List[float]) -> Optional[Dict[str, object]]:
+def _delta_summary(values: List[float], faster_strategy: str) -> Optional[Dict[str, object]]:
     summary = LatencySummary.from_values(values)
     if summary is None:
         return None
     rendered: Dict[str, object] = summary.as_dict()
-    rendered["bulk_search_faster_fraction"] = round(sum(value < 0 for value in values) / len(values), 4)
+    faster_key = f"{faster_strategy.replace('-', '_')}_faster_fraction"
+    rendered[faster_key] = round(sum(value < 0 for value in values) / len(values), 4)
     return rendered
 
 
 def _comparison_delta_dict(stage: ComparisonStage, basis: str) -> Dict[str, object]:
+    first, second = stage.strategies
     return {
-        "all": _delta_summary(_paired_delta_values(stage, basis)),
-        "current_first": _delta_summary(_paired_delta_values(stage, basis, "current")),
-        "bulk_search_first": _delta_summary(_paired_delta_values(stage, basis, "bulk-search")),
+        "all": _delta_summary(_paired_delta_values(stage, basis), second),
+        stage.order_key(first): _delta_summary(_paired_delta_values(stage, basis, first), second),
+        stage.order_key(second): _delta_summary(_paired_delta_values(stage, basis, second), second),
     }
 
 
 def _comparison_p90_difference(stage: ComparisonStage, basis: str) -> Optional[float]:
-    current = (
-        stage.arm_report("current").server_latency()
-        if basis == "server"
-        else stage.arm_report("current").client_latency()
+    first, second = stage.strategies
+    first_summary = (
+        stage.arm_report(first).server_latency() if basis == "server" else stage.arm_report(first).client_latency()
     )
-    bulk_search = (
-        stage.arm_report("bulk-search").server_latency()
-        if basis == "server"
-        else stage.arm_report("bulk-search").client_latency()
+    second_summary = (
+        stage.arm_report(second).server_latency() if basis == "server" else stage.arm_report(second).client_latency()
     )
-    if current is None or bulk_search is None:
+    if first_summary is None or second_summary is None:
         return None
-    return round(bulk_search.p90 - current.p90, 2)
+    return round(second_summary.p90 - first_summary.p90, 2)
 
 
 def _comparison_p90_percent(stage: ComparisonStage, basis: str) -> Optional[float]:
-    current = (
-        stage.arm_report("current").server_latency()
-        if basis == "server"
-        else stage.arm_report("current").client_latency()
+    first, second = stage.strategies
+    first_summary = (
+        stage.arm_report(first).server_latency() if basis == "server" else stage.arm_report(first).client_latency()
     )
-    bulk_search = (
-        stage.arm_report("bulk-search").server_latency()
-        if basis == "server"
-        else stage.arm_report("bulk-search").client_latency()
+    second_summary = (
+        stage.arm_report(second).server_latency() if basis == "server" else stage.arm_report(second).client_latency()
     )
-    if current is None or bulk_search is None or current.p90 == 0:
+    if first_summary is None or second_summary is None or first_summary.p90 == 0:
         return None
-    return round((bulk_search.p90 - current.p90) / current.p90 * 100, 2)
+    return round((second_summary.p90 - first_summary.p90) / first_summary.p90 * 100, 2)
 
 
 def _comparison_arm_dict(stage: ComparisonStage, strategy: str, threshold_ms: float) -> Dict[str, object]:
@@ -169,6 +166,7 @@ def _comparison_arm_dict(stage: ComparisonStage, strategy: str, threshold_ms: fl
         "success_rate": round(arm.success_rate, 4),
         "status_counts": arm.status_counts,
         "lookup_strategy_counts": arm.lookup_strategy_counts,
+        "lookup_fallback_counts": arm.lookup_fallback_counts,
         "identifiers": arm.identifier_stats,
         "client_latency": client.as_dict() if client else None,
         "server_latency": server.as_dict() if server else None,
@@ -181,6 +179,8 @@ def _comparison_arm_dict(stage: ComparisonStage, strategy: str, threshold_ms: fl
 
 
 def _comparison_stage_dict(stage: ComparisonStage, threshold_ms: float) -> Dict[str, object]:
+    first, second = stage.strategies
+    delta_meaning = f"{second} minus {first}; negative is faster"
     return {
         "label": stage.label,
         "concurrency": stage.concurrency,
@@ -190,30 +190,39 @@ def _comparison_stage_dict(stage: ComparisonStage, threshold_ms: float) -> Dict[
         "invalid_pairs": len(stage.pairs) - len(stage.valid_pairs),
         "order_counts": stage.order_counts,
         "order_balanced": stage.order_balanced,
+        "changed_path_pairs": stage.changed_path_pair_count,
         "changed_path_order_counts": stage.changed_path_order_counts,
         "changed_path_order_balanced": stage.changed_path_order_balanced,
+        "alternative_order_counts": stage.alternative_order_counts,
+        "alternative_order_balanced": stage.alternative_order_balanced,
         "alternative_identifiers": stage.alternative_identifier_count,
         "pairs_with_alternative_identifiers": stage.pairs_with_alternative_identifiers,
         "integrity": {
             "request_id_mismatches": sum(pair.request_id_mismatches for pair in stage.pairs),
             "lookup_strategy_mismatches": sum(pair.lookup_strategy_mismatches for pair in stage.pairs),
+            "lookup_fallback_samples": stage.lookup_fallback_samples,
+            "lookup_fallback_attribution_missing": stage.lookup_fallback_attribution_missing,
             "semantic_mismatches": stage.semantic_mismatches,
             "unresolved_pairs": stage.unresolved_pairs,
             "unresolved_identifiers": stage.unresolved_identifiers,
         },
-        "arms": {
-            strategy: _comparison_arm_dict(stage, strategy, threshold_ms) for strategy in ("current", "bulk-search")
-        },
+        "arms": {strategy: _comparison_arm_dict(stage, strategy, threshold_ms) for strategy in stage.strategies},
         "p90_difference_ms": {
+            "meaning": delta_meaning,
             "server": _comparison_p90_difference(stage, "server"),
             "client": _comparison_p90_difference(stage, "client"),
         },
         "p90_difference_percent": {
+            "meaning": delta_meaning,
             "server": _comparison_p90_percent(stage, "server"),
             "client": _comparison_p90_percent(stage, "client"),
         },
         "paired_delta_ms": {
-            "meaning": "bulk-search minus current; negative is faster",
+            "meaning": delta_meaning,
+            "first_strategy": first,
+            "second_strategy": second,
+            "control_strategy": first,
+            "experiment_strategy": second,
             "server": _comparison_delta_dict(stage, "server"),
             "client": _comparison_delta_dict(stage, "client"),
         },
@@ -363,17 +372,19 @@ def _comparison_delta_line(
     if summary is None:
         return f"  {stage.label:<7} {basis:<7} {label:<17} no valid pairs"
     faster = sum(value < 0 for value in values) / len(values)
+    second = stage.strategies[1]
     return (
-        f"  {stage.label:<7} {basis:<7} {label:<17} n={summary.count:<4} "
+        f"  {stage.label:<7} {basis:<7} {label:<23} n={summary.count:<4} "
         f"p50 {summary.p50:>+7.1f}  p90 {summary.p90:>+7.1f}  p99 {summary.p99:>+7.1f}  "
-        f"bulk-search faster {faster:>6.1%}"
+        f"{second} faster {faster:>6.1%}"
     )
 
 
 def _comparison_caveats(result: ComparisonResult) -> List[str]:
+    first, second = result.strategies
     notes = [
         "each pair is sequential, so its second request can benefit from Elasticsearch state warmed by its "
-        "first; balanced current-first/bulk-search-first ordering controls first-order bias but cannot produce two "
+        f"first; balanced {first}-first/{second}-first ordering controls first-order bias but cannot produce two "
         "cold observations on one shared deployment",
         "the two implementations share one mixed load during this run, so its wall time is not a standalone "
         "capacity measurement; use single-strategy --ramp runs for absolute capacity",
@@ -393,10 +404,19 @@ def _comparison_caveats(result: ComparisonResult) -> List[str]:
             "the synthesized PMCID and DOI values usually miss; use --identifier-file with resolving identifiers "
             "before deciding between source-fetch strategies"
         )
+    if result.lookup_fallback_samples:
+        notes.append(
+            f"{result.lookup_fallback_samples} successful response sample(s) reported lookup fallback; "
+            "they are excluded from paired deltas because they did not measure the requested normal path"
+        )
+    if result.lookup_fallback_attribution_missing:
+        notes.append(
+            f"{result.lookup_fallback_attribution_missing} successful response sample(s) omitted the "
+            "lookup-fallback attribution marker; they are excluded because this usually indicates a stale "
+            "or mixed deployment"
+        )
     overheads = [
-        arm.overhead_latency()
-        for stage in result.stages
-        for arm in (stage.arm_report("current"), stage.arm_report("bulk-search"))
+        arm.overhead_latency() for stage in result.stages for arm in (stage.arm_report(first), stage.arm_report(second))
     ]
     measured = [summary.p90 for summary in overheads if summary is not None]
     if measured and max(measured) > 20:
@@ -405,23 +425,22 @@ def _comparison_caveats(result: ComparisonResult) -> List[str]:
             "latency for the implementation decision"
         )
     for stage in result.stages:
+        if stage.changed_path_pair_count == 0:
+            notes.append(
+                f"{stage.label} has zero pairs that exercise code differing between {first} and {second}; "
+                "this is a no-change control and cannot select a winner"
+            )
         if not stage.changed_path_order_balanced:
             notes.append(
                 f"{stage.label} does not contain a balanced changed-path pair in both request orders; "
                 "do not declare a winner"
             )
-        if stage.pairs_with_alternative_identifiers < len(stage.pairs):
+        first_arm_first = LatencySummary.from_values(_paired_delta_values(stage, "server", first))
+        second_arm_first = LatencySummary.from_values(_paired_delta_values(stage, "server", second))
+        if first_arm_first and second_arm_first and first_arm_first.p50 * second_arm_first.p50 <= 0:
             notes.append(
-                f"{stage.label} has {len(stage.pairs) - stage.pairs_with_alternative_identifiers} PMID-only pairs "
-                "that do not exercise the changed DOI/PMCID path; use the reported identifier mix when judging "
-                "the combined delta"
-            )
-        current_first = LatencySummary.from_values(_paired_delta_values(stage, "server", "current"))
-        bulk_search_first = LatencySummary.from_values(_paired_delta_values(stage, "server", "bulk-search"))
-        if current_first and bulk_search_first and current_first.p50 * bulk_search_first.p50 <= 0:
-            notes.append(
-                f"{stage.label} has zero or opposite-signed median server deltas between current-first "
-                "and bulk-search-first pairs; the result is order/cache-sensitive, so do not declare a winner"
+                f"{stage.label} has zero or opposite-signed median server deltas between {first}-first "
+                f"and {second}-first pairs; the result is order/cache-sensitive, so do not declare a winner"
             )
     return notes
 
@@ -431,11 +450,13 @@ def _comparison_workload_description(result: ComparisonResult) -> str:
     suffix = f", {result.plan.workload.lookup_strategy} lookup"
     if description.endswith(suffix):
         description = description[: -len(suffix)]
-    return f"{description}, paired current vs bulk-search"
+    return f"{description}, paired {result.strategies[0]} vs {result.strategies[1]}"
 
 
 def _render_comparison_text(result: ComparisonResult) -> str:
     plan = result.plan
+    first, second = result.strategies
+    delta_label = f"{second} minus {first}"
     lines = [
         "/publications paired lookup-strategy benchmark",
         f"  target     {plan.normalized_base_url}",
@@ -449,9 +470,9 @@ def _render_comparison_text(result: ComparisonResult) -> str:
         "-" * sum(width for _, width in _COMPARISON_COLUMNS),
     ]
     for stage in result.stages:
-        lines.extend(_comparison_arm_row(stage, strategy) for strategy in ("current", "bulk-search"))
+        lines.extend(_comparison_arm_row(stage, strategy) for strategy in result.strategies)
 
-    lines.extend(["", "per-arm p90 difference (bulk-search minus current)"])
+    lines.extend(["", f"per-arm p90 difference ({delta_label})"])
     for stage in result.stages:
         differences = []
         for basis in ("server", "client"):
@@ -463,25 +484,25 @@ def _render_comparison_text(result: ComparisonResult) -> str:
                 differences.append(f"{basis} {difference:+.1f} ms ({percent:+.1f}%)")
         lines.append(f"  {stage.label:<7} " + ", ".join(differences))
 
-    lines.extend(["", "paired delta in milliseconds (bulk-search minus current; negative is faster)"])
+    lines.extend(["", f"paired delta in milliseconds ({delta_label}; negative is faster)"])
     for stage in result.stages:
         for basis in ("server", "client"):
             lines.append(_comparison_delta_line(stage, basis, "all"))
-            lines.append(_comparison_delta_line(stage, basis, "current-first", "current"))
-            lines.append(_comparison_delta_line(stage, basis, "bulk-search-first", "bulk-search"))
+            lines.append(_comparison_delta_line(stage, basis, f"{first}-first", first))
+            lines.append(_comparison_delta_line(stage, basis, f"{second}-first", second))
 
     lines.extend(["", "SLO verdict by arm"])
     for stage in result.stages:
-        for strategy in ("current", "bulk-search"):
+        for strategy in result.strategies:
             arm = stage.arm_report(strategy)
             for basis in ("server", "client"):
                 verdict = arm.verdict(basis, plan.threshold_ms)
                 if verdict is None:
-                    lines.append(f"  {stage.label:<7} {strategy:<10} {basis:<7} no successful samples")
+                    lines.append(f"  {stage.label:<7} {strategy:<16} {basis:<7} no successful samples")
                     continue
                 status = "PASS" if verdict.met else "FAIL"
                 lines.append(
-                    f"  {stage.label:<7} {strategy:<10} {basis:<7} {status}  "
+                    f"  {stage.label:<7} {strategy:<16} {basis:<7} {status}  "
                     f"p90 {verdict.p90_ms:>7.1f} ms  {verdict.fraction_under_threshold:>6.1%} under "
                     f"{plan.threshold_ms:g} ms"
                 )
@@ -489,21 +510,28 @@ def _render_comparison_text(result: ComparisonResult) -> str:
     integrity_status = "PASS" if result.integrity_ok else "FAIL"
     lines.extend(["", f"comparison integrity {integrity_status}"])
     for stage in result.stages:
+        first_key = stage.order_key(first)
+        second_key = stage.order_key(second)
         lines.append(
             f"  {stage.label:<7} {len(stage.valid_pairs)}/{len(stage.pairs)} valid pairs; "
-            f"current-first {stage.order_counts['current_first']}, "
-            f"bulk-search-first {stage.order_counts['bulk_search_first']} "
+            f"{first}-first {stage.order_counts[first_key]}, "
+            f"{second}-first {stage.order_counts[second_key]} "
             f"({'balanced' if stage.order_balanced else 'NOT BALANCED'}); "
-            f"changed-path current-first {stage.changed_path_order_counts['current_first']}, "
-            f"bulk-search-first {stage.changed_path_order_counts['bulk_search_first']} "
+            f"changed-path {stage.changed_path_pair_count}/{len(stage.pairs)} pairs: "
+            f"{first}-first {stage.changed_path_order_counts[first_key]}, "
+            f"{second}-first {stage.changed_path_order_counts[second_key]} "
             f"({'balanced' if stage.changed_path_order_balanced else 'NOT BALANCED'}); "
             f"semantic mismatches {stage.semantic_mismatches}; "
+            f"fallback samples {stage.lookup_fallback_samples}; "
+            f"fallback attribution missing {stage.lookup_fallback_attribution_missing}; "
             f"unresolved {stage.unresolved_identifiers} IDs across {stage.unresolved_pairs} pairs; "
             f"alternative IDs {stage.alternative_identifier_count} across "
             f"{stage.pairs_with_alternative_identifiers}/{len(stage.pairs)} pairs"
         )
     lines.append(f"  request_id round-trip mismatches       {result.request_id_mismatches}")
     lines.append(f"  lookup strategy attribution mismatches {result.lookup_strategy_mismatches}")
+    lines.append(f"  lookup fallback samples                {result.lookup_fallback_samples}")
+    lines.append(f"  lookup fallback attribution missing    {result.lookup_fallback_attribution_missing}")
     lines.append(f"  semantic response mismatches            {result.semantic_mismatches}")
     lines.append(f"  pairs containing unresolved identifiers {result.unresolved_pairs}")
     lines.append(f"  unresolved identifiers                  {result.unresolved_identifiers}")
@@ -656,7 +684,7 @@ def _comparison_as_dict(result: ComparisonResult) -> Dict[str, object]:
             "description": _comparison_workload_description(result),
             "batch_size": plan.workload.batch_size,
             "method": plan.workload.normalized_method,
-            "lookup_strategies": ["current", "bulk-search"],
+            "lookup_strategies": list(result.strategies),
             "pmid_ratio": None if plan.workload.uses_identifier_pool else plan.workload.pmid_ratio,
             "unique_ratio": None if plan.workload.uses_identifier_pool else plan.workload.unique_ratio,
             "identifier_pool": (
@@ -681,6 +709,8 @@ def _comparison_as_dict(result: ComparisonResult) -> Dict[str, object]:
             "valid": result.integrity_ok,
             "request_id_mismatches": result.request_id_mismatches,
             "lookup_strategy_mismatches": result.lookup_strategy_mismatches,
+            "lookup_fallback_samples": result.lookup_fallback_samples,
+            "lookup_fallback_attribution_missing": result.lookup_fallback_attribution_missing,
             "semantic_mismatches": result.semantic_mismatches,
             "unresolved_pairs": result.unresolved_pairs,
             "unresolved_identifiers": result.unresolved_identifiers,
@@ -759,7 +789,7 @@ def slo_met(result: BenchmarkResult, basis: str) -> bool:
         verdicts = [
             stage.arm_report(strategy).verdict(basis, result.plan.threshold_ms)
             for stage in result.stages
-            for strategy in ("current", "bulk-search")
+            for strategy in result.strategies
         ]
         return bool(verdicts) and all(verdict is not None and verdict.met for verdict in verdicts)
 

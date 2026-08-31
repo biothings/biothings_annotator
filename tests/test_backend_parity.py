@@ -178,7 +178,7 @@ def install_fake_query_clients(monkeypatch, registry):
 async def run_with_backend(backend, method_name, *args, **kwargs):
     annotator = Annotator()
     annotator.query_backend = backend
-    annotator.elasticsearch_connection = "ci"
+    annotator.elasticsearch_connection = "in_cluster"
     method = getattr(annotator, method_name)
     return await method(*args, **kwargs)
 

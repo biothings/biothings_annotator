@@ -649,7 +649,7 @@ async def test_live_ci_elasticsearch_returns_pubmed_metadata():
     annotator = Annotator(query_backend="elasticsearch")
     annotator.elasticsearch_connection = os.environ.get(
         "PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION",
-        "ci_local_forward",
+        "ci_forward",
     )
 
     result = await annotator.annotate_curie(LIVE_PMID, include_extra=False)

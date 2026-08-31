@@ -27,6 +27,8 @@ from benchmarks.publications.users import (
 )
 from benchmarks.publications.workload import (
     DEFAULT_BATCH_SIZE,
+    DEFAULT_COMPARISON_STRATEGIES,
+    DEFAULT_LOOKUP_STRATEGY,
     SUPPORTED_LOOKUP_STRATEGIES,
     RunPlan,
     Workload,
@@ -66,14 +68,28 @@ def build_parser() -> argparse.ArgumentParser:
     strategy_mode.add_argument(
         "--lookup-strategy",
         choices=SUPPORTED_LOOKUP_STRATEGIES,
-        default="current",
-        help="temporary server-side lookup implementation to benchmark",
+        # Keep the parser default distinct from every explicit choice. Python
+        # 3.10 and 3.11 can miss a mutually-exclusive-group conflict when an
+        # explicitly parsed value is identical to that action's default.
+        default=None,
+        help=f"temporary server-side lookup implementation to benchmark; defaults to {DEFAULT_LOOKUP_STRATEGY}",
     )
     strategy_mode.add_argument(
         "--compare-lookup-strategies",
         action="store_true",
         help=(
-            "issue balanced current/bulk-search pairs against one deployment; --requests and --warmup then count pairs"
+            "backwards-compatible shorthand for --compare-strategies current bulk-search; "
+            "--requests and --warmup then count pairs"
+        ),
+    )
+    strategy_mode.add_argument(
+        "--compare-strategies",
+        nargs=2,
+        choices=SUPPORTED_LOOKUP_STRATEGIES,
+        metavar=("CONTROL", "EXPERIMENT"),
+        help=(
+            "issue balanced pairs for two explicitly selected strategies; reports EXPERIMENT minus CONTROL, "
+            "so a negative delta favors EXPERIMENT"
         ),
     )
     parser.add_argument(
@@ -186,6 +202,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bool]:
     """Build the workload from synthetic, file-backed, or verified identifiers."""
+    lookup_strategy = arguments.lookup_strategy or DEFAULT_LOOKUP_STRATEGY
     if arguments.identifier_file and arguments.verify_corpus:
         raise SystemExit("--identifier-file cannot be combined with --verify-corpus")
 
@@ -210,7 +227,7 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
         pmid_ratio=arguments.pmid_ratio,
         unique_ratio=arguments.unique_ratio,
         hot_pool_size=arguments.hot_pool,
-        lookup_strategy=arguments.lookup_strategy,
+        lookup_strategy=lookup_strategy,
         identifier_pool=identifier_pool,
         identifier_pool_source=identifier_pool_source,
     )
@@ -228,7 +245,7 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
         arguments.base_url,
         candidates,
         arguments.timeout,
-        lookup_strategy=arguments.lookup_strategy,
+        lookup_strategy=lookup_strategy,
     )
     if len(resolved) < arguments.batch_size:
         raise SystemExit(
@@ -244,7 +261,7 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
             # identifiers, which is only meaningful with reuse enabled.
             unique_ratio=0.0,
             hot_pool_size=len(resolved),
-            lookup_strategy=arguments.lookup_strategy,
+            lookup_strategy=lookup_strategy,
             identifier_pool=tuple(resolved),
             identifier_pool_source="verified PMID pool",
         ),
@@ -253,18 +270,22 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
 
 
 async def execute(arguments: argparse.Namespace) -> Union[RunResult, ComparisonResult]:
-    if arguments.compare_lookup_strategies and arguments.users is not None:
-        raise SystemExit("--compare-lookup-strategies cannot be combined with --users")
-    if arguments.compare_lookup_strategies and not arguments.identifier_file:
-        raise SystemExit("--compare-lookup-strategies requires --identifier-file with real resolving identifiers")
-    if arguments.compare_lookup_strategies and (arguments.requests < 2 or arguments.requests % 2):
-        raise SystemExit("--compare-lookup-strategies requires an even --requests value of at least 2")
+    comparison_strategies: Optional[Tuple[str, str]] = None
+    if arguments.compare_lookup_strategies:
+        comparison_strategies = DEFAULT_COMPARISON_STRATEGIES
+    elif arguments.compare_strategies:
+        comparison_strategies = tuple(arguments.compare_strategies)
+
+    if comparison_strategies and comparison_strategies[0] == comparison_strategies[1]:
+        raise SystemExit("--compare-strategies requires two distinct lookup strategies")
+    if comparison_strategies and arguments.users is not None:
+        raise SystemExit("paired strategy comparison cannot be combined with --users")
+    if comparison_strategies and not arguments.identifier_file:
+        raise SystemExit("paired strategy comparison requires --identifier-file with real resolving identifiers")
+    if comparison_strategies and (arguments.requests < 2 or arguments.requests % 2):
+        raise SystemExit("paired strategy comparison requires an even --requests value of at least 2")
 
     workload, cache_primed = await _prepare_workload(arguments)
-    if arguments.compare_lookup_strategies and not any(
-        identifier.lower().startswith(("doi:", "pmc:")) for identifier in workload.identifier_pool
-    ):
-        raise SystemExit("comparison identifier file must contain at least one DOI or PMCID")
     plan = RunPlan(
         base_url=arguments.base_url,
         workload=workload,
@@ -276,8 +297,12 @@ async def execute(arguments: argparse.Namespace) -> Union[RunResult, ComparisonR
         threshold_ms=arguments.threshold_ms,
         ramp=tuple(arguments.ramp or ()),
     )
-    if arguments.compare_lookup_strategies:
-        return await run_comparison_plan(plan, cache_primed=cache_primed)
+    if comparison_strategies:
+        return await run_comparison_plan(
+            plan,
+            cache_primed=cache_primed,
+            strategies=comparison_strategies,
+        )
     if arguments.users is None:
         return await run_plan(plan, cache_primed=cache_primed)
 
