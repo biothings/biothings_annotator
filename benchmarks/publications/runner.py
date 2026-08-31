@@ -89,7 +89,7 @@ class PairedObservation:
     first_strategy: str
     identifiers: Tuple[str, ...]
     current: Sample
-    two_phase: Sample
+    bulk_search: Sample
     request_id_mismatches: int = 0
     lookup_strategy_mismatches: int = 0
     semantic_match: Optional[bool] = None
@@ -116,7 +116,7 @@ class PairedObservation:
         # Both arms receive the same batch and semantic equality is checked
         # separately. Count unresolved identifiers once per pair, not once per
         # treatment.
-        return max(self._unresolved_for(self.current), self._unresolved_for(self.two_phase))
+        return max(self._unresolved_for(self.current), self._unresolved_for(self.bulk_search))
 
     @property
     def fully_resolved(self) -> bool:
@@ -127,7 +127,7 @@ class PairedObservation:
         """Whether this pair can support a like-for-like latency delta."""
         return (
             self.current.ok
-            and self.two_phase.ok
+            and self.bulk_search.ok
             and not self.request_id_mismatches
             and not self.lookup_strategy_mismatches
             and self.semantic_match is True
@@ -137,7 +137,7 @@ class PairedObservation:
 
 @dataclass
 class ComparisonStage:
-    """One concurrency stage from a paired current/two-phase comparison."""
+    """One concurrency stage from a paired current/bulk-search comparison."""
 
     label: str
     concurrency: int
@@ -148,8 +148,8 @@ class ComparisonStage:
     def samples_for(self, strategy: str) -> List[Sample]:
         if strategy == "current":
             return [pair.current for pair in self.pairs]
-        if strategy == "two-phase":
-            return [pair.two_phase for pair in self.pairs]
+        if strategy == "bulk-search":
+            return [pair.bulk_search for pair in self.pairs]
         raise ValueError(f"unknown lookup strategy: {strategy}")
 
     def arm_report(self, strategy: str) -> StageReport:
@@ -174,12 +174,12 @@ class ComparisonStage:
     def order_counts(self) -> Dict[str, int]:
         return {
             "current_first": sum(pair.first_strategy == "current" for pair in self.pairs),
-            "two_phase_first": sum(pair.first_strategy == "two-phase" for pair in self.pairs),
+            "bulk_search_first": sum(pair.first_strategy == "bulk-search" for pair in self.pairs),
         }
 
     @property
     def order_balanced(self) -> bool:
-        return self.order_counts["current_first"] == self.order_counts["two_phase_first"] > 0
+        return self.order_counts["current_first"] == self.order_counts["bulk_search_first"] > 0
 
     @property
     def alternative_identifier_count(self) -> int:
@@ -195,7 +195,7 @@ class ComparisonStage:
         changed_pairs = [pair for pair in self.pairs if pair.alternative_identifier_count > 0]
         return {
             "current_first": sum(pair.first_strategy == "current" for pair in changed_pairs),
-            "two_phase_first": sum(pair.first_strategy == "two-phase" for pair in changed_pairs),
+            "bulk_search_first": sum(pair.first_strategy == "bulk-search" for pair in changed_pairs),
         }
 
     @property
@@ -203,8 +203,8 @@ class ComparisonStage:
         counts = self.changed_path_order_counts
         return (
             counts["current_first"] > 0
-            and counts["two_phase_first"] > 0
-            and abs(counts["current_first"] - counts["two_phase_first"]) <= 1
+            and counts["bulk_search_first"] > 0
+            and abs(counts["current_first"] - counts["bulk_search_first"]) <= 1
         )
 
     @property
@@ -218,7 +218,7 @@ class ComparisonStage:
 
 @dataclass
 class ComparisonResult:
-    """A single-deployment, paired current-vs-two-phase benchmark run."""
+    """A single-deployment, paired current-vs-bulk-search benchmark run."""
 
     plan: RunPlan
     stages: List[ComparisonStage] = field(default_factory=list)
@@ -533,7 +533,7 @@ def _comparison_cases(
             first_is_current = current_count == upper
         for position, index in enumerate(indexes):
             is_current = first_is_current if position % 2 == 0 else not first_is_current
-            orders[index] = "current" if is_current else "two-phase"
+            orders[index] = "current" if is_current else "bulk-search"
 
     assign(changed_indexes, changed_current, global_starts_current)
     control_starts_current = global_starts_current if not changed_indexes else not global_starts_current
@@ -559,7 +559,7 @@ async def _comparison_worker(
         if case is None:
             return
 
-        second_strategy = "two-phase" if case.first_strategy == "current" else "current"
+        second_strategy = "bulk-search" if case.first_strategy == "current" else "current"
         samples: Dict[str, Sample] = {}
         request_id_mismatches = 0
         lookup_strategy_mismatches = 0
@@ -575,17 +575,17 @@ async def _comparison_worker(
             lookup_strategy_mismatches += int(not lookup_strategy_matched)
 
         current = samples["current"]
-        two_phase = samples["two-phase"]
+        bulk_search = samples["bulk-search"]
         semantic_match = None
-        if current.semantic_signature is not None and two_phase.semantic_signature is not None:
-            semantic_match = current.semantic_signature == two_phase.semantic_signature
+        if current.semantic_signature is not None and bulk_search.semantic_signature is not None:
+            semantic_match = current.semantic_signature == bulk_search.semantic_signature
         collected.append(
             PairedObservation(
                 index=case.index,
                 first_strategy=case.first_strategy,
                 identifiers=case.identifiers,
                 current=current,
-                two_phase=two_phase,
+                bulk_search=bulk_search,
                 request_id_mismatches=request_id_mismatches,
                 lookup_strategy_mismatches=lookup_strategy_mismatches,
                 semantic_match=semantic_match,
@@ -614,7 +614,7 @@ async def _run_comparison_stage(
 
 
 async def run_comparison_plan(plan: RunPlan, cache_primed: bool = False) -> ComparisonResult:
-    """Run a balanced, paired current-vs-two-phase comparison on one deployment.
+    """Run a balanced, paired current-vs-bulk-search comparison on one deployment.
 
     ``concurrency`` remains the maximum number of HTTP requests in flight. A
     worker issues the two members of its pair sequentially; starting both at

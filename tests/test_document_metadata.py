@@ -14,10 +14,10 @@ from biothings_annotator.annotator.document_metadata import (
 from biothings_annotator.annotator.settings import ANNOTATOR_CLIENTS
 from biothings_annotator.annotator.utils import get_elasticsearch_client
 from biothings_annotator.application.views.document_metadata import (
+    BULK_SEARCH_LOOKUP_STRATEGY,
     CURRENT_LOOKUP_STRATEGY,
     PUBLICATIONS_LOOKUP_STRATEGY_HEADER,
     SUPPORTED_PUBLICATION_ID_MESSAGE,
-    TWO_PHASE_LOOKUP_STRATEGY,
     validate_publication_ids,
 )
 
@@ -218,12 +218,12 @@ async def test_document_metadata_service_splits_exact_ids_from_scoped_lookups(mo
             calls.append({"method": "mget", "query_list": query_list, "fields": fields})
             return [{"query": PMID, "_id": PMID, "pubmed": PUBMED_METADATA}]
 
-        async def querymany(self, query_list, scopes, fields, size):
+        async def querymany_exact(self, query_list, field, fields, size):
             calls.append(
                 {
-                    "method": "querymany",
+                    "method": "querymany_exact",
                     "query_list": query_list,
-                    "scopes": scopes,
+                    "field": field,
                     "fields": fields,
                     "size": size,
                 }
@@ -246,9 +246,9 @@ async def test_document_metadata_service_splits_exact_ids_from_scoped_lookups(mo
     assert calls == [
         {"method": "mget", "query_list": [PMID], "fields": ["pubmed"]},
         {
-            "method": "querymany",
+            "method": "querymany_exact",
             "query_list": [DOI, MISSING_DOI],
-            "scopes": ["pubmed.identifiers"],
+            "field": "pubmed.identifiers",
             "fields": ["pubmed"],
             "size": 1,
         },
@@ -502,16 +502,16 @@ async def test_publications_endpoint_selects_isolated_lookup_services_per_reques
     calls = []
 
     async def get_publications(self, publication_ids):
-        calls.append((id(self), self.two_phase_lookup, publication_ids))
+        calls.append((id(self), self.lookup_strategy, publication_ids))
         return {PMID: FORMATTED_METADATA}, []
 
     monkeypatch.setattr(DocumentMetadataService, "get_publications", get_publications)
 
     _, default_response = await test_annotator.asgi_client.get(f"/publications?pubids={PMID}")
-    _, two_phase_response = await test_annotator.asgi_client.post(
+    _, bulk_search_response = await test_annotator.asgi_client.post(
         "/publications",
         json={"ids": [PMID]},
-        headers={PUBLICATIONS_LOOKUP_STRATEGY_HEADER: TWO_PHASE_LOOKUP_STRATEGY},
+        headers={PUBLICATIONS_LOOKUP_STRATEGY_HEADER: BULK_SEARCH_LOOKUP_STRATEGY},
     )
     _, current_response = await test_annotator.asgi_client.get(
         f"/publications/{PMID}",
@@ -519,14 +519,14 @@ async def test_publications_endpoint_selects_isolated_lookup_services_per_reques
     )
 
     assert [call[1:] for call in calls] == [
-        (False, [PMID]),
-        (True, [PMID]),
-        (False, [PMID]),
+        (CURRENT_LOOKUP_STRATEGY, [PMID]),
+        (BULK_SEARCH_LOOKUP_STRATEGY, [PMID]),
+        (CURRENT_LOOKUP_STRATEGY, [PMID]),
     ]
     assert calls[0][0] == calls[2][0]
     assert calls[0][0] != calls[1][0]
     assert default_response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
-    assert two_phase_response.json["_meta"]["lookup_strategy"] == TWO_PHASE_LOOKUP_STRATEGY
+    assert bulk_search_response.json["_meta"]["lookup_strategy"] == BULK_SEARCH_LOOKUP_STRATEGY
     assert current_response.json["_meta"]["lookup_strategy"] == CURRENT_LOOKUP_STRATEGY
 
 
@@ -565,7 +565,7 @@ async def test_publication_endpoints_reject_an_invalid_lookup_strategy_before_lo
         "endpoint": "/publications",
         "message": (
             f"The {PUBLICATIONS_LOOKUP_STRATEGY_HEADER} header must be either "
-            f"{CURRENT_LOOKUP_STRATEGY} or {TWO_PHASE_LOOKUP_STRATEGY}."
+            f"{CURRENT_LOOKUP_STRATEGY} or {BULK_SEARCH_LOOKUP_STRATEGY}."
         ),
     }
 
@@ -856,14 +856,8 @@ async def test_publication_endpoints_return_sanitized_server_error(
 
 
 LIVE_PMID = "PMID:16954148"
-LIVE_ALTERNATE_IDENTIFIERS = [
-    "PMC:PMC1904490",
-    "doi:10.1242/jcs.03153",
-]
-LIVE_PUBLICATION_IDENTIFIERS = [
-    LIVE_PMID,
-    *LIVE_ALTERNATE_IDENTIFIERS,
-]
+LIVE_ALTERNATE_IDENTIFIERS = ["PMC:PMC1904490", "doi:10.1242/jcs.03153"]
+LIVE_PUBLICATION_IDENTIFIERS = [LIVE_PMID, *LIVE_ALTERNATE_IDENTIFIERS]
 # Real values verified against NCBI upstream. The first two are CCWG#15's own
 # response-spec examples.
 LIVE_DATE_EXPECTATIONS = {
@@ -890,13 +884,14 @@ def live_pubmed_client():
     ANNOTATOR_CLIENTS["pubmed"]["elasticsearch"]["instance"] = None
 
 
-def _live_service() -> DocumentMetadataService:
+def _live_service(lookup_strategy: str = CURRENT_LOOKUP_STRATEGY) -> DocumentMetadataService:
     return DocumentMetadataService(
         elasticsearch_connection=os.environ.get(
             "PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION",
             "ci_local_forward",
         ),
         request_timeout=float(os.environ.get("PUBMED_INTEGRATION_REQUEST_TIMEOUT", "30")),
+        lookup_strategy=lookup_strategy,
     )
 
 
@@ -926,8 +921,9 @@ async def test_live_index_exposes_the_multi_identifier_field(live_pubmed_client)
     os.environ.get("RUN_PUBMED_ES_INTEGRATION") != "1",
     reason="Set RUN_PUBMED_ES_INTEGRATION=1 to query the live PubMed Elasticsearch alias.",
 )
-async def test_live_index_resolves_a_publication_by_every_identifier_type(live_pubmed_client):
-    service = _live_service()
+@pytest.mark.parametrize("lookup_strategy", [CURRENT_LOOKUP_STRATEGY, BULK_SEARCH_LOOKUP_STRATEGY])
+async def test_live_index_resolves_a_publication_by_every_identifier_type(live_pubmed_client, lookup_strategy):
+    service = _live_service(lookup_strategy)
 
     results, not_found = await service.get_publications(LIVE_PUBLICATION_IDENTIFIERS)
 
@@ -945,11 +941,15 @@ async def test_live_index_resolves_a_publication_by_every_identifier_type(live_p
     reason="Set RUN_PUBMED_ES_INTEGRATION=1 to query the live PubMed Elasticsearch alias.",
 )
 @pytest.mark.parametrize(
-    "identifier",
-    ["DOI:10.1242/JCS.03153", "doi:10.1242/JCS.03153", "pmc:PMC1904490"],
+    "lookup_strategy, identifier",
+    [
+        (strategy, identifier)
+        for strategy in (CURRENT_LOOKUP_STRATEGY, BULK_SEARCH_LOOKUP_STRATEGY)
+        for identifier in ("DOI:10.1242/JCS.03153", "doi:10.1242/JCS.03153", "pmc:PMC1904490")
+    ],
 )
-async def test_live_index_matches_identifiers_case_insensitively(live_pubmed_client, identifier):
-    results, not_found = await _live_service().get_publications([identifier])
+async def test_live_index_matches_identifiers_case_insensitively(live_pubmed_client, lookup_strategy, identifier):
+    results, not_found = await _live_service(lookup_strategy).get_publications([identifier])
 
     assert not_found == []
     assert results[identifier]["article_title"]
@@ -996,159 +996,268 @@ async def test_live_index_projects_verbatim_publication_dates(live_pubmed_client
     assert projected == LIVE_DATE_EXPECTATIONS
 
 
-# --- TWO-PHASE IDENTIFIER LOOKUP ---
-# Resolve DOI/PMCID to document _ids with a source-free _msearch, then fetch every
-# document in one _mget. Flagged off by default; these cover the re-keying it
-# needs, which is where the strategy can silently lose or mis-attribute a result.
-TWO_PHASE_DOCUMENTS = {
-    "PMID:30690000": {"pubmed": {"title": "First"}},
-    "PMID:17284678": {"pubmed": {"title": "Second"}},
+# --- BULK ALTERNATIVE-IDENTIFIER LOOKUP ---
+BULK_DOCUMENTS = {
+    "PMID:30690000": {
+        "pubmed": {
+            **PUBMED_METADATA,
+            "title": "First",
+            "identifiers": ["doi:10.1000/first"],
+        }
+    },
+    "PMID:17284678": {
+        "pubmed": {
+            **PUBMED_METADATA,
+            "title": "Second",
+            "identifiers": ["PMC:PMC1904490", "doi:10.1242/jcs.03153"],
+        }
+    },
 }
-TWO_PHASE_IDENTIFIER_MAP = {
+BULK_IDENTIFIER_MAP = {
+    "doi:10.1000/first": "PMID:30690000",
     "doi:10.1242/jcs.03153": "PMID:17284678",
-    "PMC:PMC1904490": "PMID:17284678",
-    "doi:10.1000/other": "PMID:30690000",
+    "pmc:pmc1904490": "PMID:17284678",
 }
 
 
 class _RecordingClient:
-    """Minimal stand-in that records which lookups the strategy issued."""
+    """Minimal stand-in that records both lookup strategies exactly."""
 
     index = "annotator-pubmed"
 
-    def __init__(self, documents=None, identifier_map=None):
-        self.documents = TWO_PHASE_DOCUMENTS if documents is None else documents
-        self.identifier_map = TWO_PHASE_IDENTIFIER_MAP if identifier_map is None else identifier_map
+    def __init__(self, documents=None, identifier_map=None, bulk_response=None):
+        self.documents = BULK_DOCUMENTS if documents is None else documents
+        self.identifier_map = BULK_IDENTIFIER_MAP if identifier_map is None else identifier_map
+        self.bulk_response = bulk_response
         self.calls = []
 
-    async def querymany_ids(self, query_list, scopes, size=None):
-        self.calls.append(("querymany_ids", list(query_list)))
-        return [
-            (
-                {"query": query, "_id": self.identifier_map[query]}
-                if query in self.identifier_map
-                else {"query": query, "notfound": True}
-            )
-            for query in query_list
-        ]
+    def _hit(self, document_id, query=None):
+        hit = {**self.documents[document_id], "_id": document_id}
+        if query is not None:
+            hit["query"] = query
+        return hit
 
     async def mget(self, ids, fields=None):
         self.calls.append(("mget", list(ids)))
+        return [
+            (
+                self._hit(document_id, query=document_id)
+                if document_id in self.documents
+                else {"query": document_id, "notfound": True}
+            )
+            for document_id in ids
+        ]
+
+    async def querymany_exact(self, query_list, field, fields=None, size=None):
+        self.calls.append(("querymany_exact", list(query_list)))
         results = []
-        for document_id in ids:
-            if document_id in self.documents:
-                hit = dict(self.documents[document_id])
-                hit.update({"_id": document_id, "query": document_id})
-                results.append(hit)
-            else:
-                results.append({"query": document_id, "notfound": True})
+        for query in query_list:
+            document_id = self.identifier_map.get(query.lower())
+            results.append(
+                self._hit(document_id, query=query) if document_id is not None else {"query": query, "notfound": True}
+            )
         return results
+
+    async def search_terms(self, query_list, field, fields=None, size=None):
+        self.calls.append(("search_terms", list(query_list)))
+        if self.bulk_response is not None:
+            return self.bulk_response
+        document_ids = list(
+            dict.fromkeys(self.identifier_map[query] for query in query_list if query in self.identifier_map)
+        )
+        hits = [self._hit(document_id) for document_id in reversed(document_ids)]
+        return {"total": len(hits), "total_relation": "eq", "hits": hits}
 
     def call_arguments(self, name):
         return [arguments for called, arguments in self.calls if called == name]
 
 
 @pytest.mark.unit
-async def test_two_phase_lookup_keys_results_by_the_submitted_identifier():
-    """The response contract is keyed by what the caller sent, not by the PMID.
+@pytest.mark.asyncio
+async def test_bulk_lookup_runs_mget_and_search_concurrently_without_pruning():
+    started = set()
+    both_started = asyncio.Event()
 
-    Resolving a DOI to a document _id and then fetching by that _id discards the
-    DOI unless the mapping is carried through, which would key the result under a
-    PMID the caller never asked about.
-    """
-    client = _RecordingClient()
-    hits = await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(
-        client, ["PMID:30690000"], ["doi:10.1242/jcs.03153"]
+    class ConcurrentClient(_RecordingClient):
+        async def _arrive(self, method):
+            started.add(method)
+            if len(started) == 2:
+                both_started.set()
+            await asyncio.wait_for(both_started.wait(), timeout=0.1)
+
+        async def mget(self, ids, fields=None):
+            await self._arrive("mget")
+            return await super().mget(ids, fields)
+
+        async def search_terms(self, query_list, field, fields=None, size=None):
+            await self._arrive("search_terms")
+            return await super().search_terms(query_list, field, fields, size)
+
+    client = ConcurrentClient()
+    hits = await DocumentMetadataService._fetch_hits_bulk_search(
+        client,
+        ["PMID:30690000"],
+        ["doi:10.1000/first", "doi:10.1242/jcs.03153"],
     )
-    assert sorted(hits) == ["PMID:30690000", "doi:10.1242/jcs.03153"]
-    assert hits["doi:10.1242/jcs.03153"]["pubmed"]["title"] == "Second"
+
+    assert started == {"mget", "search_terms"}
+    assert client.call_arguments("search_terms") == [["doi:10.1000/first", "doi:10.1242/jcs.03153"]]
+    assert set(hits) == {"PMID:30690000", "doi:10.1000/first", "doi:10.1242/jcs.03153"}
 
 
 @pytest.mark.unit
-async def test_two_phase_lookup_fans_one_document_out_to_every_alias():
-    """A DOI and a PMCID for the same paper resolve to one document.
-
-    The fetch must ask for it once while both submitted identifiers still receive
-    it, so deduplication cannot be allowed to drop a response key.
-    """
+@pytest.mark.asyncio
+async def test_bulk_lookup_fans_one_document_out_to_doi_pmcid_and_case_variants():
     client = _RecordingClient()
-    hits = await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(
-        client, [], ["doi:10.1242/jcs.03153", "PMC:PMC1904490"]
+    submitted = ["DOI:10.1242/JCS.03153", "doi:10.1242/jcs.03153", "pmc:PMC1904490"]
+
+    hits = await DocumentMetadataService._fetch_hits_bulk_search(client, [], submitted)
+
+    assert client.call_arguments("search_terms") == [["doi:10.1242/jcs.03153", "pmc:pmc1904490"]]
+    assert set(hits) == set(submitted)
+    assert {hit["_id"] for hit in hits.values()} == {"PMID:17284678"}
+    assert client.call_arguments("querymany_exact") == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_bulk_lookup_maps_nonoverlapping_hits_independent_of_hit_order():
+    client = _RecordingClient()
+    submitted = ["doi:10.1000/first", "doi:10.1242/jcs.03153"]
+
+    hits = await DocumentMetadataService._fetch_hits_bulk_search(client, [], submitted)
+
+    assert hits[submitted[0]]["pubmed"]["title"] == "First"
+    assert hits[submitted[1]]["pubmed"]["title"] == "Second"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_bulk_lookup_preserves_result_and_not_found_order(monkeypatch):
+    client = _RecordingClient()
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: client,
     )
-    assert hits["doi:10.1242/jcs.03153"]["pubmed"]["title"] == "Second"
-    assert hits["PMC:PMC1904490"]["pubmed"]["title"] == "Second"
-    assert client.call_arguments("mget") == [["PMID:17284678"]]
+    submitted = [MISSING_DOI, PMID, DOI, "doi:10.9999/also-absent"]
+
+    results, not_found = await DocumentMetadataService(
+        elasticsearch_connection="ci",
+        lookup_strategy=BULK_SEARCH_LOOKUP_STRATEGY,
+    ).get_publications(submitted)
+
+    assert list(results) == [PMID, DOI]
+    assert not_found == [MISSING_DOI, "doi:10.9999/also-absent"]
+
+
+def _fallback_hit(query):
+    return {**BULK_DOCUMENTS["PMID:17284678"], "_id": "PMID:17284678", "query": query}
 
 
 @pytest.mark.unit
-async def test_two_phase_lookup_does_not_refetch_a_submitted_pmid_reached_by_doi():
-    """A DOI resolving to an already-submitted PMID must not be fetched twice."""
-    client = _RecordingClient()
-    await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(
-        client, ["PMID:30690000"], ["doi:10.1000/other"]
-    )
-    assert client.call_arguments("mget") == [["PMID:30690000"]]
-
-
-@pytest.mark.unit
-async def test_two_phase_lookup_omits_identifiers_that_resolve_to_nothing():
-    client = _RecordingClient()
-    hits = await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(
-        client, [], ["doi:10.9999/absent"]
-    )
-    assert hits == {}
-    # Nothing resolved, so there is no document to fetch and no request to make.
-    assert client.call_arguments("mget") == []
-
-
-@pytest.mark.unit
-async def test_two_phase_lookup_skips_the_search_when_only_pmids_were_submitted():
-    """A PMID-only batch must stay on the single exact-ID request."""
-    client = _RecordingClient()
-    await DocumentMetadataService(two_phase_lookup=True)._fetch_hits_two_phase(client, ["PMID:30690000"], [])
-    assert client.call_arguments("querymany_ids") == []
-    assert client.call_arguments("mget") == [["PMID:30690000"]]
-
-
-@pytest.mark.unit
-async def test_two_phase_and_one_phase_agree_on_the_same_batch():
-    """The flag must change only how the lookup is issued, never the result."""
-    submitted_documents = ["PMID:30690000"]
-    submitted_searches = ["doi:10.1242/jcs.03153", "PMC:PMC1904490", "doi:10.9999/absent"]
-
-    class OnePhaseClient(_RecordingClient):
-        async def querymany(self, query_list, scopes, fields=None, size=None):
-            results = []
-            for query in query_list:
-                document_id = self.identifier_map.get(query)
-                if document_id is None:
-                    results.append({"query": query, "notfound": True})
-                    continue
-                hit = dict(self.documents[document_id])
-                hit.update({"_id": document_id, "query": query})
-                results.append(hit)
-            return results
-
-    service = DocumentMetadataService(two_phase_lookup=True)
-    two_phase = await service._fetch_hits_two_phase(_RecordingClient(), submitted_documents, submitted_searches)
-    one_phase = await service._fetch_hits(OnePhaseClient(), submitted_documents, submitted_searches)
-
-    assert sorted(two_phase) == sorted(one_phase)
-    for key in two_phase:
-        assert two_phase[key]["pubmed"] == one_phase[key]["pubmed"]
-
-
-@pytest.mark.unit
-def test_two_phase_lookup_is_off_unless_enabled():
-    assert DocumentMetadataService().two_phase_lookup is False
-    assert DocumentMetadataService(two_phase_lookup=True).two_phase_lookup is True
-
-
-@pytest.mark.unit
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "value, expected",
-    [("1", True), ("true", True), ("TRUE", True), ("on", True), ("0", False), ("false", False), ("", False)],
+    "bulk_response",
+    [
+        {
+            "total": 2,
+            "total_relation": "eq",
+            "hits": [{**BULK_DOCUMENTS["PMID:17284678"], "_id": "PMID:17284678"}],
+        },
+        {
+            "total": 1,
+            "total_relation": "gte",
+            "hits": [{**BULK_DOCUMENTS["PMID:17284678"], "_id": "PMID:17284678"}],
+        },
+        {
+            "timed_out": True,
+            "total": 1,
+            "total_relation": "eq",
+            "hits": [{**BULK_DOCUMENTS["PMID:17284678"], "_id": "PMID:17284678"}],
+        },
+        {
+            "failed_shards": 1,
+            "total": 1,
+            "total_relation": "eq",
+            "hits": [{**BULK_DOCUMENTS["PMID:17284678"], "_id": "PMID:17284678"}],
+        },
+        {"total": 1, "total_relation": "eq", "hits": [{"_id": "PMID:17284678", "pubmed": {}}]},
+        {
+            "total": 1,
+            "total_relation": "eq",
+            "hits": [
+                {
+                    "_id": "PMID:17284678",
+                    "pubmed": {"identifiers": ["doi:10.9999/unrequested"]},
+                }
+            ],
+        },
+    ],
+    ids=[
+        "truncated",
+        "inexact-total",
+        "timed-out",
+        "failed-shard",
+        "malformed-identifiers",
+        "unassignable-hit",
+    ],
 )
-def test_two_phase_lookup_reads_the_environment(monkeypatch, value: str, expected: bool):
-    monkeypatch.setenv("DOCUMENT_METADATA_TWO_PHASE_LOOKUP", value)
-    assert DocumentMetadataService().two_phase_lookup is expected
+async def test_bulk_lookup_falls_back_to_exact_msearch_when_reverse_mapping_is_unsafe(bulk_response):
+    client = _RecordingClient(bulk_response=bulk_response)
+
+    hits = await DocumentMetadataService._fetch_hits_bulk_search(client, [], [DOI])
+
+    assert hits[DOI] == _fallback_hit(DOI)
+    assert client.call_arguments("querymany_exact") == [[DOI]]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_bulk_lookup_falls_back_when_one_identifier_belongs_to_multiple_documents():
+    collision = "doi:10.1000/collision"
+    pmcid = "PMC:PMC1904490"
+    documents = {
+        "PMID:1": {"pubmed": {"title": "Wrong", "identifiers": [collision]}},
+        "PMID:2": {"pubmed": {"title": "Right", "identifiers": [collision, pmcid]}},
+    }
+    identifier_map = {collision: "PMID:2", pmcid.lower(): "PMID:2"}
+    bulk_response = {
+        "total": 2,
+        "total_relation": "eq",
+        "hits": [
+            {**documents["PMID:1"], "_id": "PMID:1"},
+            {**documents["PMID:2"], "_id": "PMID:2"},
+        ],
+    }
+    client = _RecordingClient(documents=documents, identifier_map=identifier_map, bulk_response=bulk_response)
+
+    hits = await DocumentMetadataService._fetch_hits_bulk_search(client, [], [collision, pmcid])
+
+    assert hits[collision]["_id"] == "PMID:2"
+    assert hits[pmcid]["_id"] == "PMID:2"
+    assert client.call_arguments("querymany_exact") == [[collision, pmcid]]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_bulk_and_current_lookup_agree_on_a_mixed_batch():
+    document_ids = ["PMID:30690000"]
+    search_ids = [DOI, PMCID, MISSING_DOI]
+
+    current = await DocumentMetadataService._fetch_hits(_RecordingClient(), document_ids, search_ids)
+    bulk = await DocumentMetadataService._fetch_hits_bulk_search(_RecordingClient(), document_ids, search_ids)
+
+    assert sorted(bulk) == sorted(current)
+    for key in bulk:
+        assert bulk[key]["pubmed"] == current[key]["pubmed"]
+
+
+@pytest.mark.unit
+def test_document_metadata_lookup_strategy_defaults_and_validation():
+    assert DocumentMetadataService().lookup_strategy == CURRENT_LOOKUP_STRATEGY
+    assert (
+        DocumentMetadataService(lookup_strategy=BULK_SEARCH_LOOKUP_STRATEGY).lookup_strategy
+        == BULK_SEARCH_LOOKUP_STRATEGY
+    )
+    with pytest.raises(ValueError, match="lookup_strategy"):
+        DocumentMetadataService(lookup_strategy="unknown")

@@ -382,7 +382,7 @@ guard: pubmed2db PR #7 limits a record to its own identifiers, so a record carry
 export regressed and is pulling in cited references' DOIs.
 
 
-###### Identifier lookup: two measured optimizations
+###### Identifier lookup: measurements and experiments
 
 Both were measured against the CI Elasticsearch cluster (`es-core-components-cluster`, index
 `pubmed_20260824_ybg350zl_202608250007`, 41.0M documents, 21.5 GB per copy, 5 primary shards and 2
@@ -412,10 +412,9 @@ field itself roughly halved, which is 2.3% of the index. The latency gain is nil
 identical `_msearch` timings and a `_mget` response 1% smaller. Worth having as a storage and index-size
 change; it is not a latency optimization and should not be quoted as one.
 
-**Resolving to `_id` first, then one combined `_mget` — keep off pending an endpoint A/B.** The idea is
-to ask the `_msearch` only for `_id`, then fetch everything through a single exact-ID `_mget`. It is
-an explicit `DocumentMetadataService` option. The endpoint keeps `current` as its hard-coded safe default
-and exposes the temporary per-request benchmark selector below:
+**Resolving to `_id` first, then one combined `_mget` — rejected.** The idea was to ask the `_msearch`
+only for `_id`, then fetch everything through a single exact-ID `_mget`. Direct Elasticsearch measurements
+showed higher backend bytes at every identifier mix and added a serial round trip:
 
 | identifier mix | current total | two-phase total | delta | current `_msearch` took | two-phase `_msearch` took | ES round trips |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -424,13 +423,13 @@ and exposes the temporary per-request benchmark selector below:
 | 25 / 75 | 166.0 kB | 173.7 kB | **+4.7%** | 18 ms | 16 ms | 1 parallel → 2 serial |
 | 0 / 100 other | 168.7 kB | 181.9 kB | **+7.8%** | 22 ms | 21 ms | 1 → 2 serial |
 
-These measurements do not establish full-path latency. The timing columns are only the top-level
+These measurements did not establish full-path latency. The timing columns are only the top-level
 `_msearch.took`; the two-phase value omits the `_mget` that follows it. They do show that source
 retrieval is not an expensive part of `_msearch`: 100 identifiers that all resolve take 22 ms of
 Elasticsearch wall-clock, and `"_source": false` removes about 1 ms. It cuts that leg's response by 84%
 (169 kB to 26 kB), but those bytes reappear in the combined `_mget` with its per-document envelope, so
-total backend response bytes rise 3–8%. The extra serial round trip makes a slowdown plausible, not
-measured; use the single-deployment endpoint A/B below before calling it a latency regression.
+total backend response bytes rise 3–8%. The endpoint A/B later confirmed that the sequential strategy
+was not worth adopting, so its implementation and selector were removed before the next experiment.
 
 Two corrections to earlier reasoning come out of this. The shard fan-out is not the practical problem it
 looked like: per-identifier cost *falls* with batch size, 0.40 ms at 10 identifiers to 0.22 ms at 100,
@@ -438,6 +437,20 @@ so Elasticsearch is parallelising the sub-searches well across the 5 shards. And
 not where the latency budget goes at all — 22 ms for a fully-resolving 100-identifier batch, against the
 ~114 kB of response body that the [load benchmark](#load-benchmark-and-the-150-ms-objective) shows to be
 the actual constraint. Optimisation effort belongs on payload size, not on identifier resolution.
+
+**One bulk alternative-ID search — temporary endpoint A/B.** The current arm still runs the PMID `_mget`
+and the alternative-ID `_msearch` concurrently. Its PubMed-specific `_msearch` now queries only the
+confirmed root `pubmed.identifiers` keyword field; the old generic `pubmed.identifiers.keyword` clause was
+a guaranteed miss for this mapping. Generic annotator searches keep their root-plus-`.keyword` compatibility
+behavior because their mappings are not uniform.
+
+The `bulk-search` arm also starts the PMID `_mget` immediately, but replaces the per-identifier `_msearch`
+entries with one `terms` `_search` over every DOI and PMCID. It does not wait for or prune against `_mget`
+results. Returned documents are mapped back to submitted identifiers from `pubmed.identifiers` in linear
+time. The arm falls back to the cleaned exact `_msearch` for the whole alternative-ID batch if Elasticsearch
+reports a truncated total, an identifier belongs to multiple documents, or a hit cannot be mapped safely.
+The temporary request selector and paired benchmark below compare these two concurrent strategies on one
+deployment.
 
 A measurement note for anyone repeating this. Run through an SSH tunnel, every Elasticsearch round trip
 costs 90-190 ms and drifts during a session, which is two orders of magnitude above in-cluster and more
@@ -473,24 +486,24 @@ python -m benchmarks.publications --method POST --compare-lookup-strategies \
   --requests 200 --warmup 20 --seed 2026
 
 # A single arm remains available for an absolute load-bearing sweep.
-python -m benchmarks.publications --lookup-strategy two-phase --ramp 1,4,8,16 --requests 200
+python -m benchmarks.publications --lookup-strategy bulk-search --ramp 1,4,8,16 --requests 200
 
 # Machine-readable output; exit status is 0 only if every stage met the objective.
 python -m benchmarks.publications --json --slo-basis server
 ```
 
 `--lookup-strategy` sends the undocumented `X-Publications-Lookup-Strategy` benchmark header. The
-endpoint defaults to `current`, holds independent current and two-phase service instances, and echoes
+endpoint defaults to `current`, holds independent current and bulk-search service instances, and echoes
 the selection as `_meta.lookup_strategy`. The harness rejects a missing or mismatched attribution rather
 than admitting that latency into the result. `--compare-lookup-strategies` performs the A/B in one
 invocation: it precomputes each batch, sends that exact batch to both implementations, and balances
-current-first/two-phase-first order after the batches are known. In comparison mode, `--requests` and
+current-first/bulk-search-first order after the batches are known. In comparison mode, `--requests` and
 `--warmup` count pairs, so 200 measured pairs produce 400 HTTP requests. The measured pair count must be
 even and at least two, ensuring both request orders are represented. `--concurrency` remains the maximum
 number of HTTP requests in flight; the two members of a pair are sequential rather than doubling the
 offered load.
 
-The paired report keeps current-first and two-phase-first deltas separate as well as combined. That is
+The paired report keeps current-first and bulk-search-first deltas separate as well as combined. That is
 necessary because the second request can benefit from Elasticsearch state warmed by the first. Balanced
 ordering is applied separately to pairs containing DOI/PMCID identifiers and to PMID-only controls, so
 the changed path is represented in both orders. This controls first-order bias, but one shared deployment
@@ -504,8 +517,8 @@ Comparison mode requires `--identifier-file` with one real, resolving identifier
 batch's worth of identifiers, and at least one DOI or PMCID; blank lines and lines beginning with `#` are
 ignored. Prefer one identifier per distinct document and enough DOI/PMCID entries for the reported mix to
 represent the traffic being decided. Synthesized DOI values mostly miss, while an all-PMID corpus sends
-both implementations down the same `_mget` path, so neither can decide whether the two-phase source fetch
-is faster. Any identifier reported as `not_found` by either arm invalidates its pair and makes the
+both implementations down the same `_mget` path, so neither can decide whether the bulk alternative-ID
+search is faster. Any identifier reported as `not_found` by either arm invalidates its pair and makes the
 comparison exit nonzero.
 
 ###### Reading the numbers

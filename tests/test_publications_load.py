@@ -232,16 +232,16 @@ def test_post_requests_carry_identifiers_in_the_json_body():
 
 @pytest.mark.unit
 def test_lookup_strategy_is_selected_from_the_cli_and_sent_as_a_header():
-    arguments = build_parser().parse_args(["--lookup-strategy", "two-phase"])
+    arguments = build_parser().parse_args(["--lookup-strategy", "bulk-search"])
     workload = Workload(lookup_strategy=arguments.lookup_strategy)
     _, kwargs = workload.build_request(["PMID:1"], "rid")
-    assert kwargs["headers"] == {LOOKUP_STRATEGY_HEADER: "two-phase"}
+    assert kwargs["headers"] == {LOOKUP_STRATEGY_HEADER: "bulk-search"}
 
 
 @pytest.mark.unit
 def test_paired_mode_is_mutually_exclusive_with_a_single_lookup_strategy():
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["--compare-lookup-strategies", "--lookup-strategy", "two-phase"])
+        build_parser().parse_args(["--compare-lookup-strategies", "--lookup-strategy", "bulk-search"])
 
 
 @pytest.mark.unit
@@ -312,14 +312,14 @@ def test_workload_rejects_an_unknown_lookup_strategy():
 @pytest.mark.asyncio
 async def test_matching_response_strategy_is_attributed_to_the_sample():
     async def respond(request: httpx.Request) -> httpx.Response:
-        assert request.headers[LOOKUP_STRATEGY_HEADER] == "two-phase"
+        assert request.headers[LOOKUP_STRATEGY_HEADER] == "bulk-search"
         return httpx.Response(
             200,
             json={
                 "_meta": {
                     "processing_time_ms": 8,
                     "request_id": request.url.params["request_id"],
-                    "lookup_strategy": "two-phase",
+                    "lookup_strategy": "bulk-search",
                 },
                 "results": {"PMID:1": {}},
                 "not_found": [],
@@ -332,14 +332,14 @@ async def test_matching_response_strategy_is_attributed_to_the_sample():
     ) as client:
         sample, request_id_matched, lookup_strategy_matched = await _issue_request(
             client,
-            Workload(batch_size=1, lookup_strategy="two-phase"),
+            Workload(batch_size=1, lookup_strategy="bulk-search"),
             ["PMID:1"],
             capture_semantics=True,
         )
 
     assert request_id_matched
     assert lookup_strategy_matched
-    assert sample.lookup_strategy == "two-phase"
+    assert sample.lookup_strategy == "bulk-search"
     assert sample.semantic_signature is not None
     assert sample.ok
 
@@ -358,11 +358,11 @@ def test_paired_cases_are_precomputed_reproducibly_with_balanced_order():
     assert first == second
     assert [case.first_strategy for case in first] == [
         "current",
-        "two-phase",
+        "bulk-search",
         "current",
-        "two-phase",
+        "bulk-search",
         "current",
-        "two-phase",
+        "bulk-search",
     ]
     assert all(len(case.identifiers) == 2 for case in first)
 
@@ -396,8 +396,8 @@ def test_paired_cases_balance_order_within_changed_and_control_paths():
     control_orders = [
         case.first_strategy for case in cases if not case.identifiers[0].lower().startswith(("doi:", "pmc:"))
     ]
-    assert changed_orders == ["current", "two-phase"]
-    assert control_orders == ["two-phase", "current"]
+    assert changed_orders == ["current", "bulk-search"]
+    assert control_orders == ["bulk-search", "current"]
     assert sum(case.first_strategy == "current" for case in cases) == 2
 
 
@@ -416,13 +416,13 @@ async def test_paired_stage_uses_identical_batches_without_doubling_http_concurr
             strategy = request.headers[LOOKUP_STRATEGY_HEADER]
             # Unequal treatment latency must not change which identifiers the
             # other treatment receives.
-            await asyncio.sleep(0.004 if strategy == "two-phase" else 0.001)
+            await asyncio.sleep(0.004 if strategy == "bulk-search" else 0.001)
             identifiers = payload["ids"]
             return httpx.Response(
                 200,
                 json={
                     "_meta": {
-                        "processing_time_ms": 20 if strategy == "two-phase" else 10,
+                        "processing_time_ms": 20 if strategy == "bulk-search" else 10,
                         "request_id": payload["request_id"],
                         "lookup_strategy": strategy,
                     },
@@ -462,7 +462,7 @@ async def test_paired_stage_uses_identical_batches_without_doubling_http_concurr
     assert max_active == 3
     assert [pair.index for pair in pairs] == list(range(8))
     assert all(pair.semantic_match and pair.valid for pair in pairs)
-    assert {pair.order_label for pair in pairs} == {"current-first", "two-phase-first"}
+    assert {pair.order_label for pair in pairs} == {"current-first", "bulk-search-first"}
 
 
 @pytest.mark.unit
@@ -473,7 +473,7 @@ async def test_paired_stage_rejects_semantically_different_results():
         strategy = request.headers[LOOKUP_STRATEGY_HEADER]
         result = {"PMID:1": {"title": "same"}}
         not_found = ["PMID:2"]
-        if strategy == "two-phase":
+        if strategy == "bulk-search":
             result["PMID:1"] = {"title": "different"}
             not_found = []
         return httpx.Response(
@@ -602,15 +602,15 @@ def test_paired_report_has_per_arm_latency_and_order_split_deltas():
             first_strategy="current",
             identifiers=("PMID:1", "doi:10.1000/example"),
             current=sample("current", 10),
-            two_phase=sample("two-phase", 20),
+            bulk_search=sample("bulk-search", 20),
             semantic_match=True,
         ),
         PairedObservation(
             index=1,
-            first_strategy="two-phase",
+            first_strategy="bulk-search",
             identifiers=("PMID:3", "PMC:PMC4"),
             current=sample("current", 30),
-            two_phase=sample("two-phase", 20),
+            bulk_search=sample("bulk-search", 20),
             semantic_match=True,
         ),
     ]
@@ -630,18 +630,18 @@ def test_paired_report_has_per_arm_latency_and_order_split_deltas():
     assert report["mode"] == "paired_lookup_strategy_comparison"
     assert report["integrity"]["valid"] is True
     assert stage["arms"]["current"]["server_latency"]["p50_ms"] == 10
-    assert stage["arms"]["two-phase"]["server_latency"]["p90_ms"] == 20
+    assert stage["arms"]["bulk-search"]["server_latency"]["p90_ms"] == 20
     assert stage["paired_delta_ms"]["server"]["current_first"]["p50_ms"] == 10
-    assert stage["paired_delta_ms"]["server"]["two_phase_first"]["p50_ms"] == -10
+    assert stage["paired_delta_ms"]["server"]["bulk_search_first"]["p50_ms"] == -10
     assert stage["p90_difference_percent"]["server"] == pytest.approx(-33.33)
-    assert stage["order_counts"] == {"current_first": 1, "two_phase_first": 1}
+    assert stage["order_counts"] == {"current_first": 1, "bulk_search_first": 1}
     assert stage["order_balanced"] is True
-    assert stage["changed_path_order_counts"] == {"current_first": 1, "two_phase_first": 1}
+    assert stage["changed_path_order_counts"] == {"current_first": 1, "bulk_search_first": 1}
     assert stage["changed_path_order_balanced"] is True
     assert stage["alternative_identifiers"] == 2
     rendered = render_text(result)
     assert "paired lookup-strategy benchmark" in rendered
-    assert "two-phase minus current" in rendered
+    assert "bulk-search minus current" in rendered
     assert "do not declare a winner" in rendered
 
 
@@ -662,7 +662,7 @@ def test_paired_result_fails_when_one_arm_is_incomplete():
         first_strategy="current",
         identifiers=("PMID:1",),
         current=current,
-        two_phase=timed_out,
+        bulk_search=timed_out,
     )
     plan = RunPlan(
         base_url="https://example.invalid",
@@ -693,13 +693,13 @@ def test_paired_result_requires_both_request_orders():
         lookup_strategy="current",
         semantic_signature="same",
     )
-    two_phase = Sample(
+    bulk_search = Sample(
         client_ms=21.0,
         status=200,
         server_ms=11,
         requested=1,
         found=1,
-        lookup_strategy="two-phase",
+        lookup_strategy="bulk-search",
         semantic_signature="same",
     )
     pair = PairedObservation(
@@ -707,7 +707,7 @@ def test_paired_result_requires_both_request_orders():
         first_strategy="current",
         identifiers=("doi:10.1000/example",),
         current=current,
-        two_phase=two_phase,
+        bulk_search=bulk_search,
         semantic_match=True,
     )
     plan = RunPlan(
@@ -749,13 +749,13 @@ async def test_response_strategy_mismatch_is_excluded_from_latency_samples(obser
     ) as client:
         sample, request_id_matched, lookup_strategy_matched = await _issue_request(
             client,
-            Workload(batch_size=1, lookup_strategy="two-phase"),
+            Workload(batch_size=1, lookup_strategy="bulk-search"),
             ["PMID:1"],
         )
 
     assert request_id_matched
     assert not lookup_strategy_matched
-    assert sample.error == (f"lookup-strategy-mismatch:expected=two-phase,observed={observed or '<missing>'}")
+    assert sample.error == (f"lookup-strategy-mismatch:expected=bulk-search,observed={observed or '<missing>'}")
     stage = StageReport(label="c=1", concurrency=1, wall_seconds=1.0, samples=[sample])
     assert stage.successful == []
     assert stage.client_latency() is None
@@ -763,7 +763,7 @@ async def test_response_strategy_mismatch_is_excluded_from_latency_samples(obser
 
     plan = RunPlan(
         base_url="https://example.invalid",
-        workload=Workload(batch_size=1, lookup_strategy="two-phase"),
+        workload=Workload(batch_size=1, lookup_strategy="bulk-search"),
     )
     result = RunResult(plan=plan, stages=[stage], lookup_strategy_mismatches=1)
     assert "lookup strategy attribution mismatches  1" in render_text(result)
@@ -787,7 +787,7 @@ async def test_verified_corpus_uses_and_validates_the_selected_lookup_strategy(m
                 200,
                 request=httpx.Request("POST", f"https://example.invalid{path}"),
                 json={
-                    "_meta": {"lookup_strategy": "two-phase"},
+                    "_meta": {"lookup_strategy": "bulk-search"},
                     "results": {"PMID:1": {}},
                 },
             )
@@ -800,7 +800,7 @@ async def test_verified_corpus_uses_and_validates_the_selected_lookup_strategy(m
     resolved = await verify_pmid_pool(
         "https://example.invalid",
         ["PMID:1", "PMID:2"],
-        lookup_strategy="two-phase",
+        lookup_strategy="bulk-search",
     )
 
     assert resolved == ["PMID:1"]
@@ -809,7 +809,7 @@ async def test_verified_corpus_uses_and_validates_the_selected_lookup_strategy(m
             "/publications",
             {
                 "json": {"ids": ["PMID:1", "PMID:2"], "request_id": "corpus-verify"},
-                "headers": {LOOKUP_STRATEGY_HEADER: "two-phase"},
+                "headers": {LOOKUP_STRATEGY_HEADER: "bulk-search"},
             },
         )
     ]
@@ -840,11 +840,11 @@ async def test_verified_corpus_rejects_wrong_strategy_attribution(monkeypatch):
         lambda **kwargs: FakeClient(),
     )
 
-    with pytest.raises(RuntimeError, match="expected=two-phase, observed=current"):
+    with pytest.raises(RuntimeError, match="expected=bulk-search, observed=current"):
         await verify_pmid_pool(
             "https://example.invalid",
             ["PMID:1"],
-            lookup_strategy="two-phase",
+            lookup_strategy="bulk-search",
         )
 
 
@@ -895,7 +895,7 @@ async def test_file_backed_workload_draws_reproducible_full_batches_and_reports_
             "--seed",
             "17",
             "--lookup-strategy",
-            "two-phase",
+            "bulk-search",
         ]
     )
 

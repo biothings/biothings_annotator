@@ -12,7 +12,12 @@ from sanic.exceptions import BadRequest
 from sanic.request import Request
 from sanic.views import HTTPMethodView
 
-from biothings_annotator.annotator.document_metadata import DocumentMetadataService
+from biothings_annotator.annotator.document_metadata import (
+    BULK_SEARCH_LOOKUP_STRATEGY,
+    CURRENT_LOOKUP_STRATEGY,
+    DOCUMENT_METADATA_LOOKUP_STRATEGIES,
+    DocumentMetadataService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +25,7 @@ MAX_PUBLICATION_IDS = 100
 # Temporary single-deployment A/B hook for the CCWG#15 benchmark. Keep it out of
 # OpenAPI and remove it with the losing lookup implementation after measurement.
 PUBLICATIONS_LOOKUP_STRATEGY_HEADER = "X-Publications-Lookup-Strategy"
-CURRENT_LOOKUP_STRATEGY = "current"
-TWO_PHASE_LOOKUP_STRATEGY = "two-phase"
-PUBLICATIONS_LOOKUP_STRATEGIES = (CURRENT_LOOKUP_STRATEGY, TWO_PHASE_LOOKUP_STRATEGY)
+PUBLICATIONS_LOOKUP_STRATEGIES = DOCUMENT_METADATA_LOOKUP_STRATEGIES
 # The index stores the PMID as the document _id and carries the DOI and PMCID in
 # pubmed.identifiers. PMCID values keep PubMed's doubled form, PMC:PMC1904490
 # rather than PMC:1904490. Prefix casing is accepted loosely: DOI and PMCID
@@ -91,10 +94,10 @@ class DocumentMetadataView(HTTPMethodView):
 
     # HTTPMethodView constructs a view object for every request, so these live on
     # the class to provide exactly two fixed service instances per worker.
-    # Mutating one shared service's ``two_phase_lookup`` flag would race when
-    # current and two-phase requests overlap in the same worker.
-    document_metadata = DocumentMetadataService(two_phase_lookup=False)
-    two_phase_document_metadata = DocumentMetadataService(two_phase_lookup=True)
+    # Mutating one shared service's strategy would race when current and bulk
+    # requests overlap in the same worker.
+    document_metadata = DocumentMetadataService(lookup_strategy=CURRENT_LOOKUP_STRATEGY)
+    bulk_search_document_metadata = DocumentMetadataService(lookup_strategy=BULK_SEARCH_LOOKUP_STRATEGY)
 
     @staticmethod
     def _lookup_strategy(request: Request) -> str:
@@ -105,13 +108,13 @@ class DocumentMetadataView(HTTPMethodView):
         if lookup_strategy not in PUBLICATIONS_LOOKUP_STRATEGIES:
             raise DocumentMetadataRequestError(
                 f"The {PUBLICATIONS_LOOKUP_STRATEGY_HEADER} header must be either "
-                f"{CURRENT_LOOKUP_STRATEGY} or {TWO_PHASE_LOOKUP_STRATEGY}."
+                f"{CURRENT_LOOKUP_STRATEGY} or {BULK_SEARCH_LOOKUP_STRATEGY}."
             )
         return lookup_strategy
 
     def _service_for_lookup_strategy(self, lookup_strategy: str) -> DocumentMetadataService:
-        if lookup_strategy == TWO_PHASE_LOOKUP_STRATEGY:
-            return self.two_phase_document_metadata
+        if lookup_strategy == BULK_SEARCH_LOOKUP_STRATEGY:
+            return self.bulk_search_document_metadata
         return self.document_metadata
 
     @staticmethod

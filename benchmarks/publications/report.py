@@ -83,7 +83,7 @@ def _comparison_arm_row(stage: ComparisonStage, strategy: str) -> str:
 
 
 def _pair_latency(pair: PairedObservation, strategy: str, basis: str) -> Optional[float]:
-    sample = pair.current if strategy == "current" else pair.two_phase
+    sample = pair.current if strategy == "current" else pair.bulk_search
     if basis == "client":
         return sample.client_ms
     if basis == "server":
@@ -101,9 +101,9 @@ def _paired_delta_values(
         if first_strategy is not None and pair.first_strategy != first_strategy:
             continue
         current = _pair_latency(pair, "current", basis)
-        two_phase = _pair_latency(pair, "two-phase", basis)
-        if current is not None and two_phase is not None:
-            values.append(two_phase - current)
+        bulk_search = _pair_latency(pair, "bulk-search", basis)
+        if current is not None and bulk_search is not None:
+            values.append(bulk_search - current)
     return values
 
 
@@ -112,7 +112,7 @@ def _delta_summary(values: List[float]) -> Optional[Dict[str, object]]:
     if summary is None:
         return None
     rendered: Dict[str, object] = summary.as_dict()
-    rendered["two_phase_faster_fraction"] = round(sum(value < 0 for value in values) / len(values), 4)
+    rendered["bulk_search_faster_fraction"] = round(sum(value < 0 for value in values) / len(values), 4)
     return rendered
 
 
@@ -120,7 +120,7 @@ def _comparison_delta_dict(stage: ComparisonStage, basis: str) -> Dict[str, obje
     return {
         "all": _delta_summary(_paired_delta_values(stage, basis)),
         "current_first": _delta_summary(_paired_delta_values(stage, basis, "current")),
-        "two_phase_first": _delta_summary(_paired_delta_values(stage, basis, "two-phase")),
+        "bulk_search_first": _delta_summary(_paired_delta_values(stage, basis, "bulk-search")),
     }
 
 
@@ -130,14 +130,14 @@ def _comparison_p90_difference(stage: ComparisonStage, basis: str) -> Optional[f
         if basis == "server"
         else stage.arm_report("current").client_latency()
     )
-    two_phase = (
-        stage.arm_report("two-phase").server_latency()
+    bulk_search = (
+        stage.arm_report("bulk-search").server_latency()
         if basis == "server"
-        else stage.arm_report("two-phase").client_latency()
+        else stage.arm_report("bulk-search").client_latency()
     )
-    if current is None or two_phase is None:
+    if current is None or bulk_search is None:
         return None
-    return round(two_phase.p90 - current.p90, 2)
+    return round(bulk_search.p90 - current.p90, 2)
 
 
 def _comparison_p90_percent(stage: ComparisonStage, basis: str) -> Optional[float]:
@@ -146,14 +146,14 @@ def _comparison_p90_percent(stage: ComparisonStage, basis: str) -> Optional[floa
         if basis == "server"
         else stage.arm_report("current").client_latency()
     )
-    two_phase = (
-        stage.arm_report("two-phase").server_latency()
+    bulk_search = (
+        stage.arm_report("bulk-search").server_latency()
         if basis == "server"
-        else stage.arm_report("two-phase").client_latency()
+        else stage.arm_report("bulk-search").client_latency()
     )
-    if current is None or two_phase is None or current.p90 == 0:
+    if current is None or bulk_search is None or current.p90 == 0:
         return None
-    return round((two_phase.p90 - current.p90) / current.p90 * 100, 2)
+    return round((bulk_search.p90 - current.p90) / current.p90 * 100, 2)
 
 
 def _comparison_arm_dict(stage: ComparisonStage, strategy: str, threshold_ms: float) -> Dict[str, object]:
@@ -202,7 +202,7 @@ def _comparison_stage_dict(stage: ComparisonStage, threshold_ms: float) -> Dict[
             "unresolved_identifiers": stage.unresolved_identifiers,
         },
         "arms": {
-            strategy: _comparison_arm_dict(stage, strategy, threshold_ms) for strategy in ("current", "two-phase")
+            strategy: _comparison_arm_dict(stage, strategy, threshold_ms) for strategy in ("current", "bulk-search")
         },
         "p90_difference_ms": {
             "server": _comparison_p90_difference(stage, "server"),
@@ -213,7 +213,7 @@ def _comparison_stage_dict(stage: ComparisonStage, threshold_ms: float) -> Dict[
             "client": _comparison_p90_percent(stage, "client"),
         },
         "paired_delta_ms": {
-            "meaning": "two-phase minus current; negative is faster",
+            "meaning": "bulk-search minus current; negative is faster",
             "server": _comparison_delta_dict(stage, "server"),
             "client": _comparison_delta_dict(stage, "client"),
         },
@@ -366,14 +366,14 @@ def _comparison_delta_line(
     return (
         f"  {stage.label:<7} {basis:<7} {label:<17} n={summary.count:<4} "
         f"p50 {summary.p50:>+7.1f}  p90 {summary.p90:>+7.1f}  p99 {summary.p99:>+7.1f}  "
-        f"two-phase faster {faster:>6.1%}"
+        f"bulk-search faster {faster:>6.1%}"
     )
 
 
 def _comparison_caveats(result: ComparisonResult) -> List[str]:
     notes = [
         "each pair is sequential, so its second request can benefit from Elasticsearch state warmed by its "
-        "first; balanced current-first/two-phase-first ordering controls first-order bias but cannot produce two "
+        "first; balanced current-first/bulk-search-first ordering controls first-order bias but cannot produce two "
         "cold observations on one shared deployment",
         "the two implementations share one mixed load during this run, so its wall time is not a standalone "
         "capacity measurement; use single-strategy --ramp runs for absolute capacity",
@@ -396,7 +396,7 @@ def _comparison_caveats(result: ComparisonResult) -> List[str]:
     overheads = [
         arm.overhead_latency()
         for stage in result.stages
-        for arm in (stage.arm_report("current"), stage.arm_report("two-phase"))
+        for arm in (stage.arm_report("current"), stage.arm_report("bulk-search"))
     ]
     measured = [summary.p90 for summary in overheads if summary is not None]
     if measured and max(measured) > 20:
@@ -417,11 +417,11 @@ def _comparison_caveats(result: ComparisonResult) -> List[str]:
                 "the combined delta"
             )
         current_first = LatencySummary.from_values(_paired_delta_values(stage, "server", "current"))
-        two_phase_first = LatencySummary.from_values(_paired_delta_values(stage, "server", "two-phase"))
-        if current_first and two_phase_first and current_first.p50 * two_phase_first.p50 <= 0:
+        bulk_search_first = LatencySummary.from_values(_paired_delta_values(stage, "server", "bulk-search"))
+        if current_first and bulk_search_first and current_first.p50 * bulk_search_first.p50 <= 0:
             notes.append(
                 f"{stage.label} has zero or opposite-signed median server deltas between current-first "
-                "and two-phase-first pairs; the result is order/cache-sensitive, so do not declare a winner"
+                "and bulk-search-first pairs; the result is order/cache-sensitive, so do not declare a winner"
             )
     return notes
 
@@ -431,7 +431,7 @@ def _comparison_workload_description(result: ComparisonResult) -> str:
     suffix = f", {result.plan.workload.lookup_strategy} lookup"
     if description.endswith(suffix):
         description = description[: -len(suffix)]
-    return f"{description}, paired current vs two-phase"
+    return f"{description}, paired current vs bulk-search"
 
 
 def _render_comparison_text(result: ComparisonResult) -> str:
@@ -449,9 +449,9 @@ def _render_comparison_text(result: ComparisonResult) -> str:
         "-" * sum(width for _, width in _COMPARISON_COLUMNS),
     ]
     for stage in result.stages:
-        lines.extend(_comparison_arm_row(stage, strategy) for strategy in ("current", "two-phase"))
+        lines.extend(_comparison_arm_row(stage, strategy) for strategy in ("current", "bulk-search"))
 
-    lines.extend(["", "per-arm p90 difference (two-phase minus current)"])
+    lines.extend(["", "per-arm p90 difference (bulk-search minus current)"])
     for stage in result.stages:
         differences = []
         for basis in ("server", "client"):
@@ -463,16 +463,16 @@ def _render_comparison_text(result: ComparisonResult) -> str:
                 differences.append(f"{basis} {difference:+.1f} ms ({percent:+.1f}%)")
         lines.append(f"  {stage.label:<7} " + ", ".join(differences))
 
-    lines.extend(["", "paired delta in milliseconds (two-phase minus current; negative is faster)"])
+    lines.extend(["", "paired delta in milliseconds (bulk-search minus current; negative is faster)"])
     for stage in result.stages:
         for basis in ("server", "client"):
             lines.append(_comparison_delta_line(stage, basis, "all"))
             lines.append(_comparison_delta_line(stage, basis, "current-first", "current"))
-            lines.append(_comparison_delta_line(stage, basis, "two-phase-first", "two-phase"))
+            lines.append(_comparison_delta_line(stage, basis, "bulk-search-first", "bulk-search"))
 
     lines.extend(["", "SLO verdict by arm"])
     for stage in result.stages:
-        for strategy in ("current", "two-phase"):
+        for strategy in ("current", "bulk-search"):
             arm = stage.arm_report(strategy)
             for basis in ("server", "client"):
                 verdict = arm.verdict(basis, plan.threshold_ms)
@@ -492,10 +492,10 @@ def _render_comparison_text(result: ComparisonResult) -> str:
         lines.append(
             f"  {stage.label:<7} {len(stage.valid_pairs)}/{len(stage.pairs)} valid pairs; "
             f"current-first {stage.order_counts['current_first']}, "
-            f"two-phase-first {stage.order_counts['two_phase_first']} "
+            f"bulk-search-first {stage.order_counts['bulk_search_first']} "
             f"({'balanced' if stage.order_balanced else 'NOT BALANCED'}); "
             f"changed-path current-first {stage.changed_path_order_counts['current_first']}, "
-            f"two-phase-first {stage.changed_path_order_counts['two_phase_first']} "
+            f"bulk-search-first {stage.changed_path_order_counts['bulk_search_first']} "
             f"({'balanced' if stage.changed_path_order_balanced else 'NOT BALANCED'}); "
             f"semantic mismatches {stage.semantic_mismatches}; "
             f"unresolved {stage.unresolved_identifiers} IDs across {stage.unresolved_pairs} pairs; "
@@ -656,7 +656,7 @@ def _comparison_as_dict(result: ComparisonResult) -> Dict[str, object]:
             "description": _comparison_workload_description(result),
             "batch_size": plan.workload.batch_size,
             "method": plan.workload.normalized_method,
-            "lookup_strategies": ["current", "two-phase"],
+            "lookup_strategies": ["current", "bulk-search"],
             "pmid_ratio": None if plan.workload.uses_identifier_pool else plan.workload.pmid_ratio,
             "unique_ratio": None if plan.workload.uses_identifier_pool else plan.workload.unique_ratio,
             "identifier_pool": (
@@ -759,7 +759,7 @@ def slo_met(result: BenchmarkResult, basis: str) -> bool:
         verdicts = [
             stage.arm_report(strategy).verdict(basis, result.plan.threshold_ms)
             for stage in result.stages
-            for strategy in ("current", "two-phase")
+            for strategy in ("current", "bulk-search")
         ]
         return bool(verdicts) and all(verdict is not None and verdict.met for verdict in verdicts)
 
