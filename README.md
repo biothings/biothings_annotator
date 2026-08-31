@@ -319,22 +319,19 @@ selection. The request has a two-second total backend deadline by default (confi
 PMIDs are the document `_id`, so they resolve through one exact-ID Elasticsearch `_mget` for the whole
 batch, including a complete batch of 100. PMCID and DOI resolve against `pubmed.identifiers` instead,
 which costs one `_msearch` entry per identifier, so a PMID-only request stays on the single-request fast
-path and only mixed requests pay for the scoped lookup. The behavioral performance test verifies that a
+path and only mixed requests pay for the scoped lookup. The canonical PMID is stored only as `_id`;
+`pubmed.identifiers` contains its DOI and PMC aliases. The behavioral performance test verifies that a
 100-PMID request remains one backend request, and the load benchmark measures what that costs against
 the 150 ms p90 service objective — see [Load benchmark](#load-benchmark-and-the-150-ms-objective).
 
-The current PubMed index contains only `PMID:<digits>` document IDs and no `pubmed.identifiers` field,
-so PMCID and DOI lookups return `not_found` until the index is rebuilt. That is the response CCWG#15
-specifies for an identifier the service does not have, but it is indistinguishable from a genuinely
-absent paper, so the index shape is checked separately — see
-[Verifying the PubMed index shape](#verifying-the-pubmed-index-shape).
+An alias that points to an older index without `pubmed.identifiers` returns `not_found` for every PMCID
+and DOI lookup. That is indistinguishable from a genuinely absent paper, so the index shape is checked
+separately — see [Verifying the PubMed index shape](#verifying-the-pubmed-index-shape).
 
-The reindex is treated as a deployment prerequisite rather than something the service polices. The
-identifier routing, the scoped lookup, and the capability probe all ship here so that PMCID and DOI
-support becomes live the moment the index is rebuilt, with no further code change. Deliberately, the
-endpoint does not refuse PMCID and DOI requests while the field is absent: a startup gate would also
-take down the PMID fast path, which works against the index as it stands today. Use
-`check_index_fields()` to tell "not in this index" from "not a real paper" before rollout.
+Index compatibility is treated as a deployment prerequisite rather than something the service polices.
+Deliberately, the endpoint does not refuse PMCID and DOI requests while the field is absent: a startup
+gate would also take down the PMID fast path, which still works against an older index. Use
+`check_index_fields()` to tell "not in this index" from "not a real paper" during rollout and rollback.
 
 ##### Verifying the PubMed index shape
 
@@ -379,7 +376,8 @@ Point `PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION` at `test_local_forward` to r
 against a forwarded test-instance service, or at `test` to reach the test ingress directly.
 
 The document metadata live checks assert the index shape, resolution by every identifier type,
-case-insensitive matching, and an upper bound of three identifiers per record. That bound is a bad-export
+case-insensitive matching, and an upper bound of two alternate identifiers per record. The canonical PMID
+remains the document `_id`, while the alternate list holds the DOI and PMCID. That bound is a bad-export
 guard: pubmed2db PR #7 limits a record to its own identifiers, so a record carrying hundreds means the
 export regressed and is pulling in cited references' DOIs.
 

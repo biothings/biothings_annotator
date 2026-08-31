@@ -856,7 +856,14 @@ async def test_publication_endpoints_return_sanitized_server_error(
 
 
 LIVE_PMID = "PMID:16954148"
-LIVE_PMID_IDENTIFIERS = ["PMID:16954148", "PMC:PMC1904490", "doi:10.1242/jcs.03153"]
+LIVE_ALTERNATE_IDENTIFIERS = [
+    "PMC:PMC1904490",
+    "doi:10.1242/jcs.03153",
+]
+LIVE_PUBLICATION_IDENTIFIERS = [
+    LIVE_PMID,
+    *LIVE_ALTERNATE_IDENTIFIERS,
+]
 # Real values verified against NCBI upstream. The first two are CCWG#15's own
 # response-spec examples.
 LIVE_DATE_EXPECTATIONS = {
@@ -867,7 +874,7 @@ LIVE_DATE_EXPECTATIONS = {
 # pubmed2db PR #7's xrefs fix bounds a record at its own identifiers. A record
 # carrying hundreds means the export regressed and is pulling in cited
 # references' DOIs, which is a bad export rather than a code defect.
-MAX_IDENTIFIERS_PER_RECORD = 3
+MAX_ALTERNATE_IDENTIFIERS_PER_RECORD = 2
 
 
 @pytest.fixture
@@ -922,11 +929,11 @@ async def test_live_index_exposes_the_multi_identifier_field(live_pubmed_client)
 async def test_live_index_resolves_a_publication_by_every_identifier_type(live_pubmed_client):
     service = _live_service()
 
-    results, not_found = await service.get_publications(LIVE_PMID_IDENTIFIERS)
+    results, not_found = await service.get_publications(LIVE_PUBLICATION_IDENTIFIERS)
 
     assert not_found == []
     # Every identifier must resolve to the same publication, keyed as submitted.
-    titles = {results[identifier]["article_title"] for identifier in LIVE_PMID_IDENTIFIERS}
+    titles = {results[identifier]["article_title"] for identifier in LIVE_PUBLICATION_IDENTIFIERS}
     assert len(titles) == 1
     assert titles.pop()
 
@@ -964,8 +971,9 @@ async def test_live_index_bounds_identifier_cardinality(live_pubmed_client):
     hits = await client.mget([LIVE_PMID], fields=["pubmed.identifiers"])
     identifiers = hits[0]["pubmed"]["identifiers"]
 
-    assert sorted(identifiers) == sorted(LIVE_PMID_IDENTIFIERS)
-    assert len(identifiers) <= MAX_IDENTIFIERS_PER_RECORD
+    assert sorted(identifiers) == sorted(LIVE_ALTERNATE_IDENTIFIERS)
+    assert LIVE_PMID not in identifiers
+    assert len(identifiers) <= MAX_ALTERNATE_IDENTIFIERS_PER_RECORD
 
 
 @pytest.mark.integration
