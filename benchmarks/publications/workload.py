@@ -18,7 +18,7 @@ LOOKUP_STRATEGY_HEADER = "X-Publications-Lookup-Strategy"
 # is the default batch size rather than something the caller has to opt into.
 DEFAULT_BATCH_SIZE = 100
 SUPPORTED_METHODS = ("GET", "POST")
-SUPPORTED_LOOKUP_STRATEGIES = ("current", "two-phase")
+SUPPORTED_LOOKUP_STRATEGIES = ("current", "bulk-search")
 
 
 @dataclass(frozen=True)

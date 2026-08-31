@@ -50,12 +50,6 @@ ELASTICSEARCH_REQUEST_TIMEOUT = 30
 ELASTICSEARCH_QUERY_SIZE = 10
 ELASTICSEARCH_QUERY_BATCH_SIZE = 1000
 DOCUMENT_METADATA_REQUEST_TIMEOUT = 2.0
-# Resolve DOI and PMCID to document _ids with a source-free _msearch, then fetch
-# every document -- those plus the submitted PMIDs -- in one _mget. Trades the
-# current parallelism (mget and msearch run concurrently) for a lighter msearch
-# and a single batched fetch, so which is faster is workload dependent and worth
-# measuring per deployment rather than assuming.
-DOCUMENT_METADATA_TWO_PHASE_LOOKUP = False
 
 
 BIOLINK_PREFIX_to_BioThings = {

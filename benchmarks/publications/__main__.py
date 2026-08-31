@@ -73,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--compare-lookup-strategies",
         action="store_true",
         help=(
-            "issue balanced current/two-phase pairs against one deployment; --requests and --warmup then count pairs"
+            "issue balanced current/bulk-search pairs against one deployment; --requests and --warmup then count pairs"
         ),
     )
     parser.add_argument(

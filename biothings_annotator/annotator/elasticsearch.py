@@ -16,8 +16,9 @@ class ElasticsearchAnnotatorClient:
     subset the annotator calls today:
 
     * querymany(query_list, scopes, fields=None, size=None)
-    * querymany_ids(query_list, scopes, size=None)
+    * querymany_exact(query_list, field, fields=None, size=None)
     * mget(query_list, fields=None)
+    * search_terms(query_list, field, fields=None, size=None)
     * query(query, fields=None, fetch_all=False, size=None, skip=0)
     * field_capabilities(fields)
 
@@ -73,55 +74,36 @@ class ElasticsearchAnnotatorClient:
 
         return results
 
-    async def querymany_ids(
+    async def querymany_exact(
         self,
-        query_list: List[str],
-        scopes: Union[str, List[str]],
+        query_list: Iterable[str],
+        field: str,
+        fields: Optional[Union[str, List[str]]] = None,
         size: Optional[int] = None,
     ) -> List[Dict]:
-        """Resolve identifiers to document ``_id`` values without fetching source.
+        """Run one exact root-field term query per input identifier.
 
-        Distinct from ``querymany(fields=[])``: an empty source filter still has
-        Elasticsearch load the stored ``_source`` and then filter it away, while
-        ``"_source": false`` skips loading it altogether. For this index that is
-        the difference between decompressing every matched abstract and touching
-        none of them, which is the whole point of resolving identifiers before
-        fetching documents.
+        ``querymany`` intentionally probes both a scope and its ``.keyword``
+        subfield because generic annotator mappings are not uniform.  Callers
+        that have already confirmed a root ``keyword`` mapping can use this
+        narrower form to avoid sending a guaranteed-miss clause for every
+        identifier.
         """
         query_list = list(query_list)
         if not query_list:
             return []
 
-        results: List[Dict] = []
         query_size = self.query_size if size is None else size
-        for batch in self._iter_batches(query_list, self.query_batch_size):
-            lines = []
-            for query_id in batch:
-                lines.append({})
-                lines.append(
-                    {
-                        "size": query_size,
-                        "_source": False,
-                        "query": self._scope_query(query_id, scopes),
-                    }
+        results: List[Dict] = []
+        for query_batch in self._iter_batches(query_list, self.query_batch_size):
+            results.extend(
+                await self._querymany_exact_batch(
+                    query_batch,
+                    field=field,
+                    fields=fields,
+                    size=query_size,
                 )
-
-            response = await self._post_ndjson("_msearch", lines)
-            responses = response.json().get("responses", [])
-            if len(responses) != len(batch):
-                raise RuntimeError(
-                    f"Elasticsearch msearch returned {len(responses)} responses for {len(batch)} queries"
-                )
-
-            for query_id, query_response in zip(batch, responses):
-                if "error" in query_response:
-                    raise RuntimeError(f"Elasticsearch query failed for {query_id}: {query_response['error']}")
-                hits = query_response.get("hits", {}).get("hits", [])
-                if not hits:
-                    results.append({"query": query_id, "notfound": True})
-                    continue
-                results.append({"query": query_id, "_id": hits[0].get("_id")})
-
+            )
         return results
 
     async def mget(
@@ -167,6 +149,68 @@ class ElasticsearchAnnotatorClient:
 
         return results
 
+    async def search_terms(
+        self,
+        query_list: Iterable[str],
+        field: str,
+        fields: Optional[Union[str, List[str]]] = None,
+        size: Optional[int] = None,
+    ) -> Dict:
+        """Resolve many exact values with one bounded ``terms`` search.
+
+        The exact hit total and its relation are retained so a caller that must
+        reverse-map documents to submitted values can detect a truncated result
+        set instead of silently reporting an identifier as absent.
+        """
+        query_list = list(query_list)
+        if not query_list:
+            return {
+                "took": None,
+                "timed_out": False,
+                "failed_shards": 0,
+                "total": 0,
+                "total_relation": "eq",
+                "max_score": None,
+                "hits": [],
+            }
+
+        query_size = len(query_list) if size is None else size
+        response = await self._post_json(
+            "_search",
+            {
+                "size": query_size,
+                "track_total_hits": True,
+                "_source": self._source_filter(fields),
+                "query": {
+                    "constant_score": {
+                        "filter": {
+                            "terms": {
+                                field: query_list,
+                            }
+                        }
+                    }
+                },
+            },
+        )
+        payload = response.json()
+        hits_section = payload.get("hits", {})
+        shards = payload.get("_shards", {})
+        total = hits_section.get("total", 0)
+        total_relation = "eq"
+        if isinstance(total, dict):
+            total_relation = total.get("relation", "eq")
+            total = total.get("value", 0)
+
+        return {
+            "took": payload.get("took"),
+            "timed_out": payload.get("timed_out", False),
+            "failed_shards": shards.get("failed", 0) if isinstance(shards, dict) else None,
+            "total": total,
+            "total_relation": total_relation,
+            "max_score": hits_section.get("max_score"),
+            "hits": [self._format_hit(hit) for hit in hits_section.get("hits", [])],
+        }
+
     async def field_capabilities(self, fields: Union[str, List[str]]) -> Dict[str, Dict]:
         """Report which of the requested fields exist in the index mapping.
 
@@ -205,6 +249,47 @@ class ElasticsearchAnnotatorClient:
         response = await self._post_ndjson("_msearch", lines)
         payload = response.json()
         responses = payload.get("responses", [])
+        if len(responses) != len(query_list):
+            raise RuntimeError(
+                f"Elasticsearch msearch returned {len(responses)} responses for {len(query_list)} queries"
+            )
+
+        results = []
+        for query_id, query_response in zip(query_list, responses):
+            if "error" in query_response:
+                raise RuntimeError(f"Elasticsearch query failed for {query_id}: {query_response['error']}")
+
+            hits = query_response.get("hits", {}).get("hits", [])
+            if not hits:
+                results.append({"query": query_id, "notfound": True})
+                continue
+
+            for hit in hits:
+                results.append(self._format_hit(hit, query=query_id))
+
+        return results
+
+    async def _querymany_exact_batch(
+        self,
+        query_list: List[str],
+        field: str,
+        fields: Optional[Union[str, List[str]]] = None,
+        size: Optional[int] = None,
+    ) -> List[Dict]:
+        lines = []
+        query_size = self.query_size if size is None else size
+        for query_id in query_list:
+            lines.append({})
+            lines.append(
+                {
+                    "size": query_size,
+                    "_source": self._source_filter(fields),
+                    "query": {"term": {field: query_id}},
+                }
+            )
+
+        response = await self._post_ndjson("_msearch", lines)
+        responses = response.json().get("responses", [])
         if len(responses) != len(query_list):
             raise RuntimeError(
                 f"Elasticsearch msearch returned {len(responses)} responses for {len(query_list)} queries"

@@ -95,7 +95,7 @@
       "get": {
         "operationId": "get~legacy_document_metadata_endpoint",
         "summary": "Retrieve metadata for a comma-separated list of publications",
-        "description": "Legacy-compatible batch multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve against pubmed.identifiers and cost one search per identifier, so a PMID-only request stays on the single-request fast path. The current index carries PMID identifiers only, so PMC and doi values are reported in not_found until the index is rebuilt with pubmed.identifiers.",
+        "description": "Legacy-compatible batch multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve against alternate identifiers in pubmed.identifiers and cost one search per identifier, so a PMID-only request stays on the single-request fast path.",
         "tags": ["metadata"],
         "parameters": [
           {
@@ -149,7 +149,7 @@
       "post": {
         "operationId": "post~batch_document_metadata_endpoint",
         "summary": "Retrieve metadata for publication IDs in a JSON request body",
-        "description": "Batch multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve against pubmed.identifiers and cost one search per identifier, so a PMID-only request stays on the single-request fast path. The current index carries PMID identifiers only, so PMC and doi values are reported in not_found until the index is rebuilt with pubmed.identifiers.",
+        "description": "Batch multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. PMID values resolve against the document _id in one multi-get request; PMC and doi values resolve against alternate identifiers in pubmed.identifiers and cost one search per identifier, so a PMID-only request stays on the single-request fast path.",
         "tags": ["metadata"],
         "parameters": [
           {
@@ -218,7 +218,7 @@
       "get": {
         "operationId": "get~document_metadata_endpoint",
         "summary": "Retrieve metadata for one publication",
-        "description": "Single-identifier multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. A PMID resolves against the document _id in one multi-get request; PMC and doi values resolve against pubmed.identifiers with one search. The current index carries PMID identifiers only, so PMC and doi values are reported in not_found until the index is rebuilt with pubmed.identifiers.",
+        "description": "Single-identifier multi-get lookup that queries only the annotator-pubmed Elasticsearch alias. A PMID resolves against the document _id in one multi-get request; PMC and doi values resolve against alternate identifiers in pubmed.identifiers with one search.",
         "tags": ["metadata"],
         "parameters": [
           {
@@ -1981,7 +1981,7 @@
     "schemas": {
       "PublicationId": {
         "type": "string",
-        "description": "Publication identifier. PMID resolves against the document _id; PMC and doi resolve against pubmed.identifiers. A PMCID keeps PubMed's doubled form, PMC:PMC1904490 rather than PMC:1904490. Prefix casing is matched case-insensitively, which is what the character classes in the pattern encode.",
+        "description": "Publication identifier. PMID resolves against the document _id; PMC and doi resolve against alternate identifiers in pubmed.identifiers. A PMCID keeps PubMed's doubled form, PMC:PMC1904490 rather than PMC:1904490. Prefix casing is matched case-insensitively, which is what the character classes in the pattern encode.",
         "pattern": "^(?:[Pp][Mm][Ii][Dd]:[1-9][0-9]*|[Pp][Mm][Cc]:[Pp][Mm][Cc][0-9]+|[Dd][Oo][Ii]:10\\.[0-9]+/\\S+)$",
         "example": "PMID:30690000"
       },
