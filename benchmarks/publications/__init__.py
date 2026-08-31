@@ -34,6 +34,7 @@ from benchmarks.publications.users import UserModel, capacity_table, run_user_pl
 from benchmarks.publications.workload import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_COMPARISON_STRATEGIES,
+    DEFAULT_LOOKUP_STRATEGY,
     LOOKUP_STRATEGY_HEADER,
     SUPPORTED_LOOKUP_STRATEGIES,
     RunPlan,
@@ -46,6 +47,7 @@ __all__ = [
     "ComparisonStage",
     "DEFAULT_BATCH_SIZE",
     "DEFAULT_COMPARISON_STRATEGIES",
+    "DEFAULT_LOOKUP_STRATEGY",
     "IdentifierCorpus",
     "LatencySummary",
     "LOOKUP_STRATEGY_HEADER",

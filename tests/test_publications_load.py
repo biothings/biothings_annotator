@@ -246,6 +246,18 @@ def test_lookup_strategy_is_selected_from_the_cli_and_sent_as_a_header(strategy)
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_omitted_lookup_strategy_still_defaults_to_current():
+    arguments = build_parser().parse_args([])
+
+    workload, cache_primed = await _prepare_workload(arguments)
+
+    assert arguments.lookup_strategy is None
+    assert workload.lookup_strategy == "current"
+    assert not cache_primed
+
+
+@pytest.mark.unit
 def test_paired_mode_is_mutually_exclusive_with_a_single_lookup_strategy():
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--compare-lookup-strategies", "--lookup-strategy", "bulk-search"])

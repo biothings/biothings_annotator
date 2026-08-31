@@ -28,6 +28,7 @@ from benchmarks.publications.users import (
 from benchmarks.publications.workload import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_COMPARISON_STRATEGIES,
+    DEFAULT_LOOKUP_STRATEGY,
     SUPPORTED_LOOKUP_STRATEGIES,
     RunPlan,
     Workload,
@@ -67,8 +68,11 @@ def build_parser() -> argparse.ArgumentParser:
     strategy_mode.add_argument(
         "--lookup-strategy",
         choices=SUPPORTED_LOOKUP_STRATEGIES,
-        default="current",
-        help="temporary server-side lookup implementation to benchmark",
+        # Keep the parser default distinct from every explicit choice. Python
+        # 3.10 and 3.11 can miss a mutually-exclusive-group conflict when an
+        # explicitly parsed value is identical to that action's default.
+        default=None,
+        help=f"temporary server-side lookup implementation to benchmark; defaults to {DEFAULT_LOOKUP_STRATEGY}",
     )
     strategy_mode.add_argument(
         "--compare-lookup-strategies",
@@ -198,6 +202,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bool]:
     """Build the workload from synthetic, file-backed, or verified identifiers."""
+    lookup_strategy = arguments.lookup_strategy or DEFAULT_LOOKUP_STRATEGY
     if arguments.identifier_file and arguments.verify_corpus:
         raise SystemExit("--identifier-file cannot be combined with --verify-corpus")
 
@@ -222,7 +227,7 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
         pmid_ratio=arguments.pmid_ratio,
         unique_ratio=arguments.unique_ratio,
         hot_pool_size=arguments.hot_pool,
-        lookup_strategy=arguments.lookup_strategy,
+        lookup_strategy=lookup_strategy,
         identifier_pool=identifier_pool,
         identifier_pool_source=identifier_pool_source,
     )
@@ -240,7 +245,7 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
         arguments.base_url,
         candidates,
         arguments.timeout,
-        lookup_strategy=arguments.lookup_strategy,
+        lookup_strategy=lookup_strategy,
     )
     if len(resolved) < arguments.batch_size:
         raise SystemExit(
@@ -256,7 +261,7 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
             # identifiers, which is only meaningful with reuse enabled.
             unique_ratio=0.0,
             hot_pool_size=len(resolved),
-            lookup_strategy=arguments.lookup_strategy,
+            lookup_strategy=lookup_strategy,
             identifier_pool=tuple(resolved),
             identifier_pool_source="verified PMID pool",
         ),

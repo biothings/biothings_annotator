@@ -18,7 +18,8 @@ LOOKUP_STRATEGY_HEADER = "X-Publications-Lookup-Strategy"
 # is the default batch size rather than something the caller has to opt into.
 DEFAULT_BATCH_SIZE = 100
 SUPPORTED_METHODS = ("GET", "POST")
-SUPPORTED_LOOKUP_STRATEGIES = ("current", "bulk-search", "combined-search")
+DEFAULT_LOOKUP_STRATEGY = "current"
+SUPPORTED_LOOKUP_STRATEGIES = (DEFAULT_LOOKUP_STRATEGY, "bulk-search", "combined-search")
 # Keep the original paired benchmark as the default and as the meaning of the
 # backwards-compatible ``--compare-lookup-strategies`` shorthand.  Callers can
 # select any other distinct pair explicitly.
@@ -42,7 +43,7 @@ class Workload:
     hot_pool_size: int = 1_000
     # Temporary benchmark selector. Every response must attribute itself to the
     # same strategy before its latency is admitted into the measured sample.
-    lookup_strategy: str = "current"
+    lookup_strategy: str = DEFAULT_LOOKUP_STRATEGY
     # Optional curated real identifiers. When present this replaces synthesized
     # and hot-pool sampling entirely, so both A/B treatments receive identical,
     # resolving batches under the same seed.
