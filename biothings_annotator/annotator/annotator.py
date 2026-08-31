@@ -18,7 +18,7 @@ from biothings_annotator.annotator.exceptions import (
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
     BIOLINK_PREFIX_to_BioThings,
-    ELASTICSEARCH_CONNECTION,
+    DEFAULT_ELASTICSEARCH_CONNECTION,
     QUERY_BACKEND,
     QUERY_BACKEND_ALIASES,
     QUERY_BACKEND_ENV,
@@ -50,7 +50,10 @@ class Annotator:
                 self.query_backend = self._normalize_query_backend(query_backend)
             except InvalidQueryBackendError:
                 self.query_backend = deployment_backend
-        self.elasticsearch_connection = os.environ.get("ELASTICSEARCH_CONNECTION", ELASTICSEARCH_CONNECTION).strip()
+        self.elasticsearch_connection = os.environ.get(
+            "ELASTICSEARCH_CONNECTION",
+            DEFAULT_ELASTICSEARCH_CONNECTION,
+        ).strip()
         self.skipped_curie_prefixes: List[str] = []
         self._source_availability: Dict[Tuple[str, str], bool] = {}
 

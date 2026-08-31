@@ -176,14 +176,10 @@ The checked-in Helm defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch` and
 to switch back.
 Set `ELASTICSEARCH_CONNECTION` to one of the named presets in
 `biothings_annotator/annotator/settings.py`. The `in_cluster` preset points at
-`http://elasticsearch.es-core-components.svc.cluster.local:9200`; `ci` remains as a compatibility
-alias. The `ci_local_forward` preset is for CI port-forward use; `ci_forward` remains as its
-deprecated alias.
-The `test` preset is for external access through `http://core-components-es.test.transltr.io:9200`
-and sends an explicit `Host: core-components-es.test.transltr.io` header because the ingress routes
-on that header. `test_local_forward` pairs the same header with `http://localhost:9200` for
-port-forward use. In-cluster CI and test deployments should use `in_cluster`, not either `test`
-preset.
+`http://elasticsearch.es-core-components.svc.cluster.local:9200` and is used by both CI and test
+deployments. The `local` preset targets Elasticsearch on `localhost:9200`. The `ci_forward` and
+`test_forward` presets also connect to `localhost:9200`, for an already-established port-forward,
+and send the corresponding environment's ingress host header.
 The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
 the selected `elasticsearch_connection`.
 
@@ -368,12 +364,12 @@ With the CI Elasticsearch service forwarded to `localhost:9200`, run the opt-in 
 
 ```shell
 RUN_PUBMED_ES_INTEGRATION=1 \
-PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION=ci_local_forward \
+PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION=ci_forward \
 python -m pytest -q tests/test_pubmed.py tests/test_document_metadata.py -m integration
 ```
 
-Point `PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION` at `test_local_forward` to run the same checks
-against a forwarded test-instance service, or at `test` to reach the test ingress directly.
+Point `PUBMED_INTEGRATION_ELASTICSEARCH_CONNECTION` at `test_forward` to run the same checks
+against a forwarded test-instance service.
 
 The document metadata live checks assert the index shape, resolution by every identifier type,
 case-insensitive matching, and an upper bound of two alternate identifiers per record. The canonical PMID
