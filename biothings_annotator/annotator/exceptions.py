@@ -1,9 +1,9 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from biothings_annotator.annotator.settings import (
-    BIOLINK_PREFIX_to_BioThings,
     QUERY_BACKEND_ALIASES,
     SUPPORTED_QUERY_BACKENDS,
+    BIOLINK_PREFIX_to_BioThings,
 )
 
 
@@ -13,6 +13,26 @@ class InvalidQueryBackendError(ValueError):
         self.aliases = dict(QUERY_BACKEND_ALIASES)
         self.supported_values = list(SUPPORTED_QUERY_BACKENDS) + list(self.aliases)
         self.message = "Unsupported query backend. Use one of the supported query backend values."
+        super().__init__(self.message)
+
+
+class BackendVerificationError(RuntimeError):
+    """Report why a live check of the configured query backend failed."""
+
+    _MESSAGES = {
+        "unsupported_backend": "Live backend verification is only available for Elasticsearch instances.",
+        "configuration_error": "Unable to resolve the configured Elasticsearch connection.",
+        "connection_error": "Unable to connect to the configured Elasticsearch backend.",
+        "authentication_error": "The Elasticsearch backend rejected the verification request.",
+        "http_error": "The Elasticsearch backend verification request failed.",
+        "invalid_response": "The Elasticsearch backend returned an invalid server information response.",
+    }
+
+    def __init__(self, query_backend: str, reason: str, status_code: Optional[int] = None):
+        self.query_backend = query_backend
+        self.reason = reason
+        self.status_code = status_code
+        self.message = self._MESSAGES.get(reason, "Unable to verify the configured query backend.")
         super().__init__(self.message)
 
 

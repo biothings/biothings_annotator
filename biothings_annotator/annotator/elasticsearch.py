@@ -8,7 +8,96 @@ from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Union
 import httpx
 
 
-class ElasticsearchAnnotatorClient:
+class ElasticsearchConnectionClient:
+    """Async client for index-independent Elasticsearch server information."""
+
+    def __init__(
+        self,
+        host: str,
+        timeout: Union[int, float] = 30,
+        headers: Optional[Dict[str, str]] = None,
+        http_client: Optional[httpx.AsyncClient] = None,
+    ):
+        try:
+            normalized_host = host.strip().rstrip("/")
+        except AttributeError as exc:
+            raise ValueError("Elasticsearch host must be a non-empty string") from exc
+        if not normalized_host:
+            raise ValueError("Elasticsearch host must be a non-empty string")
+        try:
+            parsed_host = httpx.URL(normalized_host)
+        except httpx.InvalidURL as exc:
+            raise ValueError("Elasticsearch host must be a valid HTTP(S) URL") from exc
+        if parsed_host.scheme not in {"http", "https"} or not parsed_host.host:
+            raise ValueError("Elasticsearch host must be a valid HTTP(S) URL")
+        self.host = normalized_host
+        self.timeout = timeout
+        self.headers = dict(headers or {})
+        self.http_client = http_client
+        self._owned_http_client: Optional[httpx.AsyncClient] = None
+
+    async def info(self) -> Dict[str, Optional[str]]:
+        """Return validated identity details from Elasticsearch's root endpoint."""
+        response = await self._request("GET", f"{self.host}/")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ValueError("Elasticsearch server information is not valid JSON") from exc
+
+        version = payload.get("version") if isinstance(payload, dict) else None
+        node_name = payload.get("name") if isinstance(payload, dict) else None
+        cluster_name = payload.get("cluster_name") if isinstance(payload, dict) else None
+        server_version = version.get("number") if isinstance(version, dict) else None
+        if not all(isinstance(value, str) and value for value in (node_name, cluster_name, server_version)):
+            raise ValueError("Elasticsearch server information is missing identity or version fields")
+
+        product_header = response.headers.get("X-Elastic-Product")
+        tagline = payload.get("tagline")
+        if product_header is not None and product_header != "Elasticsearch":
+            raise ValueError("Elasticsearch server information contains an unexpected product identity")
+        if product_header is None and tagline != "You Know, for Search":
+            raise ValueError("Elasticsearch server information is missing a recognizable product identity")
+
+        cluster_uuid = payload.get("cluster_uuid")
+        if cluster_uuid is not None and not isinstance(cluster_uuid, str):
+            raise ValueError("Elasticsearch server information contains an invalid cluster UUID")
+
+        return {
+            "server_product": "Elasticsearch",
+            "node_name": node_name,
+            "cluster_name": cluster_name,
+            "cluster_uuid": cluster_uuid,
+            "server_version": server_version,
+        }
+
+    async def _request(self, method: str, url: str, raise_for_status: bool = True, **kwargs) -> httpx.Response:
+        request_headers = dict(self.headers)
+        request_headers.update(kwargs.pop("headers", {}) or {})
+        if request_headers:
+            kwargs["headers"] = request_headers
+
+        response = await self._http_client.request(method, url, **kwargs)
+
+        if raise_for_status:
+            response.raise_for_status()
+        return response
+
+    @property
+    def _http_client(self) -> httpx.AsyncClient:
+        if self.http_client is not None:
+            return self.http_client
+
+        if self._owned_http_client is None:
+            self._owned_http_client = httpx.AsyncClient(timeout=self.timeout)
+        return self._owned_http_client
+
+    async def aclose(self) -> None:
+        if self._owned_http_client is not None:
+            await self._owned_http_client.aclose()
+            self._owned_http_client = None
+
+
+class ElasticsearchAnnotatorClient(ElasticsearchConnectionClient):
     """
     Small async REST adapter that mirrors the BioThings methods used by the annotator.
 
@@ -22,6 +111,7 @@ class ElasticsearchAnnotatorClient:
     * search_ids_or_terms(document_ids, query_list, field, fields=None, size=None)
     * query(query, fields=None, fetch_all=False, size=None, skip=0)
     * field_capabilities(fields)
+    * info()
 
     Unsupported BioThings conveniences like species, facets, as_dataframe,
     return_raw, and returnall are intentionally absent so they fail explicitly
@@ -38,16 +128,14 @@ class ElasticsearchAnnotatorClient:
         headers: Optional[Dict[str, str]] = None,
         http_client: Optional[httpx.AsyncClient] = None,
     ):
-        self.host = host.rstrip("/")
+        super().__init__(host=host, timeout=timeout, headers=headers, http_client=http_client)
+        if not isinstance(index, str) or not index:
+            raise ValueError("Elasticsearch index must be a non-empty string")
         self.index = index
         self.query_size = query_size
         if query_batch_size < 1:
             raise ValueError("query_batch_size must be at least 1")
         self.query_batch_size = query_batch_size
-        self.timeout = timeout
-        self.headers = dict(headers or {})
-        self.http_client = http_client
-        self._owned_http_client: Optional[httpx.AsyncClient] = None
 
     async def querymany(
         self,
@@ -574,32 +662,6 @@ class ElasticsearchAnnotatorClient:
     async def _delete_root(self, endpoint: str, **kwargs) -> httpx.Response:
         url = f"{self.host}/{endpoint.lstrip('/')}"
         return await self._request("DELETE", url, **kwargs)
-
-    async def _request(self, method: str, url: str, raise_for_status: bool = True, **kwargs) -> httpx.Response:
-        request_headers = dict(self.headers)
-        request_headers.update(kwargs.pop("headers", {}) or {})
-        if request_headers:
-            kwargs["headers"] = request_headers
-
-        response = await self._http_client.request(method, url, **kwargs)
-
-        if raise_for_status:
-            response.raise_for_status()
-        return response
-
-    @property
-    def _http_client(self) -> httpx.AsyncClient:
-        if self.http_client is not None:
-            return self.http_client
-
-        if self._owned_http_client is None:
-            self._owned_http_client = httpx.AsyncClient(timeout=self.timeout)
-        return self._owned_http_client
-
-    async def aclose(self) -> None:
-        if self._owned_http_client is not None:
-            await self._owned_http_client.aclose()
-            self._owned_http_client = None
 
     @staticmethod
     def _source_filter(fields: Optional[Union[str, List[str]]]) -> Union[bool, List[str]]:
