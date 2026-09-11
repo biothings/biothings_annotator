@@ -2,14 +2,16 @@
 Translator Node Annotator Service Handler
 """
 
-from collections import OrderedDict
-from typing import Dict, Iterable, List, Optional, Tuple, Union
 import logging
 import os
+from collections import OrderedDict
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import biothings_client
+import httpx
 
 from biothings_annotator.annotator.exceptions import (
+    BackendVerificationError,
     InvalidCurieError,
     InvalidQueryBackendError,
     SourceDiscoveryError,
@@ -17,20 +19,21 @@ from biothings_annotator.annotator.exceptions import (
 )
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
-    BIOLINK_PREFIX_to_BioThings,
     DEFAULT_ELASTICSEARCH_CONNECTION,
     QUERY_BACKEND,
     QUERY_BACKEND_ALIASES,
     QUERY_BACKEND_ENV,
     SERVICE_PROVIDER_API_HOST,
     SUPPORTED_QUERY_BACKENDS,
+    BIOLINK_PREFIX_to_BioThings,
 )
 from biothings_annotator.annotator.transformer import ResponseTransformer, load_atc_cache
 from biothings_annotator.annotator.utils import (
     batched,
-    get_client,
     get_biothings_sources,
+    get_client,
     get_dotfield_value,
+    get_elasticsearch_info_client,
     get_query_client,
     group_by_subfield,
     parse_curie,
@@ -74,6 +77,49 @@ class Annotator:
         if self.query_backend == "elasticsearch":
             return f"{self.query_backend}:{self.elasticsearch_connection}"
         return f"{self.query_backend}:{self.api_host}"
+
+    async def verify_backend(self) -> Dict[str, object]:
+        """Perform a fresh live check of this instance's configured backend.
+
+        An Annotator is not bound to an annotation index until a CURIE is
+        queried, so this verifies the Elasticsearch server connection itself.
+        It does not establish the provenance of an earlier annotation result.
+        """
+        query_backend = self.query_backend
+        elasticsearch_connection = self.elasticsearch_connection
+        if query_backend != "elasticsearch":
+            raise BackendVerificationError(query_backend, "unsupported_backend")
+
+        try:
+            client = get_elasticsearch_info_client(elasticsearch_connection)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise BackendVerificationError(query_backend, "configuration_error") from exc
+
+        try:
+            server_info = await client.info()
+        except httpx.InvalidURL as exc:
+            raise BackendVerificationError(query_backend, "configuration_error") from exc
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            reason = "authentication_error" if status_code in {401, 403} else "http_error"
+            raise BackendVerificationError(query_backend, reason, status_code=status_code) from exc
+        except httpx.RequestError as exc:
+            raise BackendVerificationError(query_backend, "connection_error") from exc
+        except (TypeError, ValueError) as exc:
+            raise BackendVerificationError(query_backend, "invalid_response") from exc
+        finally:
+            try:
+                await client.aclose()
+            except Exception as exc:
+                logger.warning("Unable to close the Elasticsearch verification client: %r", exc)
+
+        return {
+            "query_backend": query_backend,
+            "elasticsearch_connection": elasticsearch_connection,
+            "host": client.host,
+            "connected": True,
+            **server_info,
+        }
 
     def _default_scopes(self, node_type: str) -> Union[str, List[str]]:
         """Return the backend-appropriate default query scopes for a node type."""

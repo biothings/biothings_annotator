@@ -9,8 +9,8 @@ import httpx
 import pytest
 
 from biothings_annotator.annotator.annotator import Annotator
-from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient
-from biothings_annotator.annotator.exceptions import InvalidQueryBackendError
+from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient, ElasticsearchConnectionClient
+from biothings_annotator.annotator.exceptions import BackendVerificationError, InvalidQueryBackendError
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
     ELASTICSEARCH_CONNECTIONS,
@@ -18,7 +18,11 @@ from biothings_annotator.annotator.settings import (
     QUERY_BACKEND_ENV,
     SUPPORTED_QUERY_BACKENDS,
 )
-from biothings_annotator.annotator.utils import get_elasticsearch_client, get_elasticsearch_connection
+from biothings_annotator.annotator.utils import (
+    get_elasticsearch_client,
+    get_elasticsearch_connection,
+    get_elasticsearch_info_client,
+)
 
 
 def test_annotator_can_switch_query_backend_by_assignment(monkeypatch):
@@ -147,6 +151,371 @@ def test_annotator_strips_elasticsearch_connection_environment(monkeypatch):
     annotator = Annotator()
 
     assert annotator.elasticsearch_connection == "ci_forward"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_elasticsearch_info_reports_identity_from_root_with_configured_headers():
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(
+            {
+                "method": request.method,
+                "url": str(request.url),
+                "host": request.headers["host"],
+                "body": request.content,
+            }
+        )
+        return httpx.Response(
+            200,
+            headers={"X-Elastic-Product": "Elasticsearch"},
+            json={
+                "name": "es-data-0",
+                "cluster_name": "annotator-cluster",
+                "cluster_uuid": "cluster-uuid-123",
+                "version": {"number": "8.17.4", "build_flavor": "default"},
+                "tagline": "You Know, for Search",
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "gene",
+            headers={"Host": "core-components-es.ci.transltr.io"},
+            http_client=http_client,
+        )
+        result = await client.info()
+
+    assert requests == [
+        {
+            "method": "GET",
+            "url": "http://localhost:9200/",
+            "host": "core-components-es.ci.transltr.io",
+            "body": b"",
+        }
+    ]
+    assert result == {
+        "server_product": "Elasticsearch",
+        "node_name": "es-data-0",
+        "cluster_name": "annotator-cluster",
+        "cluster_uuid": "cluster-uuid-123",
+        "server_version": "8.17.4",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response_kwargs",
+    [
+        {"content": b"not-json"},
+        {"json": {"name": "es-data-0", "cluster_name": "annotator-cluster", "version": {}}},
+        {"json": []},
+    ],
+)
+async def test_elasticsearch_info_rejects_invalid_server_information(response_kwargs):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, **response_kwargs)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchConnectionClient("http://localhost:9200", http_client=http_client)
+        with pytest.raises(ValueError, match="Elasticsearch server information"):
+            await client.info()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response_headers, tagline",
+    [
+        ({"X-Elastic-Product": "OpenSearch"}, "You Know, for Search"),
+        ({}, "The OpenSearch Project: https://opensearch.org/"),
+    ],
+)
+async def test_elasticsearch_info_rejects_another_product(response_headers, tagline):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers=response_headers,
+            json={
+                "name": "search-data-0",
+                "cluster_name": "annotator-cluster",
+                "cluster_uuid": "cluster-uuid-123",
+                "version": {"number": "2.19.0"},
+                "tagline": tagline,
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchConnectionClient("http://localhost:9200", http_client=http_client)
+        with pytest.raises(ValueError, match="product identity"):
+            await client.info()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_elasticsearch_info_accepts_legacy_identity_without_product_header():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "name": "es-data-0",
+                "cluster_name": "annotator-cluster",
+                "cluster_uuid": "cluster-uuid-123",
+                "version": {"number": "7.13.4"},
+                "tagline": "You Know, for Search",
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchConnectionClient("http://localhost:9200", http_client=http_client)
+        result = await client.info()
+
+    assert result["server_product"] == "Elasticsearch"
+    assert result["server_version"] == "7.13.4"
+
+
+def test_elasticsearch_info_client_uses_named_connection_without_selecting_an_index():
+    client = get_elasticsearch_info_client("ci_forward")
+
+    assert isinstance(client, ElasticsearchConnectionClient)
+    assert client.host == "http://localhost:9200"
+    assert client.headers == {"Host": "core-components-es.ci.transltr.io"}
+    assert not hasattr(client, "index")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_annotator_verify_backend_reports_live_instance_configuration(monkeypatch):
+    calls = []
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(str(request.url))
+        return httpx.Response(
+            200,
+            headers={"X-Elastic-Product": "Elasticsearch"},
+            json={
+                "name": "es-data-1",
+                "cluster_name": "test-annotator",
+                "cluster_uuid": "test-cluster-uuid",
+                "version": {"number": "8.17.4"},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchConnectionClient("http://localhost:9200", http_client=http_client)
+
+        def fake_info_client(elasticsearch_connection):
+            calls.append(elasticsearch_connection)
+            return client
+
+        monkeypatch.setattr(
+            "biothings_annotator.annotator.annotator.get_elasticsearch_info_client",
+            fake_info_client,
+        )
+        annotator = Annotator(query_backend="es")
+        annotator.elasticsearch_connection = "test_forward"
+
+        result = await annotator.verify_backend()
+        repeated_result = await annotator.verify_backend()
+
+    assert calls == ["test_forward", "test_forward"]
+    assert requests == ["http://localhost:9200/", "http://localhost:9200/"]
+    assert repeated_result == result
+    assert result == {
+        "query_backend": "elasticsearch",
+        "elasticsearch_connection": "test_forward",
+        "host": "http://localhost:9200",
+        "connected": True,
+        "server_product": "Elasticsearch",
+        "node_name": "es-data-1",
+        "cluster_name": "test-annotator",
+        "cluster_uuid": "test-cluster-uuid",
+        "server_version": "8.17.4",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_annotator_verify_backend_rejects_non_elasticsearch_instance(monkeypatch):
+    def fail_info_client(elasticsearch_connection):
+        raise AssertionError("a BioThings instance must not probe Elasticsearch")
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_elasticsearch_info_client",
+        fail_info_client,
+    )
+
+    with pytest.raises(BackendVerificationError) as exc_info:
+        await Annotator(query_backend="biothings").verify_backend()
+
+    assert exc_info.value.query_backend == "biothings"
+    assert exc_info.value.reason == "unsupported_backend"
+    assert exc_info.value.status_code is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_annotator_verify_backend_reports_connection_failure(monkeypatch):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection failed", request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchConnectionClient("http://localhost:9200", http_client=http_client)
+        monkeypatch.setattr(
+            "biothings_annotator.annotator.annotator.get_elasticsearch_info_client",
+            lambda elasticsearch_connection: client,
+        )
+
+        with pytest.raises(BackendVerificationError) as exc_info:
+            await Annotator(query_backend="es").verify_backend()
+
+    assert exc_info.value.query_backend == "elasticsearch"
+    assert exc_info.value.reason == "connection_error"
+    assert exc_info.value.status_code is None
+    assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status_code, expected_reason",
+    [(401, "authentication_error"), (403, "authentication_error"), (500, "http_error")],
+)
+async def test_annotator_verify_backend_reports_safe_http_failure(
+    monkeypatch,
+    status_code,
+    expected_reason,
+):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, json={"error": "sensitive backend response"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchConnectionClient("http://localhost:9200", http_client=http_client)
+        monkeypatch.setattr(
+            "biothings_annotator.annotator.annotator.get_elasticsearch_info_client",
+            lambda elasticsearch_connection: client,
+        )
+
+        with pytest.raises(BackendVerificationError) as exc_info:
+            await Annotator(query_backend="es").verify_backend()
+
+    assert exc_info.value.reason == expected_reason
+    assert exc_info.value.status_code == status_code
+    assert "sensitive backend response" not in str(exc_info.value)
+    assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_annotator_verify_backend_reports_invalid_server_information(monkeypatch):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"status": "ok"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchConnectionClient("http://localhost:9200", http_client=http_client)
+        monkeypatch.setattr(
+            "biothings_annotator.annotator.annotator.get_elasticsearch_info_client",
+            lambda elasticsearch_connection: client,
+        )
+
+        with pytest.raises(BackendVerificationError) as exc_info:
+            await Annotator(query_backend="es").verify_backend()
+
+    assert exc_info.value.reason == "invalid_response"
+    assert isinstance(exc_info.value.__cause__, ValueError)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_annotator_verify_backend_reports_unknown_connection_configuration():
+    annotator = Annotator(query_backend="es")
+    annotator.elasticsearch_connection = "missing-connection"
+
+    with pytest.raises(BackendVerificationError) as exc_info:
+        await annotator.verify_backend()
+
+    assert exc_info.value.reason == "configuration_error"
+    assert isinstance(exc_info.value.__cause__, ValueError)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "malformed_host",
+    ["http://localhost:invalid-port", "localhost:9200", "ftp://localhost:9200"],
+)
+async def test_annotator_verify_backend_reports_malformed_connection_url(monkeypatch, malformed_host):
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_elasticsearch_info_client",
+        lambda elasticsearch_connection: ElasticsearchConnectionClient(malformed_host),
+    )
+
+    with pytest.raises(BackendVerificationError) as exc_info:
+        await Annotator(query_backend="es").verify_backend()
+
+    assert exc_info.value.reason == "configuration_error"
+    assert isinstance(exc_info.value.__cause__, ValueError)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_annotator_verify_backend_closes_an_owned_http_client(monkeypatch):
+    request = httpx.Request("GET", "http://localhost:9200/")
+    client = ElasticsearchConnectionClient("http://localhost:9200")
+    owned_http_client = client._http_client
+
+    async def fail_info():
+        raise httpx.ConnectError("connection failed", request=request)
+
+    monkeypatch.setattr(client, "info", fail_info)
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_elasticsearch_info_client",
+        lambda elasticsearch_connection: client,
+    )
+
+    with pytest.raises(BackendVerificationError):
+        await Annotator(query_backend="es").verify_backend()
+
+    assert client._owned_http_client is None
+    assert owned_http_client.is_closed
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_annotator_verify_backend_preserves_primary_error_when_cleanup_fails(monkeypatch):
+    request = httpx.Request("GET", "http://localhost:9200/")
+
+    class FailingVerificationClient:
+        host = "http://localhost:9200"
+
+        async def info(self):
+            raise httpx.ConnectError("connection failed", request=request)
+
+        async def aclose(self):
+            raise RuntimeError("close failed")
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.annotator.get_elasticsearch_info_client",
+        lambda elasticsearch_connection: FailingVerificationClient(),
+    )
+
+    with pytest.raises(BackendVerificationError) as exc_info:
+        await Annotator(query_backend="es").verify_backend()
+
+    assert exc_info.value.reason == "connection_error"
+    assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
 
 
 @pytest.mark.asyncio

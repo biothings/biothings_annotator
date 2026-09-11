@@ -1,6 +1,7 @@
 from .annotator import (
     ANNOTATOR_CLIENTS,
     Annotator,
+    BackendVerificationError,
     BIOLINK_PREFIX_to_BioThings,
     InvalidCurieError,
     ResponseTransformer,
@@ -10,6 +11,7 @@ from .annotator import (
 
 __all__ = [
     "Annotator",
+    "BackendVerificationError",
     "ResponseTransformer",
     "InvalidCurieError",
     "TRAPIInputError",

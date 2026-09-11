@@ -37,6 +37,41 @@ The annotator logic primarily exists within `annotator/annotator.py` and `annota
 Whereas the web server application is defined entirely within `application` directory. 
 
 
+### Direct Python usage
+
+`Annotator` can be used directly without starting the Sanic service. To select Elasticsearch and
+perform a live connection check from an async context:
+
+```python
+from biothings_annotator import Annotator
+
+annotator = Annotator(query_backend="es")
+verification = await annotator.verify_backend()
+```
+
+A successful call returns connection and server identity information:
+
+```python
+{
+    "query_backend": "elasticsearch",
+    "elasticsearch_connection": "in_cluster",
+    "host": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
+    "connected": True,
+    "server_product": "Elasticsearch",
+    "cluster_name": "...",
+    "cluster_uuid": "...",
+    "node_name": "...",
+    "server_version": "...",
+}
+```
+
+Each call makes a fresh request to the configured Elasticsearch root endpoint. Failures raise the
+public `BackendVerificationError`, whose `reason` attribute identifies configuration, connection,
+authentication, HTTP, or response-validation errors. This verifies the instance connection, not a
+specific index or the provenance of an annotation result; indexes are selected later from the queried
+CURIE, and Elasticsearch queries do not fall back to the BioThings API.
+
+
 ### Command-line Interface
 The `__main__.py` defines the entrypoint to the module for running the `sanic` web server. After
 installation run the following to command to start the annotator service:
@@ -181,7 +216,8 @@ deployments. The `local` preset targets Elasticsearch on `localhost:9200`. The `
 `test_forward` presets also connect to `localhost:9200`, for an already-established port-forward,
 and send the corresponding environment's ingress host header.
 The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
-the selected `elasticsearch_connection`.
+the selected `elasticsearch_connection`. For a live check of a directly constructed Python instance,
+see [Direct Python usage](#direct-python-usage).
 
 ##### Per-request query backend override
 

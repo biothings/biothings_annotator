@@ -24,7 +24,7 @@ except ImportError:
 import biothings_client
 import httpx
 
-from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient
+from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient, ElasticsearchConnectionClient
 from biothings_annotator.annotator.exceptions import InvalidCurieError, SourceDiscoveryError
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
@@ -32,11 +32,11 @@ from biothings_annotator.annotator.settings import (
     BIOTHINGS_SOURCE_DISCOVERY_TIMEOUT,
     BIOTHINGS_SOURCE_DISCOVERY_TTL,
     BIOTHINGS_SOURCE_LIST_PATH,
-    BIOLINK_PREFIX_to_BioThings,
     ELASTICSEARCH_CONNECTIONS,
     ELASTICSEARCH_QUERY_BATCH_SIZE,
     ELASTICSEARCH_QUERY_SIZE,
     ELASTICSEARCH_REQUEST_TIMEOUT,
+    BIOLINK_PREFIX_to_BioThings,
 )
 
 logger = logging.getLogger(__name__)
@@ -276,6 +276,7 @@ def get_elasticsearch_client(node_type: str, elasticsearch_connection: str) -> E
     if (
         isinstance(client_instance, ElasticsearchAnnotatorClient)
         and client_instance.host == elasticsearch_host.rstrip("/")
+        and client_instance.index == elasticsearch_index
         and client_instance.headers == elasticsearch_headers
     ):
         return client_instance
@@ -290,6 +291,16 @@ def get_elasticsearch_client(node_type: str, elasticsearch_connection: str) -> E
     )
     ANNOTATOR_CLIENTS[node_type]["elasticsearch"]["instance"] = client
     return client
+
+
+def get_elasticsearch_info_client(elasticsearch_connection: str) -> ElasticsearchConnectionClient:
+    """Build an uncached, index-independent client for a live server check."""
+    connection = get_elasticsearch_connection(elasticsearch_connection)
+    return ElasticsearchConnectionClient(
+        host=connection["host"],
+        timeout=ELASTICSEARCH_REQUEST_TIMEOUT,
+        headers=connection["headers"],
+    )
 
 
 def get_query_client(
