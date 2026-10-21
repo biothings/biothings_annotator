@@ -10,6 +10,7 @@ from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.static import build_static_routes, build_static_content
 from biothings_annotator.application.telemetry import configure_telemetry
 from biothings_annotator.application.views import build_routes
+from biothings_annotator.application.version import get_local_git_version
 
 logging.basicConfig()
 logger = logging.getLogger("sanic-application")
@@ -73,6 +74,9 @@ def build_application(configuration: Dict = None) -> Sanic:
 
     application = Sanic(name="biothings-annotator")
     application.update_config(configuration_settings)
+    if application.config.DEPLOYMENT_ENVIRONMENT == "local":
+        # Keep the version tied to this startup if HEAD changes while the server runs.
+        application.ctx.local_git_version = get_local_git_version()
     configure_telemetry(application, configuration["application"].get("telemetry", {}))
 
     application_routes = build_routes()

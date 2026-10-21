@@ -231,17 +231,19 @@
       "get": {
         "operationId": "get~version_endpoint",
         "summary": "Checks the version of the annotator service",
+        "description": "Reports the build commit and active backend. version.txt takes precedence. Only when that file is missing and the resolved deployment environment is local does the service use a startup Git snapshot of the loaded package checkout: full HEAD with -dirty for tracked, staged, or untracked changes. Restart to refresh the snapshot. Missing files outside local, or an unavailable local Git snapshot, produce Unknown. Local responses use Cache-Control: no-store. The API version remains available separately in /status.",
         "tags": ["metadata"],
         "responses": {
           "200": {
-            "description": "Successful github commit hash generation",
+            "description": "Build commit or Unknown, together with the active query backend",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "version": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Contents of version.txt; if missing in the local environment, the startup Git commit with an optional -dirty suffix; otherwise Unknown."
                     },
                     "query_backend": {
                       "type": "string",

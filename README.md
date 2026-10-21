@@ -228,6 +228,14 @@ The `version` field is the API version from the served OpenAPI specification. Th
 `/version` endpoint reports the build's Git commit from `version.txt`, together with the active
 query backend.
 
+For local development, set `ANNOTATOR_DEPLOYMENT_ENV=local` (or configure the deployment environment
+as `local`). If `version.txt` is missing, `/version` uses a Git snapshot of the loaded package's
+checkout captured at startup: the full HEAD commit, with `-dirty` appended for tracked, staged,
+or untracked changes. Restart the service to refresh that snapshot. `version.txt` always takes
+precedence. Outside the `local` environment, a missing file returns `Unknown` without querying
+Git; the local fallback also returns `Unknown` if Git or the checkout is unavailable or the
+query fails. Local `/version` responses send `Cache-Control: no-store`.
+
 Dataset keys follow `ANNOTATOR_CLIENTS` and its backend support: `gene`, `chem`,
 `disease`, `phenotype`, `ncit`, and `extra` appear under both backends; `pubmed` appears only
 under Elasticsearch. Missing optional datasets supported by that backend remain visible with an

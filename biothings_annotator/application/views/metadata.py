@@ -19,7 +19,9 @@ class VersionView(HTTPMethodView):
         super().__init__()
         application = sanic.Sanic.get_app()
         cache = application.config.CACHE_MAX_AGE
-        self.default_headers = {"Cache-Control": f"max-age={cache}, public"}
+        self.is_local = application.config.get("DEPLOYMENT_ENVIRONMENT") == "local"
+        self.local_git_version = getattr(application.ctx, "local_git_version", "Unknown")
+        self.default_headers = {"Cache-Control": "no-store" if self.is_local else f"max-age={cache}, public"}
 
     def open_version_file(self):
         with open("version.txt", "r") as version_file:
@@ -44,7 +46,8 @@ class VersionView(HTTPMethodView):
         repository as the version to check the commit HEAD.
         Allows for verifying what the latest commit is on the live instance
 
-        Will return {"version": "Unknown", "query_backend": "..."} if unable to read the version file.
+        For local deployments, a missing version file uses the startup Git snapshot.
+        Otherwise, an unreadable version file reports "Unknown".
         """
         try:
             version = "Unknown"
@@ -52,7 +55,10 @@ class VersionView(HTTPMethodView):
             try:
                 version = self.open_version_file()
             except FileNotFoundError:
-                logger.error("The version.txt file does not exist.")
+                if self.is_local:
+                    version = self.local_git_version
+                else:
+                    logger.error("The version.txt file does not exist.")
             except Exception as exc:
                 logger.error(f"Error getting GitHub commit hash from version.txt file: {exc}")
 
