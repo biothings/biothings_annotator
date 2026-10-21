@@ -71,8 +71,7 @@ BIOLINK_PREFIX_to_BioThings = {
     "MONDO": {"type": "disease", "field": "mondo.mondo", "keep_prefix": True},
     "DOID": {"type": "disease", "field": "disease_ontology.doid", "keep_prefix": True},
     "HP": {"type": "phenotype", "field": "hp", "keep_prefix": True},
-    # PubMed is a standalone source whose documents use the full CURIE as _id.
-    # BioThings availability is discovered dynamically from its API source list.
+    # PubMed is an Elasticsearch-only source whose documents use the full CURIE as _id.
     "PMID": {
         "type": "pubmed",
         "scopes": ["_id"],
@@ -220,14 +219,8 @@ ANNOTATOR_CLIENTS = {
         "scopes": ["hp"],
     },
     "pubmed": {
-        # The endpoint is declared before deployment so API source discovery can
-        # activate it without another annotator release.
-        "client": {
-            "configuration": None,
-            "endpoint": "pubmed",
-            "source": "pubmed",
-            "instance": None,
-        },
+        "query_backends": ["elasticsearch"],
+        # No BioThings API client: publication metadata is served directly from ES.
         "elasticsearch": {"index": "annotator-pubmed", "instance": None},
         "fields": [
             "pubmed.identifiers",

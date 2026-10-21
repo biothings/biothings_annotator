@@ -2,6 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Dict, List, Union
+from urllib.parse import quote
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -613,7 +614,6 @@ async def test_elasticsearch_query_backend_returns_canonical_header(test_annotat
 @pytest.mark.parametrize(
     "method,url,json_body",
     [
-        ("get", "/curie/PMID:31763219?query_backend=biothings", None),
         ("post", "/curie/?query_backend=biothings", {"ids": ["PMID:31763219"]}),
         (
             "post",
@@ -638,8 +638,7 @@ async def test_backend_unavailable_prefix_is_reported_in_response_header(
     json_body: dict,
 ):
     async def sources_without_pubmed(api_host):
-        del api_host
-        return frozenset()
+        pytest.fail("PubMed must be skipped without BioThings source discovery")
 
     monkeypatch.setattr(
         "biothings_annotator.annotator.annotator.get_biothings_sources",
@@ -685,11 +684,11 @@ async def test_backend_unavailable_prefix_is_reported_in_response_header(
 @pytest.mark.parametrize(
     "method,url,json_body,is_trapi",
     [
-        ("get", "/curie/{curie}?query_backend=biothings", None, False),
-        ("post", "/curie/?query_backend=biothings", {"ids": ["{curie}"]}, False),
+        ("get", "/curie/{curie}?query_backend=elasticsearch", None, False),
+        ("post", "/curie/?query_backend=elasticsearch", {"ids": ["{curie}"]}, False),
         (
             "post",
-            "/trapi/?query_backend=biothings",
+            "/trapi/?query_backend=elasticsearch",
             {
                 "message": {
                     "knowledge_graph": {
@@ -710,7 +709,7 @@ async def test_backend_unavailable_prefix_is_reported_in_response_header(
         ("PMID:3176321900", True),
     ],
 )
-async def test_available_biothings_pubmed_uses_normal_result_contract(
+async def test_elasticsearch_pubmed_uses_normal_result_contract(
     test_annotator: sanic.Sanic,
     monkeypatch,
     method: str,
@@ -735,8 +734,7 @@ async def test_available_biothings_pubmed_uses_normal_result_contract(
             ]
 
     async def sources_with_pubmed(api_host):
-        del api_host
-        return frozenset({"pubmed"})
+        pytest.fail("Elasticsearch must not perform BioThings discovery")
 
     client = FakePubMedClient()
     monkeypatch.setattr(
@@ -766,7 +764,7 @@ async def test_available_biothings_pubmed_uses_normal_result_contract(
         else [{"query": curie, "_id": curie, "pubmed": {"title": "Example title"}}]
     )
     assert response.status_code == 200
-    assert response.headers["X-Query-Backend"] == "biothings"
+    assert response.headers["X-Query-Backend"] == "elasticsearch"
     assert SKIPPED_CURIE_PREFIXES_HEADER not in response.headers
     assert response.headers["Cache-Control"] != "no-store"
     if is_trapi:
@@ -789,11 +787,11 @@ async def test_available_biothings_pubmed_uses_normal_result_contract(
 @pytest.mark.parametrize(
     "method,url,json_body,expected_endpoint",
     [
-        ("get", "/curie/PMID:31763219?query_backend=biothings", None, "/curie/"),
+        ("get", "/curie/HP:0000001?query_backend=biothings", None, "/curie/"),
         (
             "post",
             "/curie/?query_backend=biothings",
-            {"ids": ["PMID:31763219"]},
+            {"ids": ["HP:0000001"]},
             "/curie/",
         ),
         (
@@ -803,7 +801,7 @@ async def test_available_biothings_pubmed_uses_normal_result_contract(
                 "message": {
                     "knowledge_graph": {
                         "nodes": {
-                            "PMID:31763219": {},
+                            "HP:0000001": {},
                         }
                     }
                 }
@@ -820,6 +818,9 @@ async def test_source_discovery_failure_returns_retryable_error_without_skip(
     json_body: dict,
     expected_endpoint: str,
 ):
+    # Keep generic dynamic-source failure coverage using a supported API dataset.
+    monkeypatch.setitem(utils.ANNOTATOR_CLIENTS["phenotype"]["client"], "source", "hpo")
+
     async def fail_source_discovery(api_host):
         del api_host
         raise SourceDiscoveryError()
@@ -837,7 +838,7 @@ async def test_source_discovery_failure_returns_retryable_error_without_skip(
     assert response.status_code == 503
     assert response.json["endpoint"] == expected_endpoint
     assert response.json["message"] == "Unable to determine BioThings source availability."
-    assert response.json["source"] == "pubmed"
+    assert response.json["source"] == "hpo"
     assert SKIPPED_CURIE_PREFIXES_HEADER not in response.headers
     assert response.headers["Cache-Control"] == "no-store"
 
@@ -1012,3 +1013,80 @@ async def test_concurrent_query_backend_overrides_are_request_local(test_annotat
     assert biothings_response.headers["X-Query-Backend"] == "biothings"
     assert elasticsearch_response.json == {"backend": "elasticsearch"}
     assert elasticsearch_response.headers["X-Query-Backend"] == "elasticsearch"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("curie", ["PMID:31763219", "doi:10.1234/example", "DOI:10.1234/example", "PMC:PMC123", "pmc:PMC123"])
+@pytest.mark.parametrize("explicit_backend", [False, True])
+async def test_single_pubmed_biothings_request_is_rejected_without_network(test_annotator, monkeypatch, curie, explicit_backend):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "biothings")
+    discovery = AsyncMock(side_effect=AssertionError("BioThings discovery must not run"))
+    query = AsyncMock(side_effect=AssertionError("No backend may be queried for this rejected request"))
+    monkeypatch.setattr("biothings_annotator.annotator.annotator.get_biothings_sources", discovery)
+    monkeypatch.setattr(Annotator, "query_annotations", query)
+    url = f"/curie/{quote(curie, safe='')}"
+    if explicit_backend:
+        url += "?query_backend=biothings"
+
+    _, response = await test_annotator.asgi_client.get(url)
+
+    assert response.status_code == 422
+    assert response.json == {
+        "input": curie,
+        "endpoint": "/curie/",
+        "error": "unsupported_source_backend",
+        "message": "Source 'pubmed' is not supported by the 'biothings' backend. Use query_backend=elasticsearch.",
+        "source": "pubmed",
+        "query_backend": "biothings",
+        "supported_backends": ["elasticsearch"],
+    }
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["X-Query-Backend"] == "biothings"
+    assert SKIPPED_CURIE_PREFIXES_HEADER not in response.headers
+    discovery.assert_not_awaited()
+    query.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("endpoint", ["curie", "trapi"])
+async def test_mixed_biothings_request_annotates_gene_and_reports_pubmed_skip(test_annotator, monkeypatch, endpoint):
+    ids = ["NCBIGene:1017", "PMID:31763219", "doi:10.1234/example", "PMC:PMC123"]
+    discovery = AsyncMock(side_effect=AssertionError("PubMed must not trigger BioThings discovery"))
+    query = AsyncMock(return_value={"1017": [{"_id": "1017", "query": "1017"}]})
+    monkeypatch.setattr("biothings_annotator.annotator.annotator.get_biothings_sources", discovery)
+    monkeypatch.setattr(Annotator, "query_annotations", query)
+    body = {"ids": ids} if endpoint == "curie" else {
+        "message": {"knowledge_graph": {"nodes": {curie: {"name": curie} for curie in ids}}}
+    }
+
+    _, response = await test_annotator.asgi_client.post(
+        f"/{endpoint}/?query_backend=biothings&raw=true&include_extra=false", json=body
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-Query-Backend"] == "biothings"
+    assert response.headers[SKIPPED_CURIE_PREFIXES_HEADER] == "PMID, doi, PMC"
+    assert response.headers["Cache-Control"] == "no-store"
+    discovery.assert_not_awaited()
+    query.assert_awaited_once_with("gene", ["1017"], fields=None, scopes=["entrezgene", "retired"])
+    result = response.json
+    for curie in ids[1:]:
+        if endpoint == "trapi":
+            assert result[curie]["name"] == curie
+            attribute = result[curie]["attributes"][0]
+            assert attribute["attribute_type_id"] == "biothings_query_status"
+            skipped = attribute["value"]
+        else:
+            skipped = result[curie]
+        assert skipped == [{
+            "query": curie,
+            "notfound": True,
+            "skipped": True,
+            "reason": "source_unavailable_for_backend",
+            "source": "pubmed",
+            "query_backend": "biothings",
+        }]
+    gene = result[ids[0]]["attributes"][0]["value"] if endpoint == "trapi" else result[ids[0]]
+    assert gene == [{"_id": "1017", "query": "1017"}]

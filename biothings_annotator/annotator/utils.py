@@ -25,7 +25,11 @@ import biothings_client
 import httpx
 
 from biothings_annotator.annotator.elasticsearch import ElasticsearchAnnotatorClient, ElasticsearchConnectionClient
-from biothings_annotator.annotator.exceptions import InvalidCurieError, SourceDiscoveryError
+from biothings_annotator.annotator.exceptions import (
+    InvalidCurieError,
+    SourceDiscoveryError,
+    UnsupportedSourceBackendError,
+)
 from biothings_annotator.annotator.settings import (
     ANNOTATOR_CLIENTS,
     BIOTHINGS_SOURCE_DISCOVERY_ERROR_TTL,
@@ -37,6 +41,7 @@ from biothings_annotator.annotator.settings import (
     ELASTICSEARCH_QUERY_SIZE,
     ELASTICSEARCH_REQUEST_TIMEOUT,
     BIOLINK_PREFIX_to_BioThings,
+    SUPPORTED_QUERY_BACKENDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -156,6 +161,13 @@ def _current_event_loop_id() -> Union[int, None]:
         return None
 
 
+def require_source_backend(node_type: str, query_backend: str) -> None:
+    """Reject unsupported source/backend pairs before discovery or client creation."""
+    supported = ANNOTATOR_CLIENTS.get(node_type, {}).get("query_backends", SUPPORTED_QUERY_BACKENDS)
+    if query_backend not in supported:
+        raise UnsupportedSourceBackendError(node_type, query_backend, list(supported))
+
+
 def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBiothingClient, None]:
     """
     Attempts to lazy load the biothings-client instance
@@ -184,6 +196,7 @@ def get_client(node_type: str, api_host: str) -> Union[biothings_client.AsyncBio
     if annotator_node is None:
         raise ValueError(f"Unable to get annotator client with `node_type`: {node_type}")
 
+    require_source_backend(node_type, "biothings")
     client_parameters = annotator_node["client"]
     client_configuration = client_parameters.get("configuration")
     client_endpoint = client_parameters.get("endpoint")
@@ -312,6 +325,7 @@ def get_query_client(
     """
     Return the configured annotator query client.
     """
+    require_source_backend(node_type, query_backend)
     if query_backend == "biothings":
         return get_client(node_type, api_host)
     if query_backend == "elasticsearch":

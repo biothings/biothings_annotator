@@ -272,6 +272,7 @@
       "get": {
         "operationId": "get~curie_endpoint",
         "summary": "Retrieve annotation objects based on a CURIE ID",
+        "description": "PubMed identifiers (PMID, doi, DOI, PMC, and pmc) require query_backend=elasticsearch. If the selected backend is biothings, returns HTTP 422 before source discovery or an annotation query. The service does not switch backends automatically.",
         "tags": ["translator"],
         "parameters": [
           {
@@ -398,7 +399,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A CURIE-keyed annotation object, or a not-found-shaped BackendSkipResult when source discovery confirms that the CURIE source is unavailable through the selected backend.",
+            "description": "A CURIE-keyed annotation object, or a not-found-shaped BackendSkipResult when source discovery confirms an unavailable source. PubMed requested through BioThings is rejected with HTTP 422 before discovery.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/AnnotationCacheControl"
@@ -502,6 +503,21 @@
               }
             }
           },
+          "422": {
+            "description": "The selected backend does not support this source. PubMed requires Elasticsearch; no BioThings discovery or annotation request is made.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Backend rejection responses must not be cached.",
+                "schema": {"type": "string", "enum": ["no-store"]}
+              },
+              "X-Query-Backend": {"$ref": "#/components/headers/QueryBackend"}
+            },
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/UnsupportedSourceBackendError"}
+              }
+            }
+          },
           "400": {
             "description": "A response indicating an unknown or unsupported curie ID",
             "content": {
@@ -555,6 +571,7 @@
       "post": {
         "operationId": "post~curie_endpoint",
         "summary": "For a list of curie IDs, return the expanded annotation objects",
+        "description": "PubMed identifiers (PMID, doi, DOI, PMC, and pmc) require Elasticsearch. With the biothings backend, PubMed entries receive BackendSkipResult and supported entries are still annotated in an HTTP 200 response. No PubMed discovery, annotation query, or automatic backend switch occurs. Skipped responses include X-Skipped-Curie-Prefixes and Cache-Control: no-store.",
         "tags": ["translator"],
         "parameters": [
           {
@@ -1411,6 +1428,7 @@
       "post": {
         "operationId": "post~trapi_endpoint",
         "summary": "Provides an annotated response based off the TRAPI body provided",
+        "description": "PubMed identifiers require Elasticsearch. With the biothings backend, affected nodes are preserved with a skipped result in their biothings_query_status attribute; supported nodes are still annotated and the response is HTTP 200. No PubMed discovery, annotation query, or automatic backend switch occurs. Skipped responses include X-Skipped-Curie-Prefixes and Cache-Control: no-store.",
         "tags": ["translator"],
         "parameters": [
           {
@@ -1971,7 +1989,7 @@
         }
       },
       "SkippedCuriePrefixes": {
-        "description": "Comma-separated recognized CURIE prefixes skipped because source discovery confirmed they are unavailable through the selected query backend. This header is omitted when no known prefixes were skipped.",
+        "description": "Comma-separated recognized CURIE prefixes skipped because the selected backend does not support their source or source discovery confirmed it is unavailable. Bulk and TRAPI PubMed requests through BioThings use this header. It is omitted when no known prefixes were skipped.",
         "schema": {
           "type": "string",
           "example": "PMID"
@@ -1979,6 +1997,27 @@
       }
     },
     "schemas": {
+      "UnsupportedSourceBackendError": {
+        "type": "object",
+        "required": ["input", "endpoint", "error", "message", "source", "query_backend", "supported_backends"],
+        "description": "A single-CURIE request selected a backend that does not support its source. No source discovery or annotation request is sent, and the service does not switch backends.",
+        "properties": {
+          "input": {"type": "string", "example": "PMID:30690000"},
+          "endpoint": {"type": "string", "enum": ["/curie/"]},
+          "error": {"type": "string", "enum": ["unsupported_source_backend"]},
+          "message": {
+            "type": "string",
+            "example": "Source 'pubmed' is not supported by the 'biothings' backend. Use query_backend=elasticsearch."
+          },
+          "source": {"type": "string", "example": "pubmed"},
+          "query_backend": {"type": "string", "enum": ["biothings", "elasticsearch"], "example": "biothings"},
+          "supported_backends": {
+            "type": "array",
+            "items": {"type": "string", "enum": ["biothings", "elasticsearch"]},
+            "example": ["elasticsearch"]
+          }
+        }
+      },
       "PublicationId": {
         "type": "string",
         "description": "Publication identifier. PMID resolves against the document _id; PMC and doi resolve against alternate identifiers in pubmed.identifiers. A PMCID keeps PubMed's doubled form, PMC:PMC1904490 rather than PMC:1904490. Prefix casing is matched case-insensitively, which is what the character classes in the pattern encode.",
@@ -2093,7 +2132,7 @@
       },
       "BackendSkipResult": {
         "type": "array",
-        "description": "Per-CURIE status returned in the same list shape as a not-found annotation result when source discovery confirms that a recognized source is unavailable through the selected backend. The skipped flag distinguishes this status from a completed query with no match.",
+        "description": "Per-CURIE status in the same list shape as a not-found result when the selected backend does not support a source or source discovery confirms it is unavailable. Bulk and TRAPI PubMed requests through BioThings use this shape; single-CURIE requests return HTTP 422 instead. The skipped flag means the lookup was not attempted.",
         "minItems": 1,
         "maxItems": 1,
         "items": {
@@ -2141,7 +2180,7 @@
           },
           "source": {
             "type": "string",
-            "example": "pubmed"
+            "example": "custom_source"
           }
         }
       }

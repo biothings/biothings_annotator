@@ -7,14 +7,15 @@ import json
 import logging
 import random
 from typing import Dict, List
+from unittest.mock import Mock
 
 import biothings_client
 import httpx
 import pytest
 
 from biothings_annotator import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings, utils
-from biothings_annotator.annotator.exceptions import SourceDiscoveryError
-from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST
+from biothings_annotator.annotator.exceptions import SourceDiscoveryError, UnsupportedSourceBackendError
+from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST, SUPPORTED_QUERY_BACKENDS
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -114,10 +115,18 @@ def test_endpoint_annotation_client_returns_none_on_metadata_failure(monkeypatch
 
 @pytest.mark.unit
 def test_source_named_endpoint_client_avoids_metadata_probe_and_normalizes_host(monkeypatch):
-    client_parameters = ANNOTATOR_CLIENTS["pubmed"]["client"]
-    original_instance = client_parameters.get("instance")
-    original_cache_key = client_parameters.get("instance_cache_key")
-    had_cache_key = "instance_cache_key" in client_parameters
+    monkeypatch.setitem(
+        ANNOTATOR_CLIENTS,
+        "example_source",
+        {
+            "client": {
+                "configuration": None,
+                "endpoint": "example-source",
+                "source": "example_source",
+                "instance": None,
+            }
+        },
+    )
     fake_client = object()
     calls = []
 
@@ -125,27 +134,35 @@ def test_source_named_endpoint_client_avoids_metadata_probe_and_normalizes_host(
         calls.append(kwargs)
         return fake_client
 
-    try:
-        client_parameters["instance"] = None
-        client_parameters.pop("instance_cache_key", None)
-        monkeypatch.setattr(biothings_client, "get_async_client", fake_get_async_client)
-
-        client = utils.get_client("pubmed", f"{SERVICE_PROVIDER_API_HOST}/")
-    finally:
-        client_parameters["instance"] = original_instance
-        if had_cache_key:
-            client_parameters["instance_cache_key"] = original_cache_key
-        else:
-            client_parameters.pop("instance_cache_key", None)
+    monkeypatch.setattr(biothings_client, "get_async_client", fake_get_async_client)
+    client = utils.get_client("example_source", f"{SERVICE_PROVIDER_API_HOST}/")
 
     assert client is fake_client
     assert calls == [
         {
-            "biothing_type": "pubmed",
+            "biothing_type": "example_source",
             "instance": True,
-            "url": f"{SERVICE_PROVIDER_API_HOST}/pubmed",
+            "url": f"{SERVICE_PROVIDER_API_HOST}/example-source",
         }
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("client_entrypoint", ["direct", "dispatcher"])
+def test_pubmed_biothings_clients_are_rejected_before_sdk_construction(monkeypatch, client_entrypoint):
+    sdk_factory = Mock(side_effect=AssertionError("PubMed BioThings clients must not be constructed"))
+    monkeypatch.setattr(biothings_client, "get_async_client", sdk_factory)
+
+    with pytest.raises(UnsupportedSourceBackendError) as exc_info:
+        if client_entrypoint == "direct":
+            utils.get_client("pubmed", SERVICE_PROVIDER_API_HOST)
+        else:
+            utils.get_query_client("pubmed", "biothings", SERVICE_PROVIDER_API_HOST)
+
+    assert exc_info.value.source == "pubmed"
+    assert exc_info.value.query_backend == "biothings"
+    assert exc_info.value.supported_backends == ["elasticsearch"]
+    sdk_factory.assert_not_called()
 
 
 @pytest.mark.unit
@@ -428,7 +445,9 @@ def test_query_post_processing(search_keyword: str, collection: List[Dict], hist
     [
         prefix
         for prefix, prefix_settings in BIOLINK_PREFIX_to_BioThings.items()
-        if "biothings" in prefix_settings.get("query_backends", ("biothings", "elasticsearch"))
+        if "biothings" in prefix_settings.get("query_backends", SUPPORTED_QUERY_BACKENDS)
+        and "biothings"
+        in ANNOTATOR_CLIENTS[prefix_settings["type"]].get("query_backends", SUPPORTED_QUERY_BACKENDS)
     ],
 )
 async def test_biothings_query(curie_prefix: str):

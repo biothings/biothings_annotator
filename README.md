@@ -227,10 +227,11 @@ The `GET /curie/{curie}`, `POST /curie`, and `POST /trapi` endpoints accept an o
 backend for only that request; `es` is accepted as an alias for `elasticsearch`.
 Unsupported values are ignored and the request uses the deployment default.
 Successful query responses include the canonical backend in the `X-Query-Backend` response header.
-When a recognized CURIE prefix is unavailable through that backend, its result contains a structured
-`skipped` status with the source, selected backend, and `source_unavailable_for_backend` reason.
-`X-Skipped-Curie-Prefixes` also summarizes the affected prefixes as comma-separated values. Unknown
-CURIE prefixes are not included in this header.
+PubMed supports only Elasticsearch. A single PubMed CURIE requested through BioThings returns
+HTTP 422; bulk and TRAPI requests retain their supported results and mark PubMed entries as
+`skipped`, with the source, selected backend, and `source_unavailable_for_backend` reason.
+`X-Skipped-Curie-Prefixes` summarizes skipped prefixes as comma-separated values. Unknown CURIE
+prefixes are not included in this header. See the PubMed section below for examples.
 
 ```shell
 curl 'http://localhost:9000/curie/NCBIGene:1017?query_backend=biothings'
@@ -251,14 +252,32 @@ source is built and indexed there, the default annotation response includes its 
 biomedical sources, PubMed has its own annotator client configuration rather than being merged into
 `annotator_extra`.
 
-For the `biothings` query backend, the annotator discovers available sources from the API's
-`/api/list` endpoint using a short-lived, per-host cache. Discovery requests revalidate intermediary
-caches, concurrent refreshes share one request, and discovery failures use a brief retry backoff.
-While `pubmed` is absent from that authoritative list, PMID requests return a one-item,
-not-found-shaped skipped result without making a downstream PubMed annotation query and set
-`X-Skipped-Curie-Prefixes: PMID`. Skipped responses use `Cache-Control: no-store`. The `notfound`
-field preserves the normal result shape, while `skipped` indicates that the PubMed annotation lookup
-was not made:
+PubMed is supported only by the `elasticsearch` backend. This applies to the `PMID`, `doi`,
+`DOI`, `PMC`, and `pmc` CURIE prefixes. When the selected backend is `biothings`, the annotator
+does not discover or query a PubMed API and does not switch to Elasticsearch automatically.
+URL-encode CURIEs used in the GET path, including the slash in DOI values.
+
+A single request such as `GET /curie/PMID:30690000?query_backend=biothings` returns HTTP 422
+with `Cache-Control: no-store`, `X-Query-Backend: biothings`, and this error:
+
+```json
+{
+  "input": "PMID:30690000",
+  "endpoint": "/curie/",
+  "error": "unsupported_source_backend",
+  "message": "Source 'pubmed' is not supported by the 'biothings' backend. Use query_backend=elasticsearch.",
+  "source": "pubmed",
+  "query_backend": "biothings",
+  "supported_backends": ["elasticsearch"]
+}
+```
+
+Bulk `POST /curie` requests still return HTTP 200 and annotate supported CURIEs. PubMed entries
+receive a one-item skipped result, as shown below. TRAPI requests also return HTTP 200, preserve
+the affected nodes, and add the skipped result in a `biothings_query_status` attribute. Both
+responses set `X-Skipped-Curie-Prefixes` to the affected prefixes and use `Cache-Control: no-store`.
+The `notfound` field preserves the normal result shape; `skipped` means no annotation lookup
+was attempted, rather than that PubMed contained no matching record:
 
 ```json
 {
@@ -275,11 +294,13 @@ was not made:
 }
 ```
 
-The future BioThings endpoint is already configured as `/pubmed`. Once `pubmed` appears in the
-source list and its metadata is available, the annotator automatically constructs that client and
-queries it without another code or configuration change. A source-discovery timeout, invalid
-response, or server error returns HTTP 503 with `Cache-Control: no-store` rather than incorrectly
-reporting a skip.
+Select `query_backend=elasticsearch` to annotate PubMed CURIEs. The dedicated publication
+metadata endpoints below already use Elasticsearch.
+
+Datasets configured to use BioThings source discovery still consult `/api/list` with a short-lived,
+per-host cache. Concurrent refreshes share one request; failures use a brief retry backoff.
+A confirmed unavailable source produces a skipped result. A discovery timeout, invalid
+response, or server error returns HTTP 503 with `Cache-Control: no-store`.
 
 ```shell
 curl 'http://localhost:9000/curie/PMID:12345678?query_backend=elasticsearch'

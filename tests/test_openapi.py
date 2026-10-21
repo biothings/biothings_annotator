@@ -23,6 +23,36 @@ QUERY_OPERATIONS = (
 
 
 @pytest.mark.unit
+def test_pubmed_backend_restriction_documents_single_error_and_batch_skips():
+    with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
+        specification = json.load(openapi_file)
+
+    single = specification["paths"]["/curie/{curie}"]["get"]
+    rejected = single["responses"]["422"]
+    assert rejected["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/UnsupportedSourceBackendError"
+    }
+    assert rejected["headers"]["X-Query-Backend"] == {"$ref": "#/components/headers/QueryBackend"}
+    assert rejected["headers"]["Cache-Control"]["schema"] == {"type": "string", "enum": ["no-store"]}
+    error = specification["components"]["schemas"]["UnsupportedSourceBackendError"]
+    assert set(error["required"]) == {
+        "input", "endpoint", "error", "message", "source", "query_backend", "supported_backends"
+    }
+    assert error["properties"]["error"]["enum"] == ["unsupported_source_backend"]
+    assert error["properties"]["supported_backends"]["example"] == ["elasticsearch"]
+    assert error["properties"]["input"]["example"].startswith("PMID:")
+
+    for path in ("/curie", "/trapi"):
+        batch = specification["paths"][path]["post"]
+        assert "422" not in batch["responses"]
+        assert "PubMed" in batch["description"]
+        assert "skip" in batch["description"].lower()
+        assert batch["responses"]["200"]["headers"]["X-Skipped-Curie-Prefixes"] == {
+            "$ref": "#/components/headers/SkippedCuriePrefixes"
+        }
+
+
+@pytest.mark.unit
 def test_query_backend_override_is_documented_for_all_query_operations():
     with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
         specification = json.load(openapi_file)

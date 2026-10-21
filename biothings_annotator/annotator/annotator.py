@@ -37,6 +37,7 @@ from biothings_annotator.annotator.utils import (
     get_query_client,
     group_by_subfield,
     parse_curie,
+    require_source_backend,
 )
 
 logger = logging.getLogger(__name__)
@@ -142,10 +143,12 @@ class Annotator:
         supported_backends = BIOLINK_PREFIX_to_BioThings.get(prefix, {}).get("query_backends")
         if supported_backends is not None and self.query_backend not in supported_backends:
             return False
+        node_type = BIOLINK_PREFIX_to_BioThings.get(prefix, {}).get("type")
+        supported_backends = ANNOTATOR_CLIENTS.get(node_type, {}).get("query_backends", SUPPORTED_QUERY_BACKENDS)
+        if self.query_backend not in supported_backends:
+            return False
         if self.query_backend != "biothings":
             return True
-
-        node_type = BIOLINK_PREFIX_to_BioThings.get(prefix, {}).get("type")
         client_settings = ANNOTATOR_CLIENTS.get(node_type, {}).get("client", {})
         source = client_settings.get("source")
         if not source:
@@ -205,6 +208,7 @@ class Annotator:
         """
         Query biothings client based on node_type for a list of ids
         """
+        require_source_backend(node_type, "biothings")
         client_settings = ANNOTATOR_CLIENTS.get(node_type, {}).get("client", {})
         source = client_settings.get("source")
         if source:
@@ -254,6 +258,7 @@ class Annotator:
         know the originating BIOLINK prefix should pass its narrower per-prefix scopes
         (see BIOLINK_PREFIX_to_BioThings) instead.
         """
+        require_source_backend(node_type, self.query_backend)
         client = get_query_client(
             node_type=node_type,
             query_backend=self.query_backend,
@@ -364,6 +369,7 @@ class Annotator:
         if not node_type:
             raise InvalidCurieError(curie)
 
+        require_source_backend(node_type, self.query_backend)
         prefix = curie.split(":", 1)[0]
         if not await self._query_backend_supports_prefix(prefix):
             self._record_skipped_curie_prefix(prefix)
