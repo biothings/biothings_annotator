@@ -22,6 +22,7 @@ from biothings_annotator.annotator.utils import (
     get_elasticsearch_client,
     get_elasticsearch_connection,
     get_elasticsearch_info_client,
+    get_query_client,
 )
 
 
@@ -1129,6 +1130,41 @@ def test_elasticsearch_client_uses_named_connection_config():
         assert test_forward_client.headers == {"Host": "core-components-es.test.transltr.io"}
     finally:
         elasticsearch_settings["instance"] = original_instance
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_configured_extra_client_queries_annotations_alias_with_atc_fields(monkeypatch):
+    """The restored ES alias differs from the BioThings extra API endpoint."""
+    assert ANNOTATOR_CLIENTS["extra"]["client"]["endpoint"] == "annotator_extra"
+    monkeypatch.setitem(ANNOTATOR_CLIENTS["extra"]["elasticsearch"], "instance", None)
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.method == "POST"
+        assert request.url.path == "/annotator-annotations/_search"
+        assert request.headers["host"] == "core-components-es.ci.transltr.io"
+        body = json.loads(request.content)
+        assert body["query"] == {"exists": {"field": "atc.code"}}
+        assert body["_source"] == ["atc.code", "atc.name"]
+        return httpx.Response(
+            200,
+            json={
+                "hits": {
+                    "total": {"value": 1, "relation": "eq"},
+                    "hits": [{"_id": "ATC:L04AB02", "_source": {"atc": {"code": "L04AB02", "name": "infliximab"}}}],
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = get_query_client("extra", "elasticsearch", "https://biothings.example.org", "ci_forward")
+        monkeypatch.setattr(client, "http_client", http_client)
+        result = await client.query("_exists_:atc.code", fields="atc.code,atc.name")
+
+    assert len(requests) == 1
+    assert result["hits"] == [{"_id": "ATC:L04AB02", "atc": {"code": "L04AB02", "name": "infliximab"}}]
 
 
 @pytest.mark.asyncio

@@ -245,7 +245,7 @@ ANNOTATOR_CLIENTS = {
     # This API captures the extra information that is not available in the main biothings API
     "extra": {
         "client": {"configuration": None, "endpoint": "annotator_extra", "instance": None},
-        "elasticsearch": {"index": "annotator_extra", "instance": None},
+        "elasticsearch": {"index": "annotator-annotations", "instance": None},
         "scopes": ["_id"],
     },
 }
