@@ -27,6 +27,10 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            - name: ANNOTATOR_DEPLOYMENT_ENV
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['gov.nih.ncats.appenv']
             - name: ES_HOST
               value: {{ .Values.containers.es_host }}
             - name: ANNOTATOR_QUERY_BACKEND

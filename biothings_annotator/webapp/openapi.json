@@ -21,38 +21,206 @@
       "get": {
         "operationId": "get~status_endpoint",
         "summary": "Checks the health status of the annotator service",
-        "tags": ["health"],
+        "description": "Checks that the deployment default query backend can annotate NCBIGene:1017 and returns service information plus dataset build versions for both backends. query_backend identifies the default; request query parameters do not override it. The API version comes from this specification; /version separately reports the build Git commit. Source metadata is informational: missing datasets and metadata failures do not affect HTTP health. Metadata snapshots are cached for 60 seconds per worker, concurrent requests share a refresh, and concurrent upstream metadata requests each have a five-second deadline. The annotation health check runs on every request.",
+        "tags": [
+          "health"
+        ],
         "responses": {
           "200": {
-            "description": "A successful network status check",
+            "description": "Successful live annotation check, including any informational source metadata errors",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "status",
+                    "deployment_environment",
+                    "version",
+                    "query_backend",
+                    "backends"
+                  ],
                   "properties": {
-                    "success": {
-                      "type": "boolean"
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "running"
+                      ],
+                      "description": "Service status after a successful health check.",
+                      "example": "running"
+                    },
+                    "deployment_environment": {
+                      "type": "string",
+                      "description": "Explicit deployment environment loaded at startup from ANNOTATOR_DEPLOYMENT_ENV or application.configuration.DEPLOYMENT_ENVIRONMENT. Kubernetes supplies the environment variable from the gov.nih.ncats.appenv pod label. Defaults to unknown when unset; it is not inferred from request headers or hostnames.",
+                      "example": "ci"
+                    },
+                    "version": {
+                      "type": "string",
+                      "description": "Translator Annotation Service API version from the served OpenAPI specification.",
+                      "example": "1.0"
+                    },
+                    "query_backend": {
+                      "type": "string",
+                      "enum": [
+                        "biothings",
+                        "elasticsearch"
+                      ],
+                      "description": "Deployment default backend used by this health check.",
+                      "example": "elasticsearch"
+                    },
+                    "backends": {
+                      "type": "object",
+                      "required": [
+                        "biothings",
+                        "elasticsearch"
+                      ],
+                      "properties": {
+                        "biothings": {
+                          "$ref": "#/components/schemas/StatusBioThingsBackend"
+                        },
+                        "elasticsearch": {
+                          "$ref": "#/components/schemas/StatusElasticsearchBackend"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "status": "running",
+                  "deployment_environment": "ci",
+                  "version": "1.0",
+                  "query_backend": "elasticsearch",
+                  "backends": {
+                    "biothings": {
+                      "checked_at": "2026-10-20T18:00:00+00:00",
+                      "datasets": {
+                        "gene": {
+                          "build_version": "20261018"
+                        }
+                      }
+                    },
+                    "elasticsearch": {
+                      "connection": "in_cluster",
+                      "checked_at": "2026-10-20T18:00:00+00:00",
+                      "datasets": {
+                        "gene": {
+                          "index": "gene",
+                          "indices": {
+                            "mygene_20261011": {
+                              "build_version": "20261011"
+                            }
+                          }
+                        },
+                        "pubmed": {
+                          "index": "annotator-pubmed",
+                          "error": {
+                            "code": "http_error",
+                            "http_status": 404
+                          }
+                        }
+                      }
                     }
                   }
                 }
               }
+            },
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
             }
           },
           "400": {
-            "description": "An unsuccessful network status check",
+            "description": "The health check raised an exception",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
                   "properties": {
                     "success": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
                     },
                     "error": {
                       "type": "string"
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
+            }
+          },
+          "500": {
+            "description": "The health check did not return the expected annotation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "Service unavailable due to a failed data check!"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "operationId": "head~status_endpoint",
+        "summary": "Checks service health without collecting source metadata",
+        "description": "Runs the same live annotation health check as GET, without fetching source metadata or returning a response body.",
+        "tags": [
+          "health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful live annotation check",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
+            }
+          },
+          "400": {
+            "description": "The health check raised an exception",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
+            }
+          },
+          "500": {
+            "description": "The health check did not return the expected annotation",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
               }
             }
           }
@@ -1967,6 +2135,15 @@
   },
   "components": {
     "headers": {
+      "StatusCacheControl": {
+        "description": "All status responses, including health-check failures, must not be cached. Internal source metadata snapshots have a separate 60-second cache.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "no-store"
+          ]
+        }
+      },
       "AnnotationCacheControl": {
         "description": "Normal annotation responses use the configured public cache lifetime. A response containing a BackendSkipResult uses no-store so newly deployed sources can activate promptly.",
         "schema": {
@@ -2017,6 +2194,176 @@
             "example": ["elasticsearch"]
           }
         }
+      },
+      "StatusBuildVersion": {
+        "type": "object",
+        "required": [
+          "build_version"
+        ],
+        "properties": {
+          "build_version": {
+            "type": "string",
+            "nullable": true,
+            "description": "Build version supplied by metadata, or null when unknown. Never inferred from the index name."
+          }
+        }
+      },
+      "StatusMetadataError": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "description": "Informational metadata failure. Contains a static code and optional HTTP status, without upstream URLs, credentials, or raw error text.",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "timeout",
+              "http_error",
+              "connection_error",
+              "invalid_metadata",
+              "configuration_error",
+              "metadata_unavailable"
+            ]
+          },
+          "http_status": {
+            "type": "integer",
+            "description": "Upstream HTTP error status, when available."
+          }
+        }
+      },
+      "StatusBioThingsDataset": {
+        "description": "Build version from this dataset API /metadata, or a dataset-local metadata error.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StatusBuildVersion"
+          },
+          {
+            "type": "object",
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "$ref": "#/components/schemas/StatusMetadataError"
+              }
+            }
+          }
+        ]
+      },
+      "StatusElasticsearchDataset": {
+        "type": "object",
+        "required": [
+          "index"
+        ],
+        "description": "Configured index or alias and build version from each concrete index mapping _meta, or a dataset-local metadata error.",
+        "properties": {
+          "index": {
+            "type": "string",
+            "nullable": true,
+            "description": "Configured alias or index; null if missing from configuration."
+          },
+          "indices": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StatusBuildVersion"
+            }
+          },
+          "error": {
+            "$ref": "#/components/schemas/StatusMetadataError"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "indices"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          }
+        ]
+      },
+      "StatusBioThingsBackend": {
+        "type": "object",
+        "required": [
+          "checked_at"
+        ],
+        "properties": {
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC time this metadata snapshot was refreshed; snapshots are cached for 60 seconds per worker.",
+            "example": "2026-10-20T18:00:00+00:00"
+          },
+          "datasets": {
+            "type": "object",
+            "description": "Entries keyed by ANNOTATOR_CLIENTS dataset name for BioThings-supported datasets: gene, chem, disease, phenotype, ncit, and extra. PubMed is Elasticsearch-only and is omitted here. Supported datasets remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StatusBioThingsDataset"
+            }
+          },
+          "error": {
+            "$ref": "#/components/schemas/StatusMetadataError"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "datasets"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          }
+        ],
+        "description": "BioThings source metadata. An unexpected collection failure replaces datasets with a metadata_unavailable error."
+      },
+      "StatusElasticsearchBackend": {
+        "type": "object",
+        "required": [
+          "checked_at"
+        ],
+        "properties": {
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC time this metadata snapshot was refreshed; snapshots are cached for 60 seconds per worker.",
+            "example": "2026-10-20T18:00:00+00:00"
+          },
+          "connection": {
+            "type": "string",
+            "description": "Selected connection preset label; connection URLs and credentials are not exposed."
+          },
+          "datasets": {
+            "type": "object",
+            "description": "Entries keyed by ANNOTATOR_CLIENTS dataset name for Elasticsearch-supported datasets: gene, chem, disease, phenotype, pubmed, ncit, and extra. PubMed is available only through this backend. Supported datasets remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StatusElasticsearchDataset"
+            }
+          },
+          "error": {
+            "$ref": "#/components/schemas/StatusMetadataError"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "connection",
+              "datasets"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          }
+        ],
+        "description": "Elasticsearch source metadata. An unexpected collection failure replaces connection and datasets with a metadata_unavailable error."
       },
       "PublicationId": {
         "type": "string",

@@ -16,13 +16,38 @@ from biothings_annotator.application.views import VersionView
 from biothings_annotator.application.views.headers import SKIPPED_CURIE_PREFIXES_HEADER
 
 
+@pytest.fixture
+def backend_metadata(monkeypatch):
+    metadata = AsyncMock(
+        return_value={
+            "biothings": {
+                "checked_at": "2026-10-20T00:00:00+00:00",
+                "datasets": {"gene": {"build_version": "20260922"}},
+            },
+            "elasticsearch": {
+                "checked_at": "2026-10-20T00:00:00+00:00",
+                "connection": "local",
+                "datasets": {
+                    "extra": {"index": "annotator-annotations", "error": {"code": "http_error", "http_status": 404}}
+                },
+            },
+        }
+    )
+    monkeypatch.setattr("biothings_annotator.application.views.status.get_backend_metadata", metadata)
+    return metadata
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
-@pytest.mark.parametrize("endpoint", ["/status/"])
-async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
+@pytest.mark.parametrize("endpoint", ["/status", "/status/"])
+@pytest.mark.parametrize("environment", ["unknown", "ci", "test", "prod"])
+@pytest.mark.parametrize("query_backend", ["biothings", "elasticsearch"])
+async def test_status_get(test_annotator, endpoint, environment, query_backend, monkeypatch, backend_metadata):
     """
     Tests the Status endpoint GET when the response is HTTP 200
     """
+    monkeypatch.setitem(test_annotator.config, "DEPLOYMENT_ENVIRONMENT", environment)
+    monkeypatch.setenv(QUERY_BACKEND_ENV, query_backend)
     with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}) as mock_annotate:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
@@ -38,7 +63,14 @@ async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
         assert request.scheme == "http"
         assert request.server_path == endpoint
 
-        expected_response_body = {"success": True}
+        specification_path = Path(__file__).parents[1] / "biothings_annotator" / "webapp" / "openapi.json"
+        expected_response_body = {
+            "status": "running",
+            "deployment_environment": environment,
+            "version": json.loads(specification_path.read_text(encoding="utf-8"))["info"]["version"],
+            "query_backend": query_backend,
+            "backends": backend_metadata.return_value,
+        }
         assert isinstance(response.json, dict)
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
@@ -48,12 +80,16 @@ async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
         assert response.status_code == 200
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
+        assert response.headers["Cache-Control"] == "no-store"
+        backend_metadata.assert_awaited_once()
+        assert backend_metadata.await_args.args[0] is test_annotator
+        assert backend_metadata.await_args.args[1].query_backend == query_backend
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
-@pytest.mark.parametrize("endpoint", ["/status/"])
-async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
+@pytest.mark.parametrize("endpoint", ["/status", "/status/"])
+async def test_status_head(test_annotator: sanic.Sanic, endpoint: str, backend_metadata):
     """
     Tests the Status endpoint HEAD when the response is HTTP 200
     """
@@ -80,12 +116,47 @@ async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
         assert response.is_closed
         assert response.status_code == 200
         assert response.encoding == "utf-8"
+        assert response.headers["Cache-Control"] == "no-store"
+        backend_metadata.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("annotation_result,expected_status", [({}, 500), (Exception("Unavailable"), 400)])
+async def test_status_head_failure(test_annotator: sanic.Sanic, annotation_result, expected_status):
+    annotation = AsyncMock()
+    if isinstance(annotation_result, Exception):
+        annotation.side_effect = annotation_result
+    else:
+        annotation.return_value = annotation_result
+    with patch.object(Annotator, "annotate_curie", annotation):
+        _, response = await test_annotator.asgi_client.request(method="head", url="/status")
+
+    assert response.status_code == expected_status
+    assert response.body == b""
+    assert response.headers["Cache-Control"] == "no-store"
+    annotation.assert_awaited_once_with("NCBIGene:1017", fields="_id", raw=True, include_extra=False)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_status_environment_is_not_inferred_from_request_host(test_annotator, monkeypatch, backend_metadata):
+    monkeypatch.setitem(test_annotator.config, "DEPLOYMENT_ENVIRONMENT", "unknown")
+    with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}):
+        _, response = await test_annotator.asgi_client.request(
+            method="get",
+            url="/status",
+            headers={"Host": "annotator.ci.transltr.io", "X-Forwarded-Host": "annotator.test.transltr.io"},
+        )
+
+    assert response.status_code == 200
+    assert response.json["deployment_environment"] == "unknown"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
-async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
+async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str, backend_metadata):
     """
     Tests the Status endpoint GET when an Exception is raised
     Mocking the annotate_curie method to raise an exception
@@ -107,12 +178,14 @@ async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         assert response.status_code == 400
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
+        assert response.headers["Cache-Control"] == "no-store"
+        backend_metadata.assert_not_awaited()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
-async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
+async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str, backend_metadata):
     """
     Tests the Status endpoint GET when the data check fails
     Mocking the annotate_curie method to return a value that doesn't contain "NCBIGene:1017"
@@ -137,6 +210,8 @@ async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoin
         assert response.status_code == 500
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
+        assert response.headers["Cache-Control"] == "no-store"
+        backend_metadata.assert_not_awaited()
 
 
 @pytest.mark.unit

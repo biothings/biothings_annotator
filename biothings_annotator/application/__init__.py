@@ -1,5 +1,6 @@
 from typing import Dict
 import logging
+import os
 import pathlib
 
 from sanic import Sanic
@@ -13,6 +14,14 @@ from biothings_annotator.application.views import build_routes
 logging.basicConfig()
 logger = logging.getLogger("sanic-application")
 logger.setLevel(logging.DEBUG)
+
+
+def get_deployment_environment(configuration: Dict) -> str:
+    """Resolve the explicit deployment label, independently of request hosts."""
+    environment = os.getenv("ANNOTATOR_DEPLOYMENT_ENV") or configuration.get("DEPLOYMENT_ENVIRONMENT", "unknown")
+    if not isinstance(environment, str):
+        raise ValueError("DEPLOYMENT_ENVIRONMENT must be a string")
+    return environment.strip() or "unknown"
 
 
 def build_application(configuration: Dict = None) -> Sanic:
@@ -60,6 +69,7 @@ def build_application(configuration: Dict = None) -> Sanic:
     configuration_settings = {}
     configuration_settings.update(application_configuration)
     configuration_settings.update(extension_configuration["cors"])
+    configuration_settings["DEPLOYMENT_ENVIRONMENT"] = get_deployment_environment(application_configuration)
 
     application = Sanic(name="biothings-annotator")
     application.update_config(configuration_settings)
