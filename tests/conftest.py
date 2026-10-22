@@ -15,6 +15,8 @@ import os
 
 import pytest
 
+from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST
+
 pytest_plugins = [
     "fixtures.application",
     "fixtures.datastore",
@@ -26,6 +28,5 @@ logger = logging.getLogger(__name__)
 # ENVIRONMENT CONFIGURATION
 @pytest.fixture(scope="session", autouse=True)
 def annotator_environment():
-    api_host = "https://biothings.ci.transltr.io"
-    os.environ["SERVICE_PROVIDER_API_HOST"] = api_host
+    api_host = os.environ.setdefault("SERVICE_PROVIDER_API_HOST", SERVICE_PROVIDER_API_HOST)
     logger.info("Set SERVICE PROVIDER API HOST: %s for tests", api_host)

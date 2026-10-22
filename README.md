@@ -184,6 +184,15 @@ python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12 -
 
 ##### Runtime configuration
 
+`SERVICE_PROVIDER_API_HOST` overrides the BioThings host used for HPO, NCIT, and extra
+annotation endpoints and their metadata. When unset, it falls back to
+`https://biothings.transltr.io` in every deployment environment. Set it explicitly in the
+container environment to use a matching CI or test BioThings API, such as
+`https://biothings.ci.transltr.io` or `https://biothings.test.transltr.io`, and restart the service.
+The checked-in Helm chart does not currently inject this variable; deployment charts must
+pass it to the container. With the `biothings` query backend, primary gene, chemical, and
+disease queries continue to use the public MyGene, MyChem, and MyDisease APIs.
+
 ##### Service status
 
 `GET /status` verifies that the configured query backend can annotate `NCBIGene:1017` and

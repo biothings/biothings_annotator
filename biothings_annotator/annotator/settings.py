@@ -2,7 +2,7 @@
 Defines the mapping from the biolink model to the Biothings data model
 """
 
-SERVICE_PROVIDER_API_HOST = "https://biothings.ci.transltr.io"
+SERVICE_PROVIDER_API_HOST = "https://biothings.transltr.io"
 
 QUERY_BACKEND = "biothings"
 QUERY_BACKEND_ENV = "ANNOTATOR_QUERY_BACKEND"
