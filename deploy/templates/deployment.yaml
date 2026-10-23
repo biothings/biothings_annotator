@@ -37,6 +37,10 @@ spec:
             {{- end }}
             - name: OPENTELEMETRY_ENABLED
               value: "{{ .Values.containers.OPENTELEMETRY_ENABLED_VALUE }}"
+            {{- with .Values.containers.service_provider_api_host }}
+            - name: SERVICE_PROVIDER_API_HOST
+              value: {{ . | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.containers.port }}
