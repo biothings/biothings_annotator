@@ -189,9 +189,20 @@ annotation endpoints and their metadata. When unset, it falls back to
 `https://biothings.transltr.io` in every deployment environment. Set it explicitly in the
 container environment to use a matching CI or test BioThings API, such as
 `https://biothings.ci.transltr.io` or `https://biothings.test.transltr.io`, and restart the service.
-The checked-in Helm chart does not currently inject this variable; deployment charts must
-pass it to the container. With the `biothings` query backend, primary gene, chemical, and
-disease queries continue to use the public MyGene, MyChem, and MyDisease APIs.
+The Helm chart requires `containers.service_provider_api_host` and passes it to the container
+as `SERVICE_PROVIDER_API_HOST`. Set it in the environment's values file (`values-ncats.yaml`
+when using `deploy/deploy.sh`), for example:
+
+```yaml
+containers:
+  service_provider_api_host: https://biothings.ci.transltr.io
+```
+
+Use `https://biothings.test.transltr.io` for test and `https://biothings.transltr.io` for
+production. Helm rendering fails when the value is missing or blank, so each deployment
+must explicitly choose its BioThings API host. The deployment environment label does not
+select this host. With the `biothings` query backend, primary gene, chemical, and disease
+queries continue to use the public MyGene, MyChem, and MyDisease APIs.
 
 ##### Service status
 
