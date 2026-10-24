@@ -369,7 +369,7 @@ and the background timer. Metadata refresh does not change annotation routing.
 
 GET and HEAD share a separate annotation health cache, scoped to the worker and backend
 configuration. Successful checks are cached for **5 seconds**, failures for **1 second**, and
-each check has a 3-second total deadline. Concurrent probes share one check; a disconnected
+each check has a 10-second total deadline. Concurrent probes share one check; a disconnected
 caller cannot cancel it for the others. An expired healthy result is never served after a
 failed check. Failures retain `{"success": false, "error": "..."}`: HTTP 500 when the expected
 annotation is missing, or HTTP 400 when the check raises an exception or times out.

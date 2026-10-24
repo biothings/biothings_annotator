@@ -9,7 +9,7 @@ from time import monotonic
 logger = logging.getLogger(__name__)
 HEALTH_CACHE_TTL = 5
 HEALTH_FAILURE_TTL = 1
-HEALTH_TIMEOUT = 3
+HEALTH_TIMEOUT = 10
 HEALTH_CURIE = "NCBIGene:1017"
 HEALTH_ERROR_MESSAGE = "Service unavailable due to a failed health check!"
 
