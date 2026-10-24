@@ -62,7 +62,7 @@ class StatusView(HTTPMethodView):
                 "deployment_environment": request.app.config.DEPLOYMENT_ENVIRONMENT,
                 "version": get_openapi_version(),
                 "query_backend": annotator.query_backend,
-                "backends": await get_backend_metadata(request.app, annotator),
+                "available_query_backends": await get_backend_metadata(request.app, annotator),
             }
             return sanic.json(result, headers=self.default_headers, status=200)
         except Exception as exc:

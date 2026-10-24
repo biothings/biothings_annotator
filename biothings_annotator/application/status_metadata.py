@@ -38,7 +38,10 @@ class BackendMetadataCache:
                 for backend in ("biothings", "elasticsearch")
             }
         checked_at = datetime.now(timezone.utc).isoformat()
-        self._value = {backend: {**metadata, "checked_at": checked_at} for backend, metadata in backends.items()}
+        self._value = {
+            "biothings-api" if backend == "biothings" else backend: {**metadata, "checked_at": checked_at}
+            for backend, metadata in backends.items()
+        }
         self._expires_at = monotonic() + METADATA_CACHE_TTL
         return self._value
 

@@ -84,11 +84,11 @@ async def test_collects_actual_client_urls_and_distinct_backend_build_versions(
         "http://localhost:9200/gene",
         "http://localhost:9200/hpo",
     }
-    assert result["biothings"]["datasets"]["gene"] == {
+    assert result["biothings"]["sources"]["gene"] == {
         "build_version": "20260922",
     }
     assert result["elasticsearch"]["connection"] == "ci_forward"
-    assert result["elasticsearch"]["datasets"]["gene"] == {
+    assert result["elasticsearch"]["sources"]["gene"] == {
         "index": "gene",
         "indices": {
             "older-index": {"build_version": "20260705"},
@@ -109,8 +109,8 @@ async def test_retains_indices_with_no_metadata_without_inferring_versions(mock_
     mock_metadata_transport(handler)
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert result["biothings"]["datasets"]["gene"] == {"build_version": None}
-    assert result["elasticsearch"]["datasets"]["gene"]["indices"] == {
+    assert result["biothings"]["sources"]["gene"] == {"build_version": None}
+    assert result["elasticsearch"]["sources"]["gene"]["indices"] == {
         "gene_20260922": {"build_version": None}
     }
 
@@ -131,8 +131,8 @@ async def test_pubmed_metadata_uses_elasticsearch_only(mock_metadata_transport):
     mock_metadata_transport(handler)
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert "pubmed" not in result["biothings"]["datasets"]
-    assert result["elasticsearch"]["datasets"]["pubmed"] == {
+    assert "pubmed" not in result["biothings"]["sources"]
+    assert result["elasticsearch"]["sources"]["pubmed"] == {
         "index": "annotator-pubmed",
         "indices": {"pubmed-build": {"build_version": "20260814"}},
     }
@@ -154,8 +154,8 @@ async def test_dataset_capabilities_filter_each_backend(mock_metadata_transport,
     mock_metadata_transport(handler)
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert set(result["biothings"]["datasets"]) == {"gene"}
-    assert set(result["elasticsearch"]["datasets"]) == {"phenotype"}
+    assert set(result["biothings"]["sources"]) == {"gene"}
+    assert set(result["elasticsearch"]["sources"]) == {"phenotype"}
     assert set(requests) == {"https://mygene.info/v3/metadata", "http://localhost:9200/hpo"}
 
 
@@ -190,9 +190,9 @@ async def test_individual_errors_are_sanitized_and_other_sources_survive(
     mock_metadata_transport(handler)
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert result["biothings"]["datasets"]["gene"] == {"error": expected}
-    assert result["biothings"]["datasets"]["phenotype"]["build_version"] == "good"
-    assert result["elasticsearch"]["datasets"]["gene"] == {
+    assert result["biothings"]["sources"]["gene"] == {"error": expected}
+    assert result["biothings"]["sources"]["phenotype"]["build_version"] == "good"
+    assert result["elasticsearch"]["sources"]["gene"] == {
         "index": "gene",
         "error": {"code": "http_error", "http_status": 404},
     }
@@ -211,8 +211,8 @@ async def test_invalid_es_connection_does_not_prevent_biothings_metadata(mock_me
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "missing")
 
     assert len(requests) == 2
-    assert result["biothings"]["datasets"]["gene"]["build_version"] == "good"
-    assert result["elasticsearch"]["datasets"]["gene"] == {
+    assert result["biothings"]["sources"]["gene"]["build_version"] == "good"
+    assert result["elasticsearch"]["sources"]["gene"] == {
         "index": "gene",
         "error": {"code": "configuration_error"},
     }
@@ -251,8 +251,8 @@ async def test_all_datasets_fetch_concurrently_with_total_deadlines(mock_metadat
 
     assert len(started) == expected_requests
     assert len(cancelled) == 1
-    assert result["biothings"]["datasets"]["gene"] == {"error": {"code": "timeout"}}
-    assert result["biothings"]["datasets"]["chem"]["build_version"] == "good"
+    assert result["biothings"]["sources"]["gene"] == {"error": {"code": "timeout"}}
+    assert result["biothings"]["sources"]["chem"]["build_version"] == "good"
 
 
 @pytest.mark.parametrize(
@@ -266,7 +266,7 @@ async def test_malformed_es_metadata_is_reported(mock_metadata_transport, two_da
     mock_metadata_transport(handler)
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert result["elasticsearch"]["datasets"]["gene"]["error"] == {"code": "invalid_metadata"}
+    assert result["elasticsearch"]["sources"]["gene"]["error"] == {"code": "invalid_metadata"}
 
 
 async def test_missing_client_type_never_triggers_sdk_discovery(mock_metadata_transport, two_datasets, monkeypatch):
@@ -279,7 +279,7 @@ async def test_missing_client_type_never_triggers_sdk_discovery(mock_metadata_tr
     mock_metadata_transport(lambda request: httpx.Response(200, json={}))
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert result["biothings"]["datasets"]["gene"] == {"error": {"code": "configuration_error"}}
+    assert result["biothings"]["sources"]["gene"] == {"error": {"code": "configuration_error"}}
 
 
 async def test_malformed_dataset_configuration_is_isolated(mock_metadata_transport, two_datasets):
@@ -288,8 +288,8 @@ async def test_malformed_dataset_configuration_is_isolated(mock_metadata_transpo
 
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert result["elasticsearch"]["datasets"]["gene"] == {
+    assert result["elasticsearch"]["sources"]["gene"] == {
         "index": None,
         "error": {"code": "configuration_error"},
     }
-    assert result["biothings"]["datasets"]["gene"]["build_version"] == "good"
+    assert result["biothings"]["sources"]["gene"]["build_version"] == "good"

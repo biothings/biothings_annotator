@@ -32,13 +32,15 @@ def test_status_contract_documents_service_metadata_and_health_check_failures():
     responses = status["get"]["responses"]
     assert set(responses) == {"200", "400", "500"}
     success = responses["200"]["content"]["application/json"]["schema"]
-    assert set(success["required"]) == {"status", "deployment_environment", "version", "query_backend", "backends"}
+    assert set(success["required"]) == {
+        "status", "deployment_environment", "version", "query_backend", "available_query_backends"
+    }
     assert set(success["properties"]) == set(success["required"])
     assert success["properties"]["status"]["enum"] == ["running"]
     assert success["properties"]["deployment_environment"]["type"] == "string"
     assert success["properties"]["version"]["example"] == specification["info"]["version"]
     assert success["properties"]["query_backend"]["enum"] == ["biothings", "elasticsearch"]
-    assert success["properties"]["backends"]["required"] == ["biothings", "elasticsearch"]
+    assert success["properties"]["available_query_backends"]["required"] == ["biothings-api", "elasticsearch"]
 
     for operation in status.values():
         assert set(operation["responses"]) == {"200", "400", "500"}
@@ -64,23 +66,23 @@ def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versio
 
     schemas = specification["components"]["schemas"]
     success = specification["paths"]["/status"]["get"]["responses"]["200"]["content"]["application/json"]
-    backend_properties = success["schema"]["properties"]["backends"]["properties"]
+    backend_properties = success["schema"]["properties"]["available_query_backends"]["properties"]
     for backend_name, schema_name, dataset_schema in (
-        ("biothings", "StatusBioThingsBackend", "StatusBioThingsDataset"),
+        ("biothings-api", "StatusBioThingsBackend", "StatusBioThingsDataset"),
         ("elasticsearch", "StatusElasticsearchBackend", "StatusElasticsearchDataset"),
     ):
         assert backend_properties[backend_name] == {"$ref": f"#/components/schemas/{schema_name}"}
         backend = schemas[schema_name]
         assert backend["required"] == ["checked_at"]
         assert backend["properties"]["checked_at"]["format"] == "date-time"
-        assert backend["properties"]["datasets"]["additionalProperties"] == {
+        assert backend["properties"]["sources"]["additionalProperties"] == {
             "$ref": f"#/components/schemas/{dataset_schema}"
         }
-        # Collection failure may replace datasets with an informational error.
+        # Collection failure may replace sources with an informational error.
         assert {"required": ["error"]} in backend["oneOf"]
         assert backend["properties"]["error"] == {"$ref": "#/components/schemas/StatusMetadataError"}
 
-    assert {"required": ["connection", "datasets"]} in schemas["StatusElasticsearchBackend"]["oneOf"]
+    assert {"required": ["connection", "sources"]} in schemas["StatusElasticsearchBackend"]["oneOf"]
     versions_reference = {"$ref": "#/components/schemas/StatusBuildVersion"}
     assert versions_reference in schemas["StatusBioThingsDataset"]["oneOf"]
     elasticsearch_dataset = schemas["StatusElasticsearchDataset"]
@@ -98,13 +100,14 @@ def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versio
     assert schemas["StatusMetadataError"]["properties"]["http_status"]["type"] == "integer"
 
     example = success["example"]
-    assert example["query_backend"] in example["backends"]
-    biothings_gene = example["backends"]["biothings"]["datasets"]["gene"]
-    elasticsearch_gene = example["backends"]["elasticsearch"]["datasets"]["gene"]
+    backend_name = {"biothings": "biothings-api"}.get(example["query_backend"], example["query_backend"])
+    assert backend_name in example["available_query_backends"]
+    biothings_gene = example["available_query_backends"]["biothings-api"]["sources"]["gene"]
+    elasticsearch_gene = example["available_query_backends"]["elasticsearch"]["sources"]["gene"]
     assert biothings_gene["build_version"] != next(iter(elasticsearch_gene["indices"].values()))["build_version"]
     assert example["status"] == "running"
-    assert "pubmed" not in example["backends"]["biothings"]["datasets"]
-    assert "error" in example["backends"]["elasticsearch"]["datasets"]["pubmed"]
+    assert "pubmed" not in example["available_query_backends"]["biothings-api"]["sources"]
+    assert "error" in example["available_query_backends"]["elasticsearch"]["sources"]["pubmed"]
 
 
 @pytest.mark.unit

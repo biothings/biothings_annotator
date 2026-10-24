@@ -108,7 +108,7 @@ async def test_metadata_refresh_is_shared_and_survives_caller_cancellation(monke
     async def collect(*args):
         started.set()
         await release.wait()
-        return {"biothings": {"datasets": {}}, "elasticsearch": {"datasets": {}}}
+        return {"biothings": {"sources": {}}, "elasticsearch": {"sources": {}}}
 
     collector = AsyncMock(side_effect=collect)
     monkeypatch.setattr(status_metadata, "collect_backend_metadata", collector)
@@ -124,25 +124,26 @@ async def test_metadata_refresh_is_shared_and_survives_caller_cancellation(monke
 
     assert await cache.get() == result
     collector.assert_awaited_once_with("https://example.test", "local")
-    assert datetime.fromisoformat(result["biothings"]["checked_at"]).tzinfo is not None
+    assert set(result) == {"biothings-api", "elasticsearch"}
+    assert datetime.fromisoformat(result["biothings-api"]["checked_at"]).tzinfo is not None
 
 
 @pytest.mark.asyncio
 async def test_metadata_cache_expires_and_replaces_failed_metadata(monkeypatch):
-    failed = {"biothings": {"datasets": {"gene": {"error": {"code": "timeout"}}}}}
-    recovered = {"biothings": {"datasets": {"gene": {"build_version": "new"}}}}
+    failed = {"biothings": {"sources": {"gene": {"error": {"code": "timeout"}}}}}
+    recovered = {"biothings": {"sources": {"gene": {"build_version": "new"}}}}
     collector = AsyncMock(side_effect=[failed, recovered])
     monkeypatch.setattr(status_metadata, "collect_backend_metadata", collector)
     monkeypatch.setattr(status_metadata, "monotonic", lambda: 0)
     cache = status_metadata.BackendMetadataCache("https://example.test", "local")
 
-    assert (await cache.get())["biothings"]["datasets"] == failed["biothings"]["datasets"]
+    assert (await cache.get())["biothings-api"]["sources"] == failed["biothings"]["sources"]
     monkeypatch.setattr(status_metadata, "monotonic", lambda: status_metadata.METADATA_CACHE_TTL - 1)
-    assert (await cache.get())["biothings"]["datasets"] == failed["biothings"]["datasets"]
+    assert (await cache.get())["biothings-api"]["sources"] == failed["biothings"]["sources"]
     assert collector.await_count == 1
 
     monkeypatch.setattr(status_metadata, "monotonic", lambda: status_metadata.METADATA_CACHE_TTL)
-    assert (await cache.get())["biothings"]["datasets"] == recovered["biothings"]["datasets"]
+    assert (await cache.get())["biothings-api"]["sources"] == recovered["biothings"]["sources"]
     assert collector.await_count == 2
 
 
@@ -151,7 +152,7 @@ async def test_metadata_cache_expires_and_replaces_failed_metadata(monkeypatch):
     "setting,new_value", [("api_host", "https://other.test"), ("elasticsearch_connection", "test_forward")]
 )
 async def test_metadata_cache_is_scoped_to_application_and_backend_configuration(monkeypatch, setting, new_value):
-    collector = AsyncMock(return_value={"biothings": {"datasets": {}}, "elasticsearch": {"datasets": {}}})
+    collector = AsyncMock(return_value={"biothings": {"sources": {}}, "elasticsearch": {"sources": {}}})
     monkeypatch.setattr(status_metadata, "collect_backend_metadata", collector)
     application = SimpleNamespace(ctx=SimpleNamespace())
     annotator = SimpleNamespace(api_host="https://example.test", elasticsearch_connection="local")
@@ -180,15 +181,16 @@ async def test_metadata_failure_does_not_fail_live_status(application_configurat
 
     assert response.status_code == 200
     assert response.json["status"] == "running"
-    assert response.json["backends"]["biothings"]["error"] == {"code": "metadata_unavailable"}
-    assert response.json["backends"]["elasticsearch"]["error"] == {"code": "metadata_unavailable"}
+    assert set(response.json["available_query_backends"]) == {"biothings-api", "elasticsearch"}
+    assert response.json["available_query_backends"]["biothings-api"]["error"] == {"code": "metadata_unavailable"}
+    assert response.json["available_query_backends"]["elasticsearch"]["error"] == {"code": "metadata_unavailable"}
     assert "private connection details" not in response.text
 
 
 @pytest.mark.asyncio
 async def test_cached_metadata_does_not_cache_the_health_probe(application_configuration, monkeypatch):
     application = build_application(application_configuration)
-    collector = AsyncMock(return_value={"biothings": {"datasets": {}}, "elasticsearch": {"datasets": {}}})
+    collector = AsyncMock(return_value={"biothings": {"sources": {}}, "elasticsearch": {"sources": {}}})
     monkeypatch.setattr(status_metadata, "collect_backend_metadata", collector)
     annotation = AsyncMock(side_effect=[{"NCBIGene:1017": [{"_id": "1017"}]}, {}, {"NCBIGene:1017": []}])
     with patch.object(Annotator, "annotate_curie", new=annotation):

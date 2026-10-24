@@ -158,9 +158,9 @@ async def collect_backend_metadata(api_host: str, elasticsearch_connection: str)
             ),
         )
     return {
-        "biothings": {"datasets": dict(zip(biothings_types, results[: len(biothings_types)]))},
+        "biothings": {"sources": dict(zip(biothings_types, results[: len(biothings_types)]))},
         "elasticsearch": {
             "connection": elasticsearch_connection,
-            "datasets": dict(zip(elasticsearch_types, results[len(biothings_types) :])),
+            "sources": dict(zip(elasticsearch_types, results[len(biothings_types) :])),
         },
     }

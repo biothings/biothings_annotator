@@ -21,7 +21,7 @@
       "get": {
         "operationId": "get~status_endpoint",
         "summary": "Checks the health status of the annotator service",
-        "description": "Checks that the deployment default query backend can annotate NCBIGene:1017 and returns service information plus dataset build versions for both backends. query_backend identifies the default; request query parameters do not override it. The API version comes from this specification; /version separately reports the build Git commit. Source metadata is informational: missing datasets and metadata failures do not affect HTTP health. Metadata snapshots are cached for 60 seconds per worker, concurrent requests share a refresh, and concurrent upstream metadata requests each have a five-second deadline. The annotation health check runs on every request.",
+        "description": "Checks that the deployment default query backend can annotate NCBIGene:1017 and returns service information plus source build versions for both backends. query_backend identifies the default; request query parameters do not override it. The API version comes from this specification; /version separately reports the build Git commit. Source metadata is informational: missing sources and metadata failures do not affect HTTP health. Metadata snapshots are cached for 60 seconds per worker, concurrent requests share a refresh, and concurrent upstream metadata requests each have a five-second deadline. The annotation health check runs on every request.",
         "tags": [
           "health"
         ],
@@ -37,7 +37,7 @@
                     "deployment_environment",
                     "version",
                     "query_backend",
-                    "backends"
+                    "available_query_backends"
                   ],
                   "properties": {
                     "status": {
@@ -67,14 +67,15 @@
                       "description": "Deployment default backend used by this health check.",
                       "example": "elasticsearch"
                     },
-                    "backends": {
+                    "available_query_backends": {
                       "type": "object",
+                      "description": "Metadata for each available backend. The biothings-api entry corresponds to the canonical biothings query backend.",
                       "required": [
-                        "biothings",
+                        "biothings-api",
                         "elasticsearch"
                       ],
                       "properties": {
-                        "biothings": {
+                        "biothings-api": {
                           "$ref": "#/components/schemas/StatusBioThingsBackend"
                         },
                         "elasticsearch": {
@@ -89,10 +90,10 @@
                   "deployment_environment": "ci",
                   "version": "1.0",
                   "query_backend": "elasticsearch",
-                  "backends": {
-                    "biothings": {
+                  "available_query_backends": {
+                    "biothings-api": {
                       "checked_at": "2026-10-20T18:00:00+00:00",
-                      "datasets": {
+                      "sources": {
                         "gene": {
                           "build_version": "20261018"
                         }
@@ -101,7 +102,7 @@
                     "elasticsearch": {
                       "connection": "in_cluster",
                       "checked_at": "2026-10-20T18:00:00+00:00",
-                      "datasets": {
+                      "sources": {
                         "gene": {
                           "index": "gene",
                           "indices": {
@@ -2235,7 +2236,7 @@
         }
       },
       "StatusBioThingsDataset": {
-        "description": "Build version from this dataset API /metadata, or a dataset-local metadata error.",
+        "description": "Build version from this source API /metadata, or a source-local metadata error.",
         "oneOf": [
           {
             "$ref": "#/components/schemas/StatusBuildVersion"
@@ -2258,7 +2259,7 @@
         "required": [
           "index"
         ],
-        "description": "Configured index or alias and build version from each concrete index mapping _meta, or a dataset-local metadata error.",
+        "description": "Configured index or alias and build version from each concrete index mapping _meta, or a source-local metadata error.",
         "properties": {
           "index": {
             "type": "string",
@@ -2300,9 +2301,9 @@
             "description": "UTC time this metadata snapshot was refreshed; snapshots are cached for 60 seconds per worker.",
             "example": "2026-10-20T18:00:00+00:00"
           },
-          "datasets": {
+          "sources": {
             "type": "object",
-            "description": "Entries keyed by ANNOTATOR_CLIENTS dataset name for BioThings-supported datasets: gene, chem, disease, phenotype, ncit, and extra. PubMed is Elasticsearch-only and is omitted here. Supported datasets remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
+            "description": "Entries keyed by ANNOTATOR_CLIENTS source name for BioThings-supported sources: gene, chem, disease, phenotype, ncit, and extra. PubMed is Elasticsearch-only and is omitted here. Supported sources remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
             "additionalProperties": {
               "$ref": "#/components/schemas/StatusBioThingsDataset"
             }
@@ -2314,7 +2315,7 @@
         "oneOf": [
           {
             "required": [
-              "datasets"
+              "sources"
             ]
           },
           {
@@ -2323,7 +2324,7 @@
             ]
           }
         ],
-        "description": "BioThings source metadata. An unexpected collection failure replaces datasets with a metadata_unavailable error."
+        "description": "BioThings source metadata. An unexpected collection failure replaces sources with a metadata_unavailable error."
       },
       "StatusElasticsearchBackend": {
         "type": "object",
@@ -2341,9 +2342,9 @@
             "type": "string",
             "description": "Selected connection preset label; connection URLs and credentials are not exposed."
           },
-          "datasets": {
+          "sources": {
             "type": "object",
-            "description": "Entries keyed by ANNOTATOR_CLIENTS dataset name for Elasticsearch-supported datasets: gene, chem, disease, phenotype, pubmed, ncit, and extra. PubMed is available only through this backend. Supported datasets remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
+            "description": "Entries keyed by ANNOTATOR_CLIENTS source name for Elasticsearch-supported sources: gene, chem, disease, phenotype, pubmed, ncit, and extra. PubMed is available only through this backend. Supported sources remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
             "additionalProperties": {
               "$ref": "#/components/schemas/StatusElasticsearchDataset"
             }
@@ -2356,7 +2357,7 @@
           {
             "required": [
               "connection",
-              "datasets"
+              "sources"
             ]
           },
           {
@@ -2365,7 +2366,7 @@
             ]
           }
         ],
-        "description": "Elasticsearch source metadata. An unexpected collection failure replaces connection and datasets with a metadata_unavailable error."
+        "description": "Elasticsearch source metadata. An unexpected collection failure replaces connection and sources with a metadata_unavailable error."
       },
       "PublicationId": {
         "type": "string",

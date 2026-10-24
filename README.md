@@ -207,9 +207,11 @@ queries continue to use the public MyGene, MyChem, and MyDisease APIs.
 ##### Service status
 
 `GET /status` verifies that the configured query backend can annotate `NCBIGene:1017` and
-returns the common NodeNorm status fields plus dataset build versions for **both** backends.
-`query_backend` identifies the deployment's default backend. This abbreviated example uses
-illustrative versions; each backend lists all datasets it supports:
+returns the common NodeNorm status fields plus source build versions for **both** backends.
+`query_backend` identifies the deployment's default backend. `available_query_backends` lists
+metadata for `biothings-api` and `elasticsearch`; the `biothings-api` entry corresponds to the
+canonical `biothings` query backend. This abbreviated example uses illustrative versions; each
+backend lists all sources it supports:
 
 ```json
 {
@@ -217,17 +219,17 @@ illustrative versions; each backend lists all datasets it supports:
   "deployment_environment": "ci",
   "version": "1.0",
   "query_backend": "elasticsearch",
-  "backends": {
-    "biothings": {
+  "available_query_backends": {
+    "biothings-api": {
       "checked_at": "2026-10-20T18:00:00+00:00",
-      "datasets": {
+      "sources": {
         "gene": {"build_version": "20261018"}
       }
     },
     "elasticsearch": {
       "connection": "in_cluster",
       "checked_at": "2026-10-20T18:00:00+00:00",
-      "datasets": {
+      "sources": {
         "gene": {
           "index": "gene",
           "indices": {
@@ -256,20 +258,20 @@ precedence. Outside the `local` environment, a missing file returns `Unknown` wi
 Git; the local fallback also returns `Unknown` if Git or the checkout is unavailable or the
 query fails. Local `/version` responses send `Cache-Control: no-store`.
 
-Dataset keys follow `ANNOTATOR_CLIENTS` and its backend support: `gene`, `chem`,
+Source keys follow `ANNOTATOR_CLIENTS` and its backend support: `gene`, `chem`,
 `disease`, `phenotype`, `ncit`, and `extra` appear under both backends; `pubmed` appears only
-under Elasticsearch. Missing optional datasets supported by that backend remain visible with an
+under Elasticsearch. Missing optional sources supported by that backend remain visible with an
 `error` instead of disappearing. BioThings versions come from each API's `/metadata`;
 Elasticsearch versions come from index mapping `_meta`, with the configured alias or index in
 `index` and each resolved concrete index under `indices`. `connection` is the selected preset
 label. Connection URLs, credentials, and raw upstream errors are not included.
-The `extra` dataset uses the BioThings `/annotator_extra` API and the Elasticsearch
+The `extra` source uses the BioThings `/annotator_extra` API and the Elasticsearch
 `annotator-annotations` alias; their names differ even though they serve the same enrichment data.
 
-`build_version` identifies each dataset's build. Unknown versions are `null`; an index name is
+`build_version` identifies each source's build. Unknown versions are `null`; an index name is
 never used to infer a version. Metadata failures use a static
-`error.code`, optionally with `http_status`, at the affected dataset. An unexpected collection
-failure produces a backend-level `error` with code `metadata_unavailable` in place of `datasets`.
+`error.code`, optionally with `http_status`, at the affected source. An unexpected collection
+failure produces a backend-level `error` with code `metadata_unavailable` in place of `sources`.
 These metadata errors are informational and do not change the health check's HTTP status.
 
 Metadata snapshots are cached for 60 seconds per worker; `checked_at` is their UTC refresh time.
@@ -405,7 +407,7 @@ was attempted, rather than that PubMed contained no matching record:
 
 Select `query_backend=elasticsearch` to annotate PubMed CURIEs. The dedicated publication
 metadata endpoints below already use Elasticsearch. `/status` lists PubMed only under
-`backends.elasticsearch.datasets`.
+`available_query_backends.elasticsearch.sources`.
 
 Datasets configured to use BioThings source discovery still consult `/api/list` with a short-lived,
 per-host cache. Concurrent refreshes share one request; failures use a brief retry backoff.

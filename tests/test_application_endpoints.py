@@ -20,14 +20,14 @@ from biothings_annotator.application.views.headers import SKIPPED_CURIE_PREFIXES
 def backend_metadata(monkeypatch):
     metadata = AsyncMock(
         return_value={
-            "biothings": {
+            "biothings-api": {
                 "checked_at": "2026-10-20T00:00:00+00:00",
-                "datasets": {"gene": {"build_version": "20260922"}},
+                "sources": {"gene": {"build_version": "20260922"}},
             },
             "elasticsearch": {
                 "checked_at": "2026-10-20T00:00:00+00:00",
                 "connection": "local",
-                "datasets": {
+                "sources": {
                     "extra": {"index": "annotator-annotations", "error": {"code": "http_error", "http_status": 404}}
                 },
             },
@@ -69,7 +69,7 @@ async def test_status_get(test_annotator, endpoint, environment, query_backend, 
             "deployment_environment": environment,
             "version": json.loads(specification_path.read_text(encoding="utf-8"))["info"]["version"],
             "query_backend": query_backend,
-            "backends": backend_metadata.return_value,
+            "available_query_backends": backend_metadata.return_value,
         }
         assert isinstance(response.json, dict)
         assert response.http_version == "HTTP/1.1"
