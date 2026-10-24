@@ -51,13 +51,6 @@ class UnsupportedSourceBackendError(ValueError):
         super().__init__(self.message)
 
 
-class SourceDiscoveryError(RuntimeError):
-    def __init__(self, source=None):
-        self.source = source
-        self.message = "Unable to determine BioThings source availability."
-        super().__init__(self.message)
-
-
 class TRAPIInputError(ValueError):
     def __init__(self, trapi_input: Dict):
         self.input_structure = trapi_input

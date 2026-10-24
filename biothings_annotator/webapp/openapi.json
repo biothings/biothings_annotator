@@ -478,7 +478,7 @@
       "get": {
         "operationId": "get~curie_endpoint",
         "summary": "Retrieve annotation objects based on a CURIE ID",
-        "description": "PubMed identifiers (PMID, doi, DOI, PMC, and pmc) require query_backend=elasticsearch. If the selected backend is biothings, returns HTTP 422 before source discovery or an annotation query. The service does not switch backends automatically.",
+        "description": "PubMed identifiers (PMID, doi, DOI, PMC, and pmc) require query_backend=elasticsearch. If the selected backend is biothings, returns HTTP 422 before an annotation query. The service does not switch backends automatically.",
         "tags": ["translator"],
         "parameters": [
           {
@@ -605,7 +605,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A CURIE-keyed annotation object, or a not-found-shaped BackendSkipResult when source discovery confirms an unavailable source. PubMed requested through BioThings is rejected with HTTP 422 before discovery.",
+            "description": "A CURIE-keyed annotation object. PubMed requested through BioThings is rejected with HTTP 422 before an annotation query.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/AnnotationCacheControl"
@@ -694,23 +694,8 @@
               }
             }
           },
-          "503": {
-            "description": "BioThings source availability could not be determined. This is retryable and is not reported as a skipped source.",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/TransientErrorCacheControl"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SourceDiscoveryError"
-                }
-              }
-            }
-          },
           "422": {
-            "description": "The selected backend does not support this source. PubMed requires Elasticsearch; no BioThings discovery or annotation request is made.",
+            "description": "The selected backend does not support this source. PubMed requires Elasticsearch; no BioThings annotation request is made.",
             "headers": {
               "Cache-Control": {
                 "description": "Backend rejection responses must not be cached.",
@@ -777,7 +762,7 @@
       "post": {
         "operationId": "post~curie_endpoint",
         "summary": "For a list of curie IDs, return the expanded annotation objects",
-        "description": "PubMed identifiers (PMID, doi, DOI, PMC, and pmc) require Elasticsearch. With the biothings backend, PubMed entries receive BackendSkipResult and supported entries are still annotated in an HTTP 200 response. No PubMed discovery, annotation query, or automatic backend switch occurs. Skipped responses include X-Skipped-Curie-Prefixes and Cache-Control: no-store.",
+        "description": "PubMed identifiers (PMID, doi, DOI, PMC, and pmc) require Elasticsearch. With the biothings backend, PubMed entries receive BackendSkipResult and supported entries are still annotated in an HTTP 200 response. No PubMed annotation query or automatic backend switch occurs. Skipped responses include X-Skipped-Curie-Prefixes and Cache-Control: no-store.",
         "tags": ["translator"],
         "parameters": [
           {
@@ -857,7 +842,7 @@
         },
         "responses": {
           "200": {
-            "description": "A CURIE-keyed annotation object. CURIEs whose source is confirmed absent from the selected backend contain a not-found-shaped BackendSkipResult.",
+            "description": "A CURIE-keyed annotation object. CURIEs whose source is not supported by the selected backend contain a not-found-shaped BackendSkipResult.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/AnnotationCacheControl"
@@ -1556,21 +1541,6 @@
               }
             }
           },
-          "503": {
-            "description": "BioThings source availability could not be determined. This is retryable and is not reported as a skipped source.",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/TransientErrorCacheControl"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SourceDiscoveryError"
-                }
-              }
-            }
-          },
           "400": {
             "description": "A response indicating an improperly formatted query",
             "content": {
@@ -1634,7 +1604,7 @@
       "post": {
         "operationId": "post~trapi_endpoint",
         "summary": "Provides an annotated response based off the TRAPI body provided",
-        "description": "PubMed identifiers require Elasticsearch. With the biothings backend, affected nodes are preserved with a skipped result in their biothings_query_status attribute; supported nodes are still annotated and the response is HTTP 200. No PubMed discovery, annotation query, or automatic backend switch occurs. Skipped responses include X-Skipped-Curie-Prefixes and Cache-Control: no-store.",
+        "description": "PubMed identifiers require Elasticsearch. With the biothings backend, affected nodes are preserved with a skipped result in their biothings_query_status attribute; supported nodes are still annotated and the response is HTTP 200. No PubMed annotation query or automatic backend switch occurs. Skipped responses include X-Skipped-Curie-Prefixes and Cache-Control: no-store.",
         "tags": ["translator"],
         "parameters": [
           {
@@ -1754,7 +1724,7 @@
         },
         "responses": {
           "200": {
-            "description": "A node-keyed annotation object. CURIEs whose source is confirmed absent from the selected backend receive a biothings_query_status attribute containing a not-found-shaped BackendSkipResult.",
+            "description": "A node-keyed annotation object. CURIEs whose source is not supported by the selected backend receive a biothings_query_status attribute containing a not-found-shaped BackendSkipResult.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/AnnotationCacheControl"
@@ -2065,21 +2035,6 @@
               }
             }
           },
-          "503": {
-            "description": "BioThings source availability could not be determined. This is retryable and is not reported as a skipped source.",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/TransientErrorCacheControl"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SourceDiscoveryError"
-                }
-              }
-            }
-          },
           "400": {
             "description": "A response indicating an improperly formatted query",
             "content": {
@@ -2183,17 +2138,10 @@
         }
       },
       "AnnotationCacheControl": {
-        "description": "Normal annotation responses use the configured public cache lifetime. A response containing a BackendSkipResult uses no-store so newly deployed sources can activate promptly.",
+        "description": "Normal annotation responses use the configured public cache lifetime. Responses containing a BackendSkipResult use no-store.",
         "schema": {
           "type": "string",
           "example": "no-store"
-        }
-      },
-      "TransientErrorCacheControl": {
-        "description": "Source-discovery errors are transient and must not be cached.",
-        "schema": {
-          "type": "string",
-          "enum": ["no-store"]
         }
       },
       "QueryBackend": {
@@ -2204,7 +2152,7 @@
         }
       },
       "SkippedCuriePrefixes": {
-        "description": "Comma-separated recognized CURIE prefixes skipped because the selected backend does not support their source or source discovery confirmed it is unavailable. Bulk and TRAPI PubMed requests through BioThings use this header. It is omitted when no known prefixes were skipped.",
+        "description": "Comma-separated recognized CURIE prefixes skipped because the selected backend does not support their source. Bulk and TRAPI PubMed requests through BioThings use this header. It is omitted when no known prefixes were skipped.",
         "schema": {
           "type": "string",
           "example": "PMID"
@@ -2215,7 +2163,7 @@
       "UnsupportedSourceBackendError": {
         "type": "object",
         "required": ["input", "endpoint", "error", "message", "source", "query_backend", "supported_backends"],
-        "description": "A single-CURIE request selected a backend that does not support its source. No source discovery or annotation request is sent, and the service does not switch backends.",
+        "description": "A single-CURIE request selected a backend that does not support its source. No annotation request is sent, and the service does not switch backends.",
         "properties": {
           "input": {"type": "string", "example": "PMID:30690000"},
           "endpoint": {"type": "string", "enum": ["/curie/"]},
@@ -2585,7 +2533,7 @@
       },
       "BackendSkipResult": {
         "type": "array",
-        "description": "Per-CURIE status in the same list shape as a not-found result when the selected backend does not support a source or source discovery confirms it is unavailable. Bulk and TRAPI PubMed requests through BioThings use this shape; single-CURIE requests return HTTP 422 instead. The skipped flag means the lookup was not attempted.",
+        "description": "Per-CURIE status in the same list shape as a not-found result when the selected backend does not support a source. Bulk and TRAPI PubMed requests through BioThings use this shape; single-CURIE requests return HTTP 422 instead. The skipped flag means the lookup was not attempted.",
         "minItems": 1,
         "maxItems": 1,
         "items": {
@@ -2616,24 +2564,6 @@
               "type": "string",
               "enum": ["biothings", "elasticsearch"]
             }
-          }
-        }
-      },
-      "SourceDiscoveryError": {
-        "type": "object",
-        "required": ["input", "endpoint", "message", "source"],
-        "properties": {
-          "input": {},
-          "endpoint": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string",
-            "enum": ["Unable to determine BioThings source availability."]
-          },
-          "source": {
-            "type": "string",
-            "example": "custom_source"
           }
         }
       }

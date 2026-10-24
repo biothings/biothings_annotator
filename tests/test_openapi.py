@@ -221,20 +221,11 @@ def test_query_backend_override_is_documented_for_all_query_operations():
         assert operation["responses"]["200"]["headers"]["Cache-Control"] == {
             "$ref": "#/components/headers/AnnotationCacheControl"
         }
-        assert operation["responses"]["503"]["content"]["application/json"]["schema"] == {
-            "$ref": "#/components/schemas/SourceDiscoveryError"
-        }
-        assert operation["responses"]["503"]["headers"]["Cache-Control"] == {
-            "$ref": "#/components/headers/TransientErrorCacheControl"
-        }
+        assert "503" not in operation["responses"]
 
     skipped_prefixes_header = specification["components"]["headers"]["SkippedCuriePrefixes"]
     assert skipped_prefixes_header["schema"] == {"type": "string", "example": "PMID"}
-    assert "source discovery confirmed" in skipped_prefixes_header["description"]
-    assert specification["components"]["headers"]["TransientErrorCacheControl"]["schema"] == {
-        "type": "string",
-        "enum": ["no-store"],
-    }
+    assert "selected backend does not support their source" in skipped_prefixes_header["description"]
 
     skipped_result = specification["components"]["schemas"]["BackendSkipResult"]
     assert skipped_result["type"] == "array"
@@ -252,12 +243,8 @@ def test_query_backend_override_is_documented_for_all_query_operations():
     assert skipped_hit["properties"]["skipped"] == {"type": "boolean", "enum": [True]}
     assert skipped_hit["properties"]["reason"]["enum"] == ["source_unavailable_for_backend"]
 
-    discovery_error = specification["components"]["schemas"]["SourceDiscoveryError"]
-    assert discovery_error["required"] == ["input", "endpoint", "message", "source"]
-    assert discovery_error["properties"]["message"]["enum"] == [
-        "Unable to determine BioThings source availability."
-    ]
-
+    assert "SourceDiscoveryError" not in json.dumps(specification)
+    assert "TransientErrorCacheControl" not in specification["components"]["headers"]
     assert "InvalidQueryBackendError" not in json.dumps(specification)
 
 

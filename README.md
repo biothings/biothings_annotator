@@ -463,7 +463,7 @@ biomedical sources, PubMed has its own annotator client configuration rather tha
 
 PubMed is supported only by the `elasticsearch` backend. This applies to the `PMID`, `doi`,
 `DOI`, `PMC`, and `pmc` CURIE prefixes. When the selected backend is `biothings`, the annotator
-does not discover or query a PubMed API and does not switch to Elasticsearch automatically.
+does not query a PubMed API and does not switch to Elasticsearch automatically.
 URL-encode CURIEs used in the GET path, including the slash in DOI values.
 
 A single request such as `GET /curie/PMID:30690000?query_backend=biothings` returns HTTP 422
@@ -506,11 +506,6 @@ was attempted, rather than that PubMed contained no matching record:
 Select `query_backend=elasticsearch` to annotate PubMed CURIEs. The dedicated publication
 metadata endpoints below already use Elasticsearch. `/status` lists PubMed only under
 `available_query_backends.elasticsearch.sources`.
-
-Datasets configured to use BioThings source discovery still consult `/api/list` with a short-lived,
-per-host cache. Concurrent refreshes share one request; failures use a brief retry backoff.
-A confirmed unavailable source produces a skipped result. A discovery timeout, invalid
-response, or server error returns HTTP 503 with `Cache-Control: no-store`.
 
 ```shell
 curl 'http://localhost:9000/curie/PMID:12345678?query_backend=elasticsearch'
@@ -575,8 +570,8 @@ follow from the transport rather than the service:
 
 These routes are deliberately separate from the generic annotation pipeline. They always read the
 `annotator-pubmed` Elasticsearch alias and retrieve only the `pubmed` source object. They do not
-perform BioThings source discovery, CURIE grouping, extra annotation lookup, or per-request backend
-selection. The request has a two-second total backend deadline by default (configurable with
+perform CURIE grouping, extra annotation lookup, or per-request backend selection. The request has a
+two-second total backend deadline by default (configurable with
 `DOCUMENT_METADATA_REQUEST_TIMEOUT`) so a degraded Elasticsearch service fails quickly.
 
 PMIDs are the document `_id`, so they resolve through one exact-ID Elasticsearch `_mget` for the whole
