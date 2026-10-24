@@ -26,6 +26,7 @@ containers:
   elasticsearch_connection: in_cluster
   port: 9000
   OPENTELEMETRY_ENABLED_VALUE: True
+  service_provider_api_host: SERVICE_PROVIDER_API_HOST_VALUE
 
 service:
   type: ClusterIP
