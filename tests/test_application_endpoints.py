@@ -168,7 +168,11 @@ async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str, back
     Tests the Status endpoint GET when an Exception is raised
     Mocking the annotate_curie method to raise an exception
     """
-    with patch.object(Annotator, "annotate_curie", side_effect=Exception("Simulated error")):
+    private_error = RuntimeError(
+        "http://service-user:private-password@elasticsearch.internal:9200/private-index "
+        "returned body: {\"access_token\": \"private-token\"}"
+    )
+    with patch.object(Annotator, "annotate_curie", side_effect=private_error):
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
         assert request.method == "GET"
@@ -176,7 +180,7 @@ async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str, back
         assert request.scheme == "http"
         assert request.server_path == endpoint
 
-        expected_response_body = {"success": False, "error": "Exception('Simulated error')"}
+        expected_response_body = {"success": False, "error": "Service unavailable due to a failed health check!"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
         assert not response.is_success
@@ -185,8 +189,24 @@ async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str, back
         assert response.status_code == 400
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
+        for private_detail in ("elasticsearch.internal", "private-index", "private-password", "private-token"):
+            assert private_detail not in response.text
         assert response.headers["Cache-Control"] == "no-store"
         backend_metadata.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_status_get_outer_error_does_not_expose_private_details(test_annotator, backend_metadata):
+    backend_metadata.side_effect = RuntimeError("http://elasticsearch.internal:9200/private-index?token=private-token")
+    with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}):
+        _, response = await test_annotator.asgi_client.get("/status")
+
+    assert response.status_code == 400
+    assert response.json == {"success": False, "error": "Service unavailable due to a failed health check!"}
+    assert response.headers["Cache-Control"] == "no-store"
+    for private_detail in ("elasticsearch.internal", "private-index", "private-token"):
+        assert private_detail not in response.text
 
 
 @pytest.mark.unit

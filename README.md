@@ -357,10 +357,12 @@ snapshot. Upstream calls run concurrently with five-second deadlines; each compl
 has a 10-second deadline. Concurrent callers share a collection if no snapshot exists yet.
 
 Source-specific failures remain visible alongside healthy sources. Timeouts, connection errors,
-HTTP 429, and HTTP 5xx responses cause another collection after **30 seconds**. Expected missing
-optional sources, configuration errors, and other source errors use the normal 10-minute interval.
+HTTP 429, and HTTP 5xx responses cause another collection after **30 seconds**. Consecutive
+transient failures double that delay (30, 60, 120 seconds, and so on), capped at the normal
+**10-minute** interval. A collection without transient errors resets the retry delay. Expected
+missing optional sources, configuration errors, and other source errors use the normal interval.
 An unexpected collection failure retains the previous snapshot and its `checked_at`, adds a
-backend-level `refresh_error` with code `metadata_unavailable`, and retries after 30 seconds.
+backend-level `refresh_error` with code `metadata_unavailable`, and uses the same retry backoff.
 If no snapshot exists, it reports a backend-level `error` with that code instead of `sources`.
 The next completed collection clears `refresh_error`. Worker shutdown cancels pending collections
 and the background timer. Metadata refresh does not change annotation routing.
@@ -371,6 +373,7 @@ each check has a 3-second total deadline. Concurrent probes share one check; a d
 caller cannot cancel it for the others. An expired healthy result is never served after a
 failed check. Failures retain `{"success": false, "error": "..."}`: HTTP 500 when the expected
 annotation is missing, or HTTP 400 when the check raises an exception or times out.
+Exception details are logged server-side; the public error uses a fixed message.
 `HEAD /status` uses the same health result without reading source metadata or returning a body.
 All GET and HEAD status responses, including failures, send `Cache-Control: no-store`.
 

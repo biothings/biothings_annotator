@@ -1,14 +1,17 @@
 """Share brief annotation health results between GET and HEAD status probes."""
 
 import asyncio
+import logging
 from contextlib import suppress
 from time import monotonic
 
 
+logger = logging.getLogger(__name__)
 HEALTH_CACHE_TTL = 5
 HEALTH_FAILURE_TTL = 1
 HEALTH_TIMEOUT = 3
 HEALTH_CURIE = "NCBIGene:1017"
+HEALTH_ERROR_MESSAGE = "Service unavailable due to a failed health check!"
 
 
 class StatusHealthCache:
@@ -37,8 +40,9 @@ class StatusHealthCache:
                 if HEALTH_CURIE in annotation
                 else (500, "Service unavailable due to a failed data check!")
             )
-        except Exception as exc:
-            self._value = (400, repr(exc))
+        except Exception:
+            logger.exception("Unable to complete annotation health check")
+            self._value = (400, HEALTH_ERROR_MESSAGE)
         self._expires_at = monotonic() + (HEALTH_CACHE_TTL if self._value[0] == 200 else HEALTH_FAILURE_TTL)
         return self._value
 

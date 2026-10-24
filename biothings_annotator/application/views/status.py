@@ -1,4 +1,5 @@
 import json
+import logging
 from functools import lru_cache
 
 import sanic
@@ -6,9 +7,12 @@ from sanic.views import HTTPMethodView
 from sanic.request import Request
 
 from biothings_annotator.annotator import Annotator
-from biothings_annotator.application.status_health import get_status_health
+from biothings_annotator.application.status_health import HEALTH_ERROR_MESSAGE, get_status_health
 from biothings_annotator.application.status_metadata import get_backend_metadata
 from biothings_annotator.application.structure import DOCKER_WEB_APP_DIRECTORY, WEB_APP_DIRECTORY
+
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=None)
@@ -36,8 +40,8 @@ class StatusView(HTTPMethodView):
         that we can still access the underlying biothings infrastructure
         to provide the annotation.
         """
-        annotator = Annotator()
         try:
+            annotator = Annotator()
             status, error = await get_status_health(request.app, annotator)
             if status != 200:
                 return sanic.json({"success": False, "error": error}, headers=self.default_headers, status=status)
@@ -50,6 +54,7 @@ class StatusView(HTTPMethodView):
                 "available_query_backends": await get_backend_metadata(request.app, annotator),
             }
             return sanic.json(result, headers=self.default_headers, status=200)
-        except Exception as exc:
-            result = {"success": False, "error": repr(exc)}
+        except Exception:
+            logger.exception("Unable to report service status")
+            result = {"success": False, "error": HEALTH_ERROR_MESSAGE}
             return sanic.json(result, headers=self.default_headers, status=400)

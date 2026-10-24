@@ -227,6 +227,31 @@ async def test_health_refresh_is_shared_and_survives_caller_cancellation():
     assert current.annotate_curie.await_count == 1
 
 
+async def test_health_exception_details_are_logged_without_exposing_them_in_cached_results(monkeypatch, caplog):
+    private_error = RuntimeError(
+        "http://service-user:private-password@elasticsearch.internal:9200/private-index "
+        "returned body: {\"access_token\": \"private-token\"}"
+    )
+    current = annotator()
+    current.annotate_curie.side_effect = private_error
+    monkeypatch.setattr(status_health, "monotonic", lambda: 0)
+    cache = StatusHealthCache(current)
+
+    with caplog.at_level("ERROR", logger=status_health.__name__):
+        result = await cache.get()
+        cached_result = await cache.get()
+
+    assert result == cached_result == (400, "Service unavailable due to a failed health check!")
+    for private_detail in ("elasticsearch.internal", "private-index", "private-password", "private-token"):
+        assert private_detail not in result[1]
+    current.annotate_curie.assert_awaited_once()
+    records = [record for record in caplog.records if record.name == status_health.__name__]
+    assert len(records) == 1
+    assert records[0].message == "Unable to complete annotation health check"
+    assert records[0].exc_info[1] is private_error
+    assert str(private_error) in caplog.text
+
+
 @pytest.mark.parametrize("setting", ["query_backend", "api_host", "elasticsearch_connection"])
 async def test_health_cache_is_scoped_to_application_and_backend_configuration(setting):
     app = SimpleNamespace(ctx=SimpleNamespace())
@@ -241,7 +266,7 @@ async def test_health_cache_is_scoped_to_application_and_backend_configuration(s
     assert current.annotate_curie.await_count == 3
 
 
-async def test_health_deadline_returns_existing_exception_failure_shape(monkeypatch):
+async def test_health_deadline_returns_safe_exception_failure_shape(monkeypatch):
     monkeypatch.setattr(status_health, "HEALTH_TIMEOUT", 0.001)
     current = annotator()
 
@@ -250,7 +275,7 @@ async def test_health_deadline_returns_existing_exception_failure_shape(monkeypa
 
     current.annotate_curie.side_effect = never_returns
     result = await asyncio.wait_for(StatusHealthCache(current).get(), timeout=1)
-    assert result == (400, "TimeoutError()")
+    assert result == (400, "Service unavailable due to a failed health check!")
 
 
 async def test_get_and_head_share_health_during_worker_lifetime_and_stop_tasks(monkeypatch):

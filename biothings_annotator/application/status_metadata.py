@@ -46,6 +46,7 @@ class BackendMetadataCache:
         self._refresh = None
         self._background = None
         self._retry = False
+        self._retry_delay = METADATA_RETRY_INTERVAL
 
     async def get(self):
         if self._value is not None:
@@ -66,7 +67,7 @@ class BackendMetadataCache:
         except Exception:
             # Metadata is informational; the annotation probe determines health.
             logger.exception("Unable to collect backend source metadata")
-            self._retry = True
+            self._update_retry(True)
             if self._value is None:
                 checked_at = datetime.now(timezone.utc).isoformat()
                 self._value = {
@@ -80,10 +81,12 @@ class BackendMetadataCache:
                 }
             return self._value
 
-        self._retry = any(
-            self._is_transient_error(source.get("error", {}))
-            for metadata in backends.values()
-            for source in metadata.get("sources", {}).values()
+        self._update_retry(
+            any(
+                self._is_transient_error(source.get("error", {}))
+                for metadata in backends.values()
+                for source in metadata.get("sources", {}).values()
+            )
         )
         checked_at = datetime.now(timezone.utc).isoformat()
         self._value = {
@@ -91,6 +94,13 @@ class BackendMetadataCache:
             for backend, metadata in backends.items()
         }
         return self._value
+
+    def _update_retry(self, retry):
+        if retry and self._retry:
+            self._retry_delay = min(self._retry_delay * 2, METADATA_REFRESH_INTERVAL)
+        else:
+            self._retry_delay = min(METADATA_RETRY_INTERVAL, METADATA_REFRESH_INTERVAL)
+        self._retry = retry
 
     @staticmethod
     def _is_transient_error(error):
@@ -101,7 +111,7 @@ class BackendMetadataCache:
 
     async def _run(self):
         while True:
-            await asyncio.sleep(METADATA_RETRY_INTERVAL if self._retry else METADATA_REFRESH_INTERVAL)
+            await asyncio.sleep(self._retry_delay if self._retry else METADATA_REFRESH_INTERVAL)
             await self.refresh()
 
     def start(self):
