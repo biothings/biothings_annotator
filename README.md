@@ -223,17 +223,24 @@ backend lists all sources it supports:
     "biothings-api": {
       "checked_at": "2026-10-20T18:00:00+00:00",
       "sources": {
-        "gene": {"build_version": "20261018"}
+        "mygene": {"build_version": "20261018"},
+        "hpo": {"build_version": "20250120"}
       }
     },
     "elasticsearch": {
       "connection": "ci_cluster",
       "checked_at": "2026-10-20T18:00:00+00:00",
       "sources": {
-        "gene": {
+        "mygene": {
           "index": "gene",
           "indices": {
             "mygene_20261011": {"build_version": "20261011"}
+          }
+        },
+        "hpo": {
+          "index": "hpo",
+          "indices": {
+            "hpo_20250120": {"build_version": "20250120"}
           }
         },
         "pubmed": {
@@ -258,9 +265,16 @@ precedence. Outside the `local` environment, a missing file returns `Unknown` wi
 Git; the local fallback also returns `Unknown` if Git or the checkout is unavailable or the
 query fails. Local `/version` responses send `Cache-Control: no-store`.
 
-Source keys follow `ANNOTATOR_CLIENTS` and its backend support: `gene`, `chem`,
-`disease`, `phenotype`, `ncit`, and `extra` appear under both backends; `pubmed` appears only
-under Elasticsearch. Missing optional sources supported by that backend remain visible with an
+Source availability follows `ANNOTATOR_CLIENTS` and its backend support. Both backends share
+status display names derived from the client configuration. Typed SDK clients use their
+configured `<service>.info` hostname, yielding `mygene`, `mychem`, and `mydisease` without a
+per-source mapping. Endpoint-based clients use their configured endpoint, yielding `hpo`,
+`ncit`, and `annotator_extra`. Sources without an API client retain their configured key;
+`pubmed` appears only under Elasticsearch. Custom client URLs outside the `<service>.info`
+convention, unresolved client configurations, and conflicting names fall back to the configured
+source key. Names do not depend on a successful metadata request. These are status labels only:
+internal source keys, annotation routing, and Elasticsearch aliases remain unchanged.
+Missing optional sources supported by that backend remain visible with an
 `error` instead of disappearing. BioThings versions come from each API's `/metadata`;
 Elasticsearch versions come from index mapping `_meta`, with the configured alias or index in
 `index` and each resolved concrete index under `indices`. `connection` describes the configured
@@ -283,8 +297,8 @@ tunnel launcher. A forwarded preset with an unrecognized environment reports
 `unknown_cluster_forwarded`; an unrecognized preset reports `unknown`. Connection URLs,
 credentials, and raw upstream errors are not included in the status response.
 
-The `extra` source uses the BioThings `/annotator_extra` API and the Elasticsearch
-`annotator-annotations` alias; their names differ even though they serve the same enrichment data.
+The `annotator_extra` status source uses the BioThings `/annotator_extra` API and the
+Elasticsearch `annotator-annotations` alias, which remains visible in its `index` field.
 
 `build_version` identifies each source's build. Unknown versions are `null`; an index name is
 never used to infer a version. Metadata failures use a static

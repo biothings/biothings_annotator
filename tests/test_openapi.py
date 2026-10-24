@@ -108,8 +108,11 @@ def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versio
     example = success["example"]
     backend_name = {"biothings": "biothings-api"}.get(example["query_backend"], example["query_backend"])
     assert backend_name in example["available_query_backends"]
-    biothings_gene = example["available_query_backends"]["biothings-api"]["sources"]["gene"]
-    elasticsearch_gene = example["available_query_backends"]["elasticsearch"]["sources"]["gene"]
+    biothings_gene = example["available_query_backends"]["biothings-api"]["sources"]["mygene"]
+    elasticsearch_gene = example["available_query_backends"]["elasticsearch"]["sources"]["mygene"]
+    assert elasticsearch_gene["index"] == "gene"
+    assert example["available_query_backends"]["elasticsearch"]["sources"]["hpo"]["index"] == "hpo"
+    assert "hpo" in example["available_query_backends"]["biothings-api"]["sources"]
     assert example["available_query_backends"]["elasticsearch"]["connection"] == "ci_cluster"
     assert biothings_gene["build_version"] != next(iter(elasticsearch_gene["indices"].values()))["build_version"]
     assert example["status"] == "running"

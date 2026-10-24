@@ -130,8 +130,8 @@ async def test_metadata_refresh_is_shared_and_survives_caller_cancellation(monke
 
 @pytest.mark.asyncio
 async def test_metadata_cache_expires_and_replaces_failed_metadata(monkeypatch):
-    failed = {"biothings": {"sources": {"gene": {"error": {"code": "timeout"}}}}}
-    recovered = {"biothings": {"sources": {"gene": {"build_version": "new"}}}}
+    failed = {"biothings": {"sources": {"mygene": {"error": {"code": "timeout"}}}}}
+    recovered = {"biothings": {"sources": {"mygene": {"build_version": "new"}}}}
     collector = AsyncMock(side_effect=[failed, recovered])
     monkeypatch.setattr(status_metadata, "collect_backend_metadata", collector)
     monkeypatch.setattr(status_metadata, "monotonic", lambda: 0)
@@ -196,7 +196,7 @@ async def test_status_connection_describes_the_configured_cluster(
         "biothings": {"sources": {}},
         "elasticsearch": {
             "connection": connection,
-            "sources": {"gene": {"error": {"code": "connection_error"}}},
+            "sources": {"mygene": {"error": {"code": "connection_error"}}},
         },
     }
     collector = AsyncMock(return_value=collected)
@@ -208,7 +208,7 @@ async def test_status_connection_describes_the_configured_cluster(
     assert response.json["deployment_environment"] == environment
     elasticsearch = response.json["available_query_backends"]["elasticsearch"]
     assert elasticsearch["connection"] == expected
-    assert elasticsearch["sources"]["gene"]["error"]["code"] == "connection_error"
+    assert elasticsearch["sources"]["mygene"]["error"]["code"] == "connection_error"
     assert collected["elasticsearch"]["connection"] == connection
 
 

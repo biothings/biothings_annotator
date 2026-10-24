@@ -1,6 +1,7 @@
 """Best-effort source versions from each configured annotation backend."""
 
 import asyncio
+from collections import Counter
 from typing import Dict, Optional
 from urllib.parse import quote
 
@@ -69,6 +70,36 @@ def _biothings_metadata_url(configuration: Dict, api_host: str) -> str:
     if not isinstance(endpoint, str) or not endpoint.strip():
         raise ValueError("A BioThings endpoint is required")
     return f"{_base_url(api_host)}/{endpoint.strip('/')}/metadata"
+
+
+def _status_source_names(api_host: str) -> Dict[str, str]:
+    """Resolve shared display names without changing source routing or ES aliases."""
+    names = {}
+    for node_type, settings in ANNOTATOR_CLIENTS.items():
+        name = node_type
+        configuration = settings.get("client")
+        if isinstance(configuration, dict):
+            if isinstance(configuration.get("configuration"), dict):
+                try:
+                    url = _biothings_metadata_url(configuration, api_host)
+                    service, _, suffix = httpx.URL(url).host.rpartition(".")
+                    if suffix == "info" and service and "." not in service:
+                        name = service
+                except (AttributeError, KeyError, TypeError, ValueError, RuntimeError, httpx.InvalidURL):
+                    pass
+            else:
+                endpoint = configuration.get("endpoint")
+                if isinstance(endpoint, str) and endpoint.strip().strip("/"):
+                    name = endpoint.strip().strip("/")
+        names[node_type] = name
+
+    # Resolve conflicts globally so the same source has the same display name
+    # under either backend, including sources supported by only one backend.
+    counts = Counter(names.values())
+    return {
+        node_type: name if counts[name] == 1 and name not in ANNOTATOR_CLIENTS else node_type
+        for node_type, name in names.items()
+    }
 
 
 def _error(code: str, http_status: Optional[int] = None) -> Dict:
@@ -149,6 +180,7 @@ async def collect_backend_metadata(api_host: str, elasticsearch_connection: str)
     }
     biothings_types = node_types["biothings"]
     elasticsearch_types = node_types["elasticsearch"]
+    source_names = _status_source_names(api_host)
     async with httpx.AsyncClient(timeout=SOURCE_METADATA_TIMEOUT, follow_redirects=True) as client:
         results = await asyncio.gather(
             *(_biothings_dataset(client, ANNOTATOR_CLIENTS[node_type], api_host) for node_type in biothings_types),
@@ -158,9 +190,15 @@ async def collect_backend_metadata(api_host: str, elasticsearch_connection: str)
             ),
         )
     return {
-        "biothings": {"sources": dict(zip(biothings_types, results[: len(biothings_types)]))},
+        "biothings": {
+            "sources": dict(
+                zip((source_names[node_type] for node_type in biothings_types), results[: len(biothings_types)])
+            )
+        },
         "elasticsearch": {
             "connection": elasticsearch_connection,
-            "sources": dict(zip(elasticsearch_types, results[len(biothings_types) :])),
+            "sources": dict(
+                zip((source_names[node_type] for node_type in elasticsearch_types), results[len(biothings_types) :])
+            ),
         },
     }

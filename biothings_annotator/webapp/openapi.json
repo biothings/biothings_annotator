@@ -94,8 +94,11 @@
                     "biothings-api": {
                       "checked_at": "2026-10-20T18:00:00+00:00",
                       "sources": {
-                        "gene": {
+                        "mygene": {
                           "build_version": "20261018"
+                        },
+                        "hpo": {
+                          "build_version": "20250120"
                         }
                       }
                     },
@@ -103,11 +106,19 @@
                       "connection": "ci_cluster",
                       "checked_at": "2026-10-20T18:00:00+00:00",
                       "sources": {
-                        "gene": {
+                        "mygene": {
                           "index": "gene",
                           "indices": {
                             "mygene_20261011": {
                               "build_version": "20261011"
+                            }
+                          }
+                        },
+                        "hpo": {
+                          "index": "hpo",
+                          "indices": {
+                            "hpo_20250120": {
+                              "build_version": "20250120"
                             }
                           }
                         },
@@ -2303,7 +2314,7 @@
           },
           "sources": {
             "type": "object",
-            "description": "Entries keyed by ANNOTATOR_CLIENTS source name for BioThings-supported sources: gene, chem, disease, phenotype, ncit, and extra. PubMed is Elasticsearch-only and is omitted here. Supported sources remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
+            "description": "Status display names are shared with Elasticsearch and derived from client configuration: typed SDK clients use their <service>.info hostname, yielding mygene, mychem, and mydisease; endpoint-based clients yield hpo, ncit, and annotator_extra. Custom URLs outside this convention, unresolved configurations, and conflicting names fall back to the configured source key. Names remain stable through metadata request failures. Internal source keys and query routing are unchanged. PubMed is Elasticsearch-only and is omitted here. The example abbreviates this set and uses illustrative versions.",
             "additionalProperties": {
               "$ref": "#/components/schemas/StatusBioThingsDataset"
             }
@@ -2357,7 +2368,7 @@
           },
           "sources": {
             "type": "object",
-            "description": "Entries keyed by ANNOTATOR_CLIENTS source name for Elasticsearch-supported sources: gene, chem, disease, phenotype, pubmed, ncit, and extra. PubMed is available only through this backend. Supported sources remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
+            "description": "Uses the same status display names as BioThings: mygene, mychem, mydisease, hpo, ncit, and annotator_extra, derived from client configuration. Sources without an API client retain their configured key, including the Elasticsearch-only pubmed source. Custom URLs outside the <service>.info convention, unresolved configurations, and conflicting names fall back to the configured source key. These are status labels only; index preserves the configured Elasticsearch alias or index, and indices preserves concrete index names. Internal source keys and query routing are unchanged. Supported sources remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
             "additionalProperties": {
               "$ref": "#/components/schemas/StatusElasticsearchDataset"
             }

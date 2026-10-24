@@ -22,13 +22,15 @@ def backend_metadata(monkeypatch):
         return_value={
             "biothings-api": {
                 "checked_at": "2026-10-20T00:00:00+00:00",
-                "sources": {"gene": {"build_version": "20260922"}},
+                "sources": {"mygene": {"build_version": "20260922"}},
             },
             "elasticsearch": {
                 "checked_at": "2026-10-20T00:00:00+00:00",
                 "connection": "local",
                 "sources": {
-                    "extra": {"index": "annotator-annotations", "error": {"code": "http_error", "http_status": 404}}
+                    "annotator_extra": {
+                        "index": "annotator-annotations", "error": {"code": "http_error", "http_status": 404}
+                    }
                 },
             },
         }
