@@ -347,17 +347,32 @@ Elasticsearch `annotator-annotations` alias, which remains visible in its `alias
 
 `build_version` identifies each source's build. Unknown versions are `null`; an index name is
 never used to infer a version. Metadata failures use a static
-`error.code`, optionally with `http_status`, at the affected source. An unexpected collection
-failure produces a backend-level `error` with code `metadata_unavailable` in place of `sources`.
-These metadata errors are informational and do not change the health check's HTTP status.
+`error.code`, optionally with `http_status`, at the affected source. These metadata errors are
+informational and do not change the health check's HTTP status.
 
-Metadata snapshots are cached for 60 seconds per worker; `checked_at` is their UTC refresh time.
-Concurrent status requests share a refresh, and upstream metadata requests run concurrently with
-a five-second deadline each. The annotation health check remains live on every request.
-Failed health checks retain `{"success": false, "error": "..."}`: HTTP 500 when the expected
-annotation is missing, or HTTP 400 when the check raises an exception. `HEAD /status` performs
-the same health check without fetching source metadata or returning a body. All GET and HEAD
-status responses, including failures, send `Cache-Control: no-store`.
+Each worker warms its source metadata at startup and refreshes it every **10 minutes** in
+the background, independently of incoming requests. GET reads the current snapshot without
+waiting for a background refresh. `checked_at` is the UTC collection time represented by that
+snapshot. Upstream calls run concurrently with five-second deadlines; each complete collection
+has a 10-second deadline. Concurrent callers share a collection if no snapshot exists yet.
+
+Source-specific failures remain visible alongside healthy sources. Timeouts, connection errors,
+HTTP 429, and HTTP 5xx responses cause another collection after **30 seconds**. Expected missing
+optional sources, configuration errors, and other source errors use the normal 10-minute interval.
+An unexpected collection failure retains the previous snapshot and its `checked_at`, adds a
+backend-level `refresh_error` with code `metadata_unavailable`, and retries after 30 seconds.
+If no snapshot exists, it reports a backend-level `error` with that code instead of `sources`.
+The next completed collection clears `refresh_error`. Worker shutdown cancels pending collections
+and the background timer. Metadata refresh does not change annotation routing.
+
+GET and HEAD share a separate annotation health cache, scoped to the worker and backend
+configuration. Successful checks are cached for **5 seconds**, failures for **1 second**, and
+each check has a 3-second total deadline. Concurrent probes share one check; a disconnected
+caller cannot cancel it for the others. An expired healthy result is never served after a
+failed check. Failures retain `{"success": false, "error": "..."}`: HTTP 500 when the expected
+annotation is missing, or HTTP 400 when the check raises an exception or times out.
+`HEAD /status` uses the same health result without reading source metadata or returning a body.
+All GET and HEAD status responses, including failures, send `Cache-Control: no-store`.
 
 Set `ANNOTATOR_DEPLOYMENT_ENV` to the deployment environment, for example `ci`, `test`, or
 `prod`. It takes precedence over `application.configuration.DEPLOYMENT_ENVIRONMENT` in the

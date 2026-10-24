@@ -12,10 +12,12 @@ input and output storage
 
 import logging
 import os
+from unittest.mock import AsyncMock
 
 import pytest
 
 from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST
+from biothings_annotator.application import status_metadata
 
 pytest_plugins = [
     "fixtures.application",
@@ -23,6 +25,18 @@ pytest_plugins = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(autouse=True)
+def offline_status_metadata(request, monkeypatch):
+    # Every worker now warms status metadata at startup, including when a unit
+    # test exercises an unrelated endpoint. Tests can override this collector.
+    if request.node.get_closest_marker("unit") is not None:
+        monkeypatch.setattr(
+            status_metadata,
+            "collect_backend_metadata",
+            AsyncMock(return_value={"biothings": {"sources": {}}, "elasticsearch": {"sources": {}}}),
+        )
 
 
 # ENVIRONMENT CONFIGURATION

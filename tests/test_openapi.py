@@ -81,6 +81,9 @@ def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versio
         # Collection failure may replace sources with an informational error.
         assert {"required": ["error"]} in backend["oneOf"]
         assert backend["properties"]["error"] == {"$ref": "#/components/schemas/StatusMetadataError"}
+        assert backend["properties"]["refresh_error"]["allOf"] == [
+            {"$ref": "#/components/schemas/StatusMetadataError"}
+        ]
 
     assert {"required": ["connection", "sources"]} in schemas["StatusElasticsearchBackend"]["oneOf"]
     connection = schemas["StatusElasticsearchBackend"]["properties"]["connection"]

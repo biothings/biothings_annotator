@@ -8,6 +8,7 @@ from sanic import Sanic
 from biothings_annotator.application.exceptions import build_exception_handers
 from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.static import build_static_routes, build_static_content
+from biothings_annotator.application.status_metadata import start_status_tasks, stop_status_tasks
 from biothings_annotator.application.telemetry import configure_telemetry
 from biothings_annotator.application.views import build_routes
 from biothings_annotator.application.version import get_local_git_version
@@ -78,6 +79,8 @@ def build_application(configuration: Dict = None) -> Sanic:
         # Keep the version tied to this startup if HEAD changes while the server runs.
         application.ctx.local_git_version = get_local_git_version()
     configure_telemetry(application, configuration["application"].get("telemetry", {}))
+    application.register_listener(start_status_tasks, "before_server_start")
+    application.register_listener(stop_status_tasks, "after_server_stop")
 
     application_routes = build_routes()
     static_routes = build_static_routes()

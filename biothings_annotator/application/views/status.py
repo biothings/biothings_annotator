@@ -6,6 +6,7 @@ from sanic.views import HTTPMethodView
 from sanic.request import Request
 
 from biothings_annotator.annotator import Annotator
+from biothings_annotator.application.status_health import get_status_health
 from biothings_annotator.application.status_metadata import get_backend_metadata
 from biothings_annotator.application.structure import DOCKER_WEB_APP_DIRECTORY, WEB_APP_DIRECTORY
 
@@ -24,38 +25,22 @@ class StatusView(HTTPMethodView):
         self.default_headers = {"Cache-Control": "no-store"}
 
     async def head(self, request: Request):
-        curie = "NCBIGene:1017"
-        fields = "_id"
-
-        annotator = Annotator()
-        try:
-            annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=True, include_extra=False)
-
-            if "NCBIGene:1017" not in annotated_node:
-                return sanic.json(None, headers=self.default_headers, status=500)
-
-            return sanic.json(None, headers=self.default_headers, status=200)
-        except Exception:
-            return sanic.json(None, headers=self.default_headers, status=400)
+        status, _error = await get_status_health(request.app, Annotator())
+        return sanic.json(None, headers=self.default_headers, status=status)
 
     async def get(self, request: Request):
         """
-        Report service status and release metadata after a live annotation check.
+        Report cached health and independently refreshed source metadata.
 
         Uses a singular CURIE (NCBIGene:1017) for annotation to verify
         that we can still access the underlying biothings infrastructure
         to provide the annotation.
         """
-        curie = "NCBIGene:1017"
-        fields = "_id"
-
         annotator = Annotator()
         try:
-            annotated_node = await annotator.annotate_curie(curie, fields=fields, raw=True, include_extra=False)
-
-            if "NCBIGene:1017" not in annotated_node:
-                result = {"success": False, "error": "Service unavailable due to a failed data check!"}
-                return sanic.json(result, headers=self.default_headers, status=500)
+            status, error = await get_status_health(request.app, annotator)
+            if status != 200:
+                return sanic.json({"success": False, "error": error}, headers=self.default_headers, status=status)
 
             result = {
                 "status": "running",

@@ -129,20 +129,18 @@ async def test_metadata_refresh_is_shared_and_survives_caller_cancellation(monke
 
 
 @pytest.mark.asyncio
-async def test_metadata_cache_expires_and_replaces_failed_metadata(monkeypatch):
+async def test_metadata_requests_reuse_snapshot_until_background_refresh(monkeypatch):
     failed = {"biothings": {"sources": {"mygene": {"error": {"code": "timeout"}}}}}
     recovered = {"biothings": {"sources": {"mygene": {"build_version": "new"}}}}
     collector = AsyncMock(side_effect=[failed, recovered])
     monkeypatch.setattr(status_metadata, "collect_backend_metadata", collector)
-    monkeypatch.setattr(status_metadata, "monotonic", lambda: 0)
     cache = status_metadata.BackendMetadataCache("https://example.test", "local")
 
     assert (await cache.get())["biothings-api"]["sources"] == failed["biothings"]["sources"]
-    monkeypatch.setattr(status_metadata, "monotonic", lambda: status_metadata.METADATA_CACHE_TTL - 1)
     assert (await cache.get())["biothings-api"]["sources"] == failed["biothings"]["sources"]
     assert collector.await_count == 1
 
-    monkeypatch.setattr(status_metadata, "monotonic", lambda: status_metadata.METADATA_CACHE_TTL)
+    await cache.refresh()
     assert (await cache.get())["biothings-api"]["sources"] == recovered["biothings"]["sources"]
     assert collector.await_count == 2
 
@@ -270,7 +268,7 @@ async def test_metadata_failure_does_not_fail_live_status(application_configurat
 
 
 @pytest.mark.asyncio
-async def test_cached_metadata_does_not_cache_the_health_probe(application_configuration, monkeypatch):
+async def test_status_health_is_checked_again_after_worker_restart(application_configuration, monkeypatch):
     application = build_application(application_configuration)
     collector = AsyncMock(return_value={"biothings": {"sources": {}}, "elasticsearch": {"sources": {}}})
     monkeypatch.setattr(status_metadata, "collect_backend_metadata", collector)

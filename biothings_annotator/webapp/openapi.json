@@ -21,13 +21,13 @@
       "get": {
         "operationId": "get~status_endpoint",
         "summary": "Checks the health status of the annotator service",
-        "description": "Checks that the deployment default query backend can annotate NCBIGene:1017 and returns service information plus source build versions for both backends. query_backend identifies the default; request query parameters do not override it. The API version comes from this specification; /version separately reports the build Git commit. Source metadata is informational: missing sources and metadata failures do not affect HTTP health. Metadata snapshots are cached for 60 seconds per worker, concurrent requests share a refresh, and concurrent upstream metadata requests each have a five-second deadline. The annotation health check runs on every request.",
+        "description": "Checks that the deployment default query backend can annotate NCBIGene:1017 and returns service information plus source build versions for both backends. query_backend identifies the default; request query parameters do not override it. The API version comes from this specification; /version separately reports the build Git commit. Source metadata is informational and does not affect HTTP health or annotation routing. Each worker warms metadata at startup and refreshes it every 600 seconds in the background, independently of incoming requests. GET reads the current snapshot while a refresh runs; concurrent callers share collection when no snapshot exists. Upstream metadata calls run concurrently with five-second deadlines and collection has a 10-second total deadline. Source-local errors remain visible; timeouts, connection errors, HTTP 429 and HTTP 5xx cause a retry after 30 seconds. Other source errors use the normal interval. Unexpected collection failure retains the previous snapshot and checked_at, exposes backend refresh_error with code metadata_unavailable, and retries after 30 seconds; without an existing snapshot it exposes backend error instead of sources. GET and HEAD share an annotation health cache per worker and backend configuration: 5 seconds for success, 1 second for failure, and a 3-second total deadline. Concurrent health probes share one check. Expired success is not served after failure. All status responses send Cache-Control: no-store.",
         "tags": [
           "health"
         ],
         "responses": {
           "200": {
-            "description": "Successful live annotation check, including any informational source metadata errors",
+            "description": "Successful annotation health check, cached for up to five seconds, including any informational source metadata errors",
             "content": {
               "application/json": {
                 "schema": {
@@ -231,13 +231,13 @@
       "head": {
         "operationId": "head~status_endpoint",
         "summary": "Checks service health without collecting source metadata",
-        "description": "Runs the same live annotation health check as GET, without fetching source metadata or returning a response body.",
+        "description": "Shares GET's annotation health cache without reading source metadata or returning a response body. Success is cached for five seconds and failure for one second per worker and backend configuration, concurrent probes share one check, and each check has a three-second deadline. Worker startup independently warms source metadata and starts its background refresh.",
         "tags": [
           "health"
         ],
         "responses": {
           "200": {
-            "description": "Successful live annotation check",
+            "description": "Successful annotation health check, cached for up to five seconds",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/StatusCacheControl"
@@ -2174,7 +2174,7 @@
   "components": {
     "headers": {
       "StatusCacheControl": {
-        "description": "All status responses, including health-check failures, must not be cached. Internal source metadata snapshots have a separate 60-second cache.",
+        "description": "HTTP responses, including health-check failures, must not be cached. Internal source snapshots refresh every 600 seconds in the background; annotation health uses a separate five-second success and one-second failure cache.",
         "schema": {
           "type": "string",
           "enum": [
@@ -2380,7 +2380,7 @@
           "checked_at": {
             "type": "string",
             "format": "date-time",
-            "description": "UTC time this metadata snapshot was refreshed; snapshots are cached for 60 seconds per worker.",
+            "description": "UTC time of the metadata collection represented by this snapshot. Workers refresh every 600 seconds in the background; a later unexpected collection failure retains this timestamp and exposes refresh_error.",
             "example": "2026-10-20T18:00:00+00:00"
           },
           "sources": {
@@ -2392,6 +2392,10 @@
           },
           "error": {
             "$ref": "#/components/schemas/StatusMetadataError"
+          },
+          "refresh_error": {
+            "allOf": [{"$ref": "#/components/schemas/StatusMetadataError"}],
+            "description": "A later collection failed unexpectedly. The previous snapshot and checked_at remain available, and collection retries after 30 seconds. Cleared by a completed collection."
           }
         },
         "oneOf": [
@@ -2406,7 +2410,7 @@
             ]
           }
         ],
-        "description": "BioThings source metadata. An unexpected collection failure replaces sources with a metadata_unavailable error."
+        "description": "BioThings source metadata refreshed in the background. Unexpected collection failure retains a previous snapshot with refresh_error; without a snapshot it reports a metadata_unavailable error in place of sources. Source-specific failures remain local."
       },
       "StatusElasticsearchBackend": {
         "type": "object",
@@ -2417,7 +2421,7 @@
           "checked_at": {
             "type": "string",
             "format": "date-time",
-            "description": "UTC time this metadata snapshot was refreshed; snapshots are cached for 60 seconds per worker.",
+            "description": "UTC time of the metadata collection represented by this snapshot. Workers refresh every 600 seconds in the background; a later unexpected collection failure retains this timestamp and exposes refresh_error.",
             "example": "2026-10-20T18:00:00+00:00"
           },
           "connection": {
@@ -2446,6 +2450,10 @@
           },
           "error": {
             "$ref": "#/components/schemas/StatusMetadataError"
+          },
+          "refresh_error": {
+            "allOf": [{"$ref": "#/components/schemas/StatusMetadataError"}],
+            "description": "A later collection failed unexpectedly. The previous snapshot and checked_at remain available, and collection retries after 30 seconds. Cleared by a completed collection."
           }
         },
         "oneOf": [
@@ -2461,7 +2469,7 @@
             ]
           }
         ],
-        "description": "Elasticsearch source metadata. An unexpected collection failure replaces connection and sources with a metadata_unavailable error."
+        "description": "Elasticsearch source metadata refreshed in the background. Unexpected collection failure retains a previous snapshot with refresh_error; without a snapshot it reports a metadata_unavailable error in place of connection and sources. Source-specific failures remain local."
       },
       "PublicationId": {
         "type": "string",
