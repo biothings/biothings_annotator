@@ -151,6 +151,10 @@ def test_query_backend_override_is_documented_for_all_query_operations():
     assert "Unsupported values are ignored and use the deployment default" in query_backend_parameter[
         "description"
     ]
+    assert "case-insensitively with surrounding whitespace trimmed" in query_backend_parameter["description"]
+    assert {example["value"] for example in query_backend_parameter["examples"].values()} == {
+        "biothings", "biothings-api", "elasticsearch", "es"
+    }
 
     for path, method in QUERY_OPERATIONS:
         operation = specification["paths"][path][method]

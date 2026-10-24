@@ -311,7 +311,9 @@ to override the configured route exclusions. The Helm deployment enables
 tracing and targets `http://jaeger-otel-collector.sri:4318` by default.
 
 The annotator query backend is controlled with `ANNOTATOR_QUERY_BACKEND`. Supported values are
-`biothings` and `elasticsearch`; when unset, the service uses `biothings`.
+`biothings`, `biothings-api`, `elasticsearch`, and `es`. Values are case-insensitive and surrounding
+whitespace is trimmed. `biothings-api` resolves to `biothings`, and `es` resolves to
+`elasticsearch`; when unset, the service uses `biothings`.
 The checked-in Helm defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch` and
 `ELASTICSEARCH_CONNECTION=in_cluster`; set `ANNOTATOR_QUERY_BACKEND` to `biothings` during deployment
 to switch back.
@@ -329,8 +331,9 @@ see [Direct Python usage](#direct-python-usage).
 
 The `GET /curie/{curie}`, `POST /curie`, and `POST /trapi` endpoints accept an optional
 `query_backend` query parameter. Omit it to use the backend selected for the deployment by
-`ANNOTATOR_QUERY_BACKEND`. Use the canonical values `biothings` or `elasticsearch` to override the
-backend for only that request; `es` is accepted as an alias for `elasticsearch`.
+`ANNOTATOR_QUERY_BACKEND`. Accepted values are `biothings`, `biothings-api`, `elasticsearch`, and
+`es`, case-insensitively with surrounding whitespace trimmed. `biothings-api` is an alias for
+`biothings`, and `es` is an alias for `elasticsearch`; either changes the backend for only that request.
 Unsupported values are ignored and the request uses the deployment default.
 Successful query responses include the canonical backend in the `X-Query-Backend` response header.
 PubMed supports only Elasticsearch. A single PubMed CURIE requested through BioThings returns

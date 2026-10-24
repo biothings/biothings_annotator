@@ -666,8 +666,19 @@ async def test_query_backend_omission_uses_deployment_default(test_annotator: sa
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
-@pytest.mark.parametrize("query_backend", ["elasticsearch", "es"])
-async def test_elasticsearch_query_backend_returns_canonical_header(test_annotator: sanic.Sanic, query_backend: str):
+@pytest.mark.parametrize(
+    "query_backend,canonical_backend",
+    [
+        ("elasticsearch", "elasticsearch"),
+        ("es", "elasticsearch"),
+        ("biothings", "biothings"),
+        ("biothings-api", "biothings"),
+    ],
+)
+async def test_query_backend_returns_canonical_header(
+    test_annotator: sanic.Sanic, monkeypatch, query_backend, canonical_backend
+):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "elasticsearch" if canonical_backend == "biothings" else "biothings")
     mock_annotation = AsyncMock(return_value={"result": "ok"})
 
     with patch.object(Annotator, "annotate_curie", mock_annotation), patch(
@@ -680,7 +691,7 @@ async def test_elasticsearch_query_backend_returns_canonical_header(test_annotat
     mock_annotator_class.assert_called_once_with(query_backend=query_backend)
     mock_annotation.assert_awaited_once()
     assert response.status_code == 200
-    assert response.headers["X-Query-Backend"] == "elasticsearch"
+    assert response.headers["X-Query-Backend"] == canonical_backend
     assert SKIPPED_CURIE_PREFIXES_HEADER not in response.headers
 
 

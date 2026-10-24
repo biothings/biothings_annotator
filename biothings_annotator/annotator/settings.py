@@ -7,7 +7,7 @@ SERVICE_PROVIDER_API_HOST = "https://biothings.transltr.io"
 QUERY_BACKEND = "biothings"
 QUERY_BACKEND_ENV = "ANNOTATOR_QUERY_BACKEND"
 SUPPORTED_QUERY_BACKENDS = ("biothings", "elasticsearch")
-QUERY_BACKEND_ALIASES = {"es": "elasticsearch"}
+QUERY_BACKEND_ALIASES = {"es": "elasticsearch", "biothings-api": "biothings"}
 
 BIOTHINGS_SOURCE_LIST_PATH = "api/list"
 BIOTHINGS_SOURCE_DISCOVERY_TIMEOUT = 5

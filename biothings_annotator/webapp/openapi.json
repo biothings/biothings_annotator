@@ -2549,7 +2549,7 @@
         "in": "query",
         "required": false,
         "allowEmptyValue": true,
-        "description": "Backend to use for this request. Omit the parameter to use the deployment default. The canonical values are `biothings` and `elasticsearch`; `es` is accepted as an alias for `elasticsearch`. Unsupported values are ignored and use the deployment default.",
+        "description": "Backend to use for this request. Omit the parameter to use the deployment default. Accepted values are `biothings`, `biothings-api`, `elasticsearch`, and `es`, case-insensitively with surrounding whitespace trimmed. The canonical values are `biothings` and `elasticsearch`; `biothings-api` is an alias for `biothings`, and `es` is an alias for `elasticsearch`. Unsupported values are ignored and use the deployment default.",
         "schema": {
           "type": "string"
         },
@@ -2557,6 +2557,10 @@
           "biothings": {
             "summary": "Use the BioThings client for this request",
             "value": "biothings"
+          },
+          "biothingsAlias": {
+            "summary": "Use the BioThings API alias",
+            "value": "biothings-api"
           },
           "elasticsearch": {
             "summary": "Use Elasticsearch for this request",

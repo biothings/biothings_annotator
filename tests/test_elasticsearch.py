@@ -60,6 +60,8 @@ def test_annotator_uses_query_backend_environment(monkeypatch):
     [
         ("biothings", "biothings"),
         (" BioThings ", "biothings"),
+        ("biothings-api", "biothings"),
+        (" BioThings-API ", "biothings"),
         ("elasticsearch", "elasticsearch"),
         (" Elasticsearch ", "elasticsearch"),
         ("es", "elasticsearch"),
@@ -74,12 +76,21 @@ def test_annotator_normalizes_explicit_query_backend(monkeypatch, requested_back
     assert annotator.query_backend == expected_backend
 
 
-def test_none_query_backend_uses_normalized_environment_alias(monkeypatch):
-    monkeypatch.setenv(QUERY_BACKEND_ENV, " ES ")
+@pytest.mark.parametrize(
+    "configured_backend, expected_backend",
+    [
+        ("es", "elasticsearch"),
+        (" ES ", "elasticsearch"),
+        ("biothings-api", "biothings"),
+        (" BioThings-API ", "biothings"),
+    ],
+)
+def test_none_query_backend_uses_normalized_environment_alias(monkeypatch, configured_backend, expected_backend):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, configured_backend)
 
     annotator = Annotator(query_backend=None)
 
-    assert annotator.query_backend == "elasticsearch"
+    assert annotator.query_backend == expected_backend
 
 
 @pytest.mark.parametrize("requested_backend", ["", "   ", "solr", 42])
