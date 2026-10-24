@@ -5,11 +5,30 @@ import logging
 from datetime import datetime, timezone
 from time import monotonic
 
+from biothings_annotator.annotator.settings import ELASTICSEARCH_CONNECTIONS
 from biothings_annotator.annotator.source_metadata import collect_backend_metadata
 
 
 logger = logging.getLogger(__name__)
 METADATA_CACHE_TTL = 60
+
+
+def get_elasticsearch_connection_label(connection_name: str, deployment_environment: str) -> str:
+    """Describe the configured cluster target without claiming verified identity."""
+    if connection_name == "in_cluster":
+        environment = deployment_environment
+        suffix = "cluster"
+    else:
+        connection = ELASTICSEARCH_CONNECTIONS.get(connection_name, {})
+        if "forwarded_environment" not in connection:
+            return "local" if connection_name == "local" else "unknown"
+        environment = connection["forwarded_environment"]
+        suffix = "cluster_forwarded"
+
+    environment = environment.strip().lower() if isinstance(environment, str) else "unknown"
+    if environment not in {"ci", "test", "prod"}:
+        environment = "unknown"
+    return f"{environment}_{suffix}"
 
 
 class BackendMetadataCache:
@@ -52,4 +71,18 @@ async def get_backend_metadata(application, annotator):
     if cache is None or cache.configuration != configuration:
         cache = BackendMetadataCache(*configuration)
         application.ctx.backend_metadata_cache = cache
-    return await cache.get()
+    backends = await cache.get()
+    elasticsearch = backends.get("elasticsearch", {})
+    if "connection" not in elasticsearch:
+        return backends
+    # Format after reading the cache so deployment labels never mutate the
+    # collected metadata or borrow an environment from another application.
+    return {
+        **backends,
+        "elasticsearch": {
+            **elasticsearch,
+            "connection": get_elasticsearch_connection_label(
+                annotator.elasticsearch_connection, application.config.DEPLOYMENT_ENVIRONMENT
+            ),
+        },
+    }

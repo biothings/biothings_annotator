@@ -227,7 +227,7 @@ backend lists all sources it supports:
       }
     },
     "elasticsearch": {
-      "connection": "in_cluster",
+      "connection": "ci_cluster",
       "checked_at": "2026-10-20T18:00:00+00:00",
       "sources": {
         "gene": {
@@ -263,8 +263,26 @@ Source keys follow `ANNOTATOR_CLIENTS` and its backend support: `gene`, `chem`,
 under Elasticsearch. Missing optional sources supported by that backend remain visible with an
 `error` instead of disappearing. BioThings versions come from each API's `/metadata`;
 Elasticsearch versions come from index mapping `_meta`, with the configured alias or index in
-`index` and each resolved concrete index under `indices`. `connection` is the selected preset
-label. Connection URLs, credentials, and raw upstream errors are not included.
+`index` and each resolved concrete index under `indices`. `connection` describes the configured
+Elasticsearch target:
+
+| `ELASTICSEARCH_CONNECTION` | Status `connection` |
+| --- | --- |
+| `ci_forward` | `ci_cluster_forwarded` |
+| `test_forward` | `test_cluster_forwarded` |
+| `prod_forward` | `prod_cluster_forwarded` |
+| `in_cluster` | `<deployment_environment>_cluster` for `ci`, `test`, or `prod`; otherwise `unknown_cluster` |
+| `local` | `local` |
+
+Forwarded environments come from the selected preset's `forwarded_environment` metadata,
+independently of annotator's deployment environment. A loopback address alone cannot identify
+which cluster is forwarded. The preset records the intended target; it does not verify the
+tunnel's destination or establish a tunnel. Verifying the actual destination would require a
+trusted mapping from Elasticsearch cluster UUIDs to environments, or metadata supplied by the
+tunnel launcher. A forwarded preset with an unrecognized environment reports
+`unknown_cluster_forwarded`; an unrecognized preset reports `unknown`. Connection URLs,
+credentials, and raw upstream errors are not included in the status response.
+
 The `extra` source uses the BioThings `/annotator_extra` API and the Elasticsearch
 `annotator-annotations` alias; their names differ even though they serve the same enrichment data.
 
@@ -324,9 +342,12 @@ Set `ELASTICSEARCH_CONNECTION` to one of the named presets in
 `http://elasticsearch.es-core-components.svc.cluster.local:9200` and is used by both CI and test
 deployments. The `local` preset targets Elasticsearch on `localhost:9200`. The `ci_forward` and
 `test_forward` presets also connect to `localhost:9200`, for an already-established port-forward,
-and send the corresponding environment's ingress host header.
+and send the corresponding environment's ingress host header. `prod_forward` connects to
+`localhost:9200` without an ingress host override, for a direct forward to the production
+Elasticsearch service. Each forwarded preset records its target environment in
+`forwarded_environment`; the status endpoint uses that metadata to format `connection`.
 The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
-the selected `elasticsearch_connection`. For a live check of a directly constructed Python instance,
+the selected `elasticsearch_connection` preset name. For a live check of a directly constructed Python instance,
 see [Direct Python usage](#direct-python-usage).
 
 ##### Per-request query backend override

@@ -100,7 +100,7 @@
                       }
                     },
                     "elasticsearch": {
-                      "connection": "in_cluster",
+                      "connection": "ci_cluster",
                       "checked_at": "2026-10-20T18:00:00+00:00",
                       "sources": {
                         "gene": {
@@ -2340,7 +2340,20 @@
           },
           "connection": {
             "type": "string",
-            "description": "Selected connection preset label; connection URLs and credentials are not exposed."
+            "description": "Configured cluster target. Forwarded presets use their forwarded_environment metadata to report ci_cluster_forwarded, test_cluster_forwarded, or prod_cluster_forwarded, independently of deployment_environment. The in_cluster preset uses deployment_environment to report ci_cluster, test_cluster, or prod_cluster; an unrecognized environment reports unknown_cluster. The local preset reports local. A forwarded preset with an unknown environment reports unknown_cluster_forwarded; an unrecognized preset reports unknown. These labels describe configured targets, not verified tunnel destinations or successful connectivity. Connection URLs and credentials are not exposed.",
+            "enum": [
+              "ci_cluster_forwarded",
+              "test_cluster_forwarded",
+              "prod_cluster_forwarded",
+              "ci_cluster",
+              "test_cluster",
+              "prod_cluster",
+              "unknown_cluster",
+              "unknown_cluster_forwarded",
+              "local",
+              "unknown"
+            ],
+            "example": "ci_cluster"
           },
           "sources": {
             "type": "object",

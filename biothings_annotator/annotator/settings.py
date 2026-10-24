@@ -28,10 +28,17 @@ ELASTICSEARCH_CONNECTIONS = {
     "ci_forward": {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.ci.transltr.io"},
+        "forwarded_environment": "ci",
     },
     "test_forward": {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.test.transltr.io"},
+        "forwarded_environment": "test",
+    },
+    "prod_forward": {
+        "host": "http://localhost:9200",
+        "headers": {},
+        "forwarded_environment": "prod",
     },
 }
 ELASTICSEARCH_REQUEST_TIMEOUT = 30

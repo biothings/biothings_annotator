@@ -1097,7 +1097,7 @@ def test_elasticsearch_connection_config_supports_in_cluster():
         "host": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
         "headers": {},
     }
-    assert set(ELASTICSEARCH_CONNECTIONS) == {"local", "in_cluster", "ci_forward", "test_forward"}
+    assert set(ELASTICSEARCH_CONNECTIONS) == {"local", "in_cluster", "ci_forward", "test_forward", "prod_forward"}
     assert get_elasticsearch_connection("in_cluster") == expected_connection
 
 
@@ -1113,6 +1113,13 @@ def test_elasticsearch_connection_config_supports_local_forwarded_test_host():
     assert get_elasticsearch_connection("test_forward") == {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.test.transltr.io"},
+    }
+
+
+def test_elasticsearch_connection_config_supports_direct_forwarded_prod_service():
+    assert get_elasticsearch_connection("prod_forward") == {
+        "host": "http://localhost:9200",
+        "headers": {},
     }
 
 

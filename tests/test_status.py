@@ -170,6 +170,88 @@ async def test_metadata_cache_is_scoped_to_application_and_backend_configuration
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "connection,environment,expected",
+    [
+        ("ci_forward", "local", "ci_cluster_forwarded"),
+        ("test_forward", "local", "test_cluster_forwarded"),
+        ("prod_forward", "local", "prod_cluster_forwarded"),
+        ("ci_forward", "prod", "ci_cluster_forwarded"),
+        ("in_cluster", "ci", "ci_cluster"),
+        ("in_cluster", "test", "test_cluster"),
+        ("in_cluster", "prod", "prod_cluster"),
+        ("in_cluster", "unknown", "unknown_cluster"),
+        ("in_cluster", "local", "unknown_cluster"),
+        ("local", "prod", "local"),
+    ],
+)
+async def test_status_connection_describes_the_configured_cluster(
+    application_configuration, monkeypatch, connection, environment, expected
+):
+    application_configuration["application"]["configuration"]["DEPLOYMENT_ENVIRONMENT"] = environment
+    application = build_application(application_configuration)
+    monkeypatch.setenv("ELASTICSEARCH_CONNECTION", connection)
+    # An unavailable backend retains its target label without claiming connectivity.
+    collected = {
+        "biothings": {"sources": {}},
+        "elasticsearch": {
+            "connection": connection,
+            "sources": {"gene": {"error": {"code": "connection_error"}}},
+        },
+    }
+    collector = AsyncMock(return_value=collected)
+    monkeypatch.setattr(status_metadata, "collect_backend_metadata", collector)
+    with patch.object(Annotator, "annotate_curie", new=AsyncMock(return_value={"NCBIGene:1017": []})):
+        _, response = await application.asgi_client.get("/status", headers={"Host": "annotator.test.transltr.io"})
+
+    assert response.status_code == 200
+    assert response.json["deployment_environment"] == environment
+    elasticsearch = response.json["available_query_backends"]["elasticsearch"]
+    assert elasticsearch["connection"] == expected
+    assert elasticsearch["sources"]["gene"]["error"]["code"] == "connection_error"
+    assert collected["elasticsearch"]["connection"] == connection
+
+
+def test_connection_label_uses_forwarded_target_metadata_independently_of_preset_name(monkeypatch):
+    monkeypatch.setitem(
+        status_metadata.ELASTICSEARCH_CONNECTIONS,
+        "renamed_tunnel",
+        {"host": "http://localhost:9200", "headers": {}, "forwarded_environment": " Test "},
+    )
+
+    assert status_metadata.get_elasticsearch_connection_label("renamed_tunnel", "prod") == "test_cluster_forwarded"
+
+
+@pytest.mark.parametrize("environment", [None, "", "staging"])
+def test_forwarded_target_without_known_environment_does_not_guess(monkeypatch, environment):
+    monkeypatch.setitem(
+        status_metadata.ELASTICSEARCH_CONNECTIONS,
+        "unidentified_tunnel",
+        {"forwarded_environment": environment},
+    )
+
+    assert status_metadata.get_elasticsearch_connection_label("unidentified_tunnel", "ci") == "unknown_cluster_forwarded"
+    assert status_metadata.get_elasticsearch_connection_label("missing", "ci") == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_connection_label_does_not_mutate_or_refetch_cached_metadata(monkeypatch):
+    collector = AsyncMock(return_value={"elasticsearch": {"connection": "in_cluster", "sources": {}}})
+    monkeypatch.setattr(status_metadata, "collect_backend_metadata", collector)
+    application = SimpleNamespace(ctx=SimpleNamespace(), config=SimpleNamespace(DEPLOYMENT_ENVIRONMENT="ci"))
+    annotator = SimpleNamespace(api_host="https://example.test", elasticsearch_connection="in_cluster")
+
+    first = await status_metadata.get_backend_metadata(application, annotator)
+    application.config.DEPLOYMENT_ENVIRONMENT = "test"
+    second = await status_metadata.get_backend_metadata(application, annotator)
+
+    assert first["elasticsearch"]["connection"] == "ci_cluster"
+    assert second["elasticsearch"]["connection"] == "test_cluster"
+    assert (await application.ctx.backend_metadata_cache.get())["elasticsearch"]["connection"] == "in_cluster"
+    collector.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_metadata_failure_does_not_fail_live_status(application_configuration, monkeypatch):
     application = build_application(application_configuration)
     collector = AsyncMock(side_effect=RuntimeError("private connection details"))

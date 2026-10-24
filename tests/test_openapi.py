@@ -83,6 +83,12 @@ def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versio
         assert backend["properties"]["error"] == {"$ref": "#/components/schemas/StatusMetadataError"}
 
     assert {"required": ["connection", "sources"]} in schemas["StatusElasticsearchBackend"]["oneOf"]
+    connection = schemas["StatusElasticsearchBackend"]["properties"]["connection"]
+    assert set(connection["enum"]) == {
+        "ci_cluster_forwarded", "test_cluster_forwarded", "prod_cluster_forwarded",
+        "ci_cluster", "test_cluster", "prod_cluster", "unknown_cluster",
+        "unknown_cluster_forwarded", "local", "unknown",
+    }
     versions_reference = {"$ref": "#/components/schemas/StatusBuildVersion"}
     assert versions_reference in schemas["StatusBioThingsDataset"]["oneOf"]
     elasticsearch_dataset = schemas["StatusElasticsearchDataset"]
@@ -104,6 +110,7 @@ def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versio
     assert backend_name in example["available_query_backends"]
     biothings_gene = example["available_query_backends"]["biothings-api"]["sources"]["gene"]
     elasticsearch_gene = example["available_query_backends"]["elasticsearch"]["sources"]["gene"]
+    assert example["available_query_backends"]["elasticsearch"]["connection"] == "ci_cluster"
     assert biothings_gene["build_version"] != next(iter(elasticsearch_gene["indices"].values()))["build_version"]
     assert example["status"] == "running"
     assert "pubmed" not in example["available_query_backends"]["biothings-api"]["sources"]
