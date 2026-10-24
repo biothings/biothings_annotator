@@ -2,19 +2,18 @@
 Exercises the query methods within the biothings_annotator package
 """
 
-import asyncio
 import json
 import logging
 import random
 from typing import Dict, List
+from unittest.mock import Mock
 
 import biothings_client
-import httpx
 import pytest
 
 from biothings_annotator import ANNOTATOR_CLIENTS, BIOLINK_PREFIX_to_BioThings, utils
-from biothings_annotator.annotator.exceptions import SourceDiscoveryError
-from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST
+from biothings_annotator.annotator.exceptions import UnsupportedSourceBackendError
+from biothings_annotator.annotator.settings import SERVICE_PROVIDER_API_HOST, SUPPORTED_QUERY_BACKENDS
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -74,7 +73,6 @@ def test_endpoint_annotation_client_uses_configured_url(monkeypatch):
     assert client is fake_client
     assert calls == [
         {
-            "biothing_type": None,
             "instance": True,
             "url": f"{SERVICE_PROVIDER_API_HOST}/hpo",
         }
@@ -113,11 +111,18 @@ def test_endpoint_annotation_client_returns_none_on_metadata_failure(monkeypatch
 
 
 @pytest.mark.unit
-def test_source_named_endpoint_client_avoids_metadata_probe_and_normalizes_host(monkeypatch):
-    client_parameters = ANNOTATOR_CLIENTS["pubmed"]["client"]
-    original_instance = client_parameters.get("instance")
-    original_cache_key = client_parameters.get("instance_cache_key")
-    had_cache_key = "instance_cache_key" in client_parameters
+def test_endpoint_annotation_client_normalizes_host(monkeypatch):
+    monkeypatch.setitem(
+        ANNOTATOR_CLIENTS,
+        "example_source",
+        {
+            "client": {
+                "configuration": None,
+                "endpoint": "example-source",
+                "instance": None,
+            }
+        },
+    )
     fake_client = object()
     calls = []
 
@@ -125,231 +130,34 @@ def test_source_named_endpoint_client_avoids_metadata_probe_and_normalizes_host(
         calls.append(kwargs)
         return fake_client
 
-    try:
-        client_parameters["instance"] = None
-        client_parameters.pop("instance_cache_key", None)
-        monkeypatch.setattr(biothings_client, "get_async_client", fake_get_async_client)
-
-        client = utils.get_client("pubmed", f"{SERVICE_PROVIDER_API_HOST}/")
-    finally:
-        client_parameters["instance"] = original_instance
-        if had_cache_key:
-            client_parameters["instance_cache_key"] = original_cache_key
-        else:
-            client_parameters.pop("instance_cache_key", None)
+    monkeypatch.setattr(biothings_client, "get_async_client", fake_get_async_client)
+    client = utils.get_client("example_source", f"{SERVICE_PROVIDER_API_HOST}/")
 
     assert client is fake_client
     assert calls == [
         {
-            "biothing_type": "pubmed",
             "instance": True,
-            "url": f"{SERVICE_PROVIDER_API_HOST}/pubmed",
+            "url": f"{SERVICE_PROVIDER_API_HOST}/example-source",
         }
     ]
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
-async def test_fetch_biothings_sources_validates_authoritative_source_list():
-    async def handler(request: httpx.Request) -> httpx.Response:
-        assert str(request.url) == f"{SERVICE_PROVIDER_API_HOST}/api/list"
-        assert request.headers["Cache-Control"] == "no-cache"
-        return httpx.Response(200, json=["gene", "pubmed"], request=request)
+@pytest.mark.parametrize("client_entrypoint", ["direct", "dispatcher"])
+def test_pubmed_biothings_clients_are_rejected_before_sdk_construction(monkeypatch, client_entrypoint):
+    sdk_factory = Mock(side_effect=AssertionError("PubMed BioThings clients must not be constructed"))
+    monkeypatch.setattr(biothings_client, "get_async_client", sdk_factory)
 
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        sources = await utils.fetch_biothings_sources(
-            SERVICE_PROVIDER_API_HOST,
-            http_client=http_client,
-        )
+    with pytest.raises(UnsupportedSourceBackendError) as exc_info:
+        if client_entrypoint == "direct":
+            utils.get_client("pubmed", SERVICE_PROVIDER_API_HOST)
+        else:
+            utils.get_query_client("pubmed", "biothings", SERVICE_PROVIDER_API_HOST)
 
-    assert sources == frozenset({"gene", "pubmed"})
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "status_code,payload",
-    [
-        (503, {"error": "unavailable"}),
-        (200, {"pubmed": True}),
-        (200, ["pubmed", 42]),
-    ],
-)
-async def test_fetch_biothings_sources_rejects_unknown_discovery_state(status_code, payload):
-    async def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(status_code, json=payload, request=request)
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        with pytest.raises(SourceDiscoveryError):
-            await utils.fetch_biothings_sources(
-                SERVICE_PROVIDER_API_HOST,
-                http_client=http_client,
-            )
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["timeout", "malformed_json"])
-async def test_fetch_biothings_sources_rejects_transport_and_json_failures(failure):
-    async def handler(request: httpx.Request) -> httpx.Response:
-        if failure == "timeout":
-            raise httpx.ReadTimeout("source discovery timed out", request=request)
-        return httpx.Response(200, content=b"{not-json", request=request)
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        with pytest.raises(SourceDiscoveryError):
-            await utils.fetch_biothings_sources(
-                SERVICE_PROVIDER_API_HOST,
-                http_client=http_client,
-            )
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_biothings_source_cache_refreshes_and_briefly_backs_off_failures(monkeypatch):
-    clock = {"now": 100.0}
-    fetched_sources = [
-        frozenset(),
-        SourceDiscoveryError(),
-        frozenset({"pubmed"}),
-    ]
-    fetch_calls = []
-
-    async def fake_fetch(api_host):
-        fetch_calls.append(api_host)
-        result = fetched_sources.pop(0)
-        if isinstance(result, Exception):
-            raise result
-        return result
-
-    monkeypatch.setattr(utils, "fetch_biothings_sources", fake_fetch)
-    monkeypatch.setattr(utils.time, "monotonic", lambda: clock["now"])
-    utils.clear_biothings_source_cache()
-    try:
-        assert await utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST) == frozenset()
-        clock["now"] += utils.BIOTHINGS_SOURCE_DISCOVERY_TTL - 1
-        assert await utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST) == frozenset()
-        assert fetch_calls == [SERVICE_PROVIDER_API_HOST]
-
-        clock["now"] += 2
-        with pytest.raises(SourceDiscoveryError):
-            await utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST)
-        with pytest.raises(SourceDiscoveryError):
-            await utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST)
-        assert fetch_calls == [
-            SERVICE_PROVIDER_API_HOST,
-            SERVICE_PROVIDER_API_HOST,
-        ]
-
-        clock["now"] += utils.BIOTHINGS_SOURCE_DISCOVERY_ERROR_TTL + 1
-        assert await utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST) == frozenset({"pubmed"})
-        assert fetch_calls == [
-            SERVICE_PROVIDER_API_HOST,
-            SERVICE_PROVIDER_API_HOST,
-            SERVICE_PROVIDER_API_HOST,
-        ]
-    finally:
-        utils.clear_biothings_source_cache()
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_biothings_source_cache_shares_concurrent_refresh(monkeypatch):
-    release_refresh = asyncio.Event()
-    fetch_calls = []
-
-    async def fake_fetch(api_host):
-        fetch_calls.append(api_host)
-        await release_refresh.wait()
-        return frozenset({"pubmed"})
-
-    monkeypatch.setattr(utils, "fetch_biothings_sources", fake_fetch)
-    utils.clear_biothings_source_cache()
-    try:
-        requests = [asyncio.create_task(utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST)) for _ in range(20)]
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        assert fetch_calls == [SERVICE_PROVIDER_API_HOST]
-
-        release_refresh.set()
-        assert await asyncio.gather(*requests) == [frozenset({"pubmed"})] * 20
-    finally:
-        release_refresh.set()
-        utils.clear_biothings_source_cache()
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_clear_biothings_source_cache_cancels_inflight_refresh(monkeypatch):
-    first_refresh_started = asyncio.Event()
-    first_refresh_cancelled = asyncio.Event()
-    first_refresh_release = asyncio.Event()
-    second_refresh_started = asyncio.Event()
-    second_refresh_release = asyncio.Event()
-    fetch_calls = []
-
-    async def fake_fetch(api_host):
-        fetch_calls.append(api_host)
-        if len(fetch_calls) == 1:
-            first_refresh_started.set()
-            try:
-                await first_refresh_release.wait()
-            except asyncio.CancelledError:
-                first_refresh_cancelled.set()
-                await first_refresh_release.wait()
-            return frozenset({"stale"})
-
-        second_refresh_started.set()
-        await second_refresh_release.wait()
-        return frozenset({"pubmed"})
-
-    monkeypatch.setattr(utils, "fetch_biothings_sources", fake_fetch)
-    utils.clear_biothings_source_cache()
-    requests = []
-    try:
-        stale_request = asyncio.create_task(utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST))
-        requests.append(stale_request)
-        await first_refresh_started.wait()
-        utils.clear_biothings_source_cache()
-        await first_refresh_cancelled.wait()
-
-        fresh_request = asyncio.create_task(utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST))
-        requests.append(fresh_request)
-        await second_refresh_started.wait()
-        normalized_host = SERVICE_PROVIDER_API_HOST.rstrip("/")
-        refresh_key = (id(asyncio.get_running_loop()), normalized_host)
-        second_refresh_task = utils._biothings_source_refreshes[refresh_key]
-
-        joined_request = asyncio.create_task(utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST))
-        requests.append(joined_request)
-        await asyncio.sleep(0)
-        assert fetch_calls == [
-            SERVICE_PROVIDER_API_HOST,
-            SERVICE_PROVIDER_API_HOST,
-        ]
-
-        first_refresh_release.set()
-        assert await stale_request == frozenset({"stale"})
-        assert utils._biothings_source_cache == {}
-        assert utils._biothings_source_refreshes[refresh_key] is second_refresh_task
-
-        second_refresh_release.set()
-        assert await asyncio.gather(fresh_request, joined_request) == [
-            frozenset({"pubmed"}),
-            frozenset({"pubmed"}),
-        ]
-    finally:
-        first_refresh_release.set()
-        second_refresh_release.set()
-        for request in requests:
-            if not request.done():
-                request.cancel()
-        await asyncio.gather(*requests, return_exceptions=True)
-        utils.clear_biothings_source_cache()
-        await asyncio.sleep(0)
+    assert exc_info.value.source == "pubmed"
+    assert exc_info.value.query_backend == "biothings"
+    assert exc_info.value.supported_backends == ["elasticsearch"]
+    sdk_factory.assert_not_called()
 
 
 @pytest.mark.unit
@@ -428,7 +236,9 @@ def test_query_post_processing(search_keyword: str, collection: List[Dict], hist
     [
         prefix
         for prefix, prefix_settings in BIOLINK_PREFIX_to_BioThings.items()
-        if "biothings" in prefix_settings.get("query_backends", ("biothings", "elasticsearch"))
+        if "biothings" in prefix_settings.get("query_backends", SUPPORTED_QUERY_BACKENDS)
+        and "biothings"
+        in ANNOTATOR_CLIENTS[prefix_settings["type"]].get("query_backends", SUPPORTED_QUERY_BACKENDS)
     ],
 )
 async def test_biothings_query(curie_prefix: str):
@@ -438,10 +248,6 @@ async def test_biothings_query(curie_prefix: str):
     node_type, node_id = utils.parse_curie(curie=curie_query, return_type=True, return_id=True)
 
     domain_fields = ANNOTATOR_CLIENTS[node_type]["fields"]
-    source = ANNOTATOR_CLIENTS[node_type]["client"].get("source")
-    if source and source not in await utils.get_biothings_sources(SERVICE_PROVIDER_API_HOST):
-        pytest.skip(f"BioThings source is not deployed: {source}")
-
     client = utils.get_client(node_type, SERVICE_PROVIDER_API_HOST)
     if not client:
         logger.warning("Failed to get the biothings client for %s type. This type is skipped.", node_type)

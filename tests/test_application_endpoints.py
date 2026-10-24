@@ -2,6 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Dict, List, Union
+from urllib.parse import quote
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -9,19 +10,50 @@ import sanic
 
 from biothings_annotator import utils
 from biothings_annotator.annotator import Annotator
-from biothings_annotator.annotator.exceptions import SourceDiscoveryError
 from biothings_annotator.annotator.settings import QUERY_BACKEND_ENV
 from biothings_annotator.application.views import VersionView
 from biothings_annotator.application.views.headers import SKIPPED_CURIE_PREFIXES_HEADER
 
 
+@pytest.fixture
+def backend_metadata(monkeypatch):
+    metadata = AsyncMock(
+        return_value={
+            "biothings-api": {
+                "checked_at": "2026-10-20T00:00:00+00:00",
+                "sources": {
+                    "mygene": {
+                        "build_version": "20260922",
+                        "sources": [{"name": "entrez", "source_version": "20260922"}],
+                    }
+                },
+            },
+            "elasticsearch": {
+                "checked_at": "2026-10-20T00:00:00+00:00",
+                "connection": "local",
+                "sources": {
+                    "annotator_extra": {
+                        "alias": "annotator-annotations", "error": {"code": "http_error", "http_status": 404}
+                    }
+                },
+            },
+        }
+    )
+    monkeypatch.setattr("biothings_annotator.application.views.status.get_backend_metadata", metadata)
+    return metadata
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
-@pytest.mark.parametrize("endpoint", ["/status/"])
-async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
+@pytest.mark.parametrize("endpoint", ["/status", "/status/"])
+@pytest.mark.parametrize("environment", ["unknown", "ci", "test", "prod"])
+@pytest.mark.parametrize("query_backend", ["biothings", "elasticsearch"])
+async def test_status_get(test_annotator, endpoint, environment, query_backend, monkeypatch, backend_metadata):
     """
     Tests the Status endpoint GET when the response is HTTP 200
     """
+    monkeypatch.setitem(test_annotator.config, "DEPLOYMENT_ENVIRONMENT", environment)
+    monkeypatch.setenv(QUERY_BACKEND_ENV, query_backend)
     with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}) as mock_annotate:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
@@ -37,7 +69,14 @@ async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
         assert request.scheme == "http"
         assert request.server_path == endpoint
 
-        expected_response_body = {"success": True}
+        specification_path = Path(__file__).parents[1] / "biothings_annotator" / "webapp" / "openapi.json"
+        expected_response_body = {
+            "status": "running",
+            "deployment_environment": environment,
+            "version": json.loads(specification_path.read_text(encoding="utf-8"))["info"]["version"],
+            "query_backend": query_backend,
+            "available_query_backends": backend_metadata.return_value,
+        }
         assert isinstance(response.json, dict)
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
@@ -47,12 +86,16 @@ async def test_status_get(test_annotator: sanic.Sanic, endpoint: str):
         assert response.status_code == 200
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
+        assert response.headers["Cache-Control"] == "no-store"
+        backend_metadata.assert_awaited_once()
+        assert backend_metadata.await_args.args[0] is test_annotator
+        assert backend_metadata.await_args.args[1].query_backend == query_backend
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
-@pytest.mark.parametrize("endpoint", ["/status/"])
-async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
+@pytest.mark.parametrize("endpoint", ["/status", "/status/"])
+async def test_status_head(test_annotator: sanic.Sanic, endpoint: str, backend_metadata):
     """
     Tests the Status endpoint HEAD when the response is HTTP 200
     """
@@ -79,17 +122,56 @@ async def test_status_head(test_annotator: sanic.Sanic, endpoint: str):
         assert response.is_closed
         assert response.status_code == 200
         assert response.encoding == "utf-8"
+        assert response.headers["Cache-Control"] == "no-store"
+        backend_metadata.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("annotation_result,expected_status", [({}, 500), (Exception("Unavailable"), 400)])
+async def test_status_head_failure(test_annotator: sanic.Sanic, annotation_result, expected_status):
+    annotation = AsyncMock()
+    if isinstance(annotation_result, Exception):
+        annotation.side_effect = annotation_result
+    else:
+        annotation.return_value = annotation_result
+    with patch.object(Annotator, "annotate_curie", annotation):
+        _, response = await test_annotator.asgi_client.request(method="head", url="/status")
+
+    assert response.status_code == expected_status
+    assert response.body == b""
+    assert response.headers["Cache-Control"] == "no-store"
+    annotation.assert_awaited_once_with("NCBIGene:1017", fields="_id", raw=True, include_extra=False)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_status_environment_is_not_inferred_from_request_host(test_annotator, monkeypatch, backend_metadata):
+    monkeypatch.setitem(test_annotator.config, "DEPLOYMENT_ENVIRONMENT", "unknown")
+    with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}):
+        _, response = await test_annotator.asgi_client.request(
+            method="get",
+            url="/status",
+            headers={"Host": "annotator.ci.transltr.io", "X-Forwarded-Host": "annotator.test.transltr.io"},
+        )
+
+    assert response.status_code == 200
+    assert response.json["deployment_environment"] == "unknown"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
-async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
+async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str, backend_metadata):
     """
     Tests the Status endpoint GET when an Exception is raised
     Mocking the annotate_curie method to raise an exception
     """
-    with patch.object(Annotator, "annotate_curie", side_effect=Exception("Simulated error")):
+    private_error = RuntimeError(
+        "http://service-user:private-password@elasticsearch.internal:9200/private-index "
+        "returned body: {\"access_token\": \"private-token\"}"
+    )
+    with patch.object(Annotator, "annotate_curie", side_effect=private_error):
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
         assert request.method == "GET"
@@ -97,7 +179,7 @@ async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         assert request.scheme == "http"
         assert request.server_path == endpoint
 
-        expected_response_body = {"success": False, "error": "Exception('Simulated error')"}
+        expected_response_body = {"success": False, "error": "Service unavailable due to a failed health check!"}
         assert response.http_version == "HTTP/1.1"
         assert response.content_type == "application/json"
         assert not response.is_success
@@ -106,12 +188,30 @@ async def test_status_get_error(test_annotator: sanic.Sanic, endpoint: str):
         assert response.status_code == 400
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
+        for private_detail in ("elasticsearch.internal", "private-index", "private-password", "private-token"):
+            assert private_detail not in response.text
+        assert response.headers["Cache-Control"] == "no-store"
+        backend_metadata.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+async def test_status_get_outer_error_does_not_expose_private_details(test_annotator, backend_metadata):
+    backend_metadata.side_effect = RuntimeError("http://elasticsearch.internal:9200/private-index?token=private-token")
+    with patch.object(Annotator, "annotate_curie", return_value={"NCBIGene:1017": [{"_id": "1017"}]}):
+        _, response = await test_annotator.asgi_client.get("/status")
+
+    assert response.status_code == 400
+    assert response.json == {"success": False, "error": "Service unavailable due to a failed health check!"}
+    assert response.headers["Cache-Control"] == "no-store"
+    for private_detail in ("elasticsearch.internal", "private-index", "private-token"):
+        assert private_detail not in response.text
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("endpoint", ["/status/"])
-async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str):
+async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoint: str, backend_metadata):
     """
     Tests the Status endpoint GET when the data check fails
     Mocking the annotate_curie method to return a value that doesn't contain "NCBIGene:1017"
@@ -136,6 +236,8 @@ async def test_status_get_failed_data_check(test_annotator: sanic.Sanic, endpoin
         assert response.status_code == 500
         assert response.encoding == "utf-8"
         assert response.json == expected_response_body
+        assert response.headers["Cache-Control"] == "no-store"
+        backend_metadata.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -590,8 +692,19 @@ async def test_query_backend_omission_uses_deployment_default(test_annotator: sa
 
 @pytest.mark.unit
 @pytest.mark.asyncio(loop_scope="module")
-@pytest.mark.parametrize("query_backend", ["elasticsearch", "es"])
-async def test_elasticsearch_query_backend_returns_canonical_header(test_annotator: sanic.Sanic, query_backend: str):
+@pytest.mark.parametrize(
+    "query_backend,canonical_backend",
+    [
+        ("elasticsearch", "elasticsearch"),
+        ("es", "elasticsearch"),
+        ("biothings", "biothings"),
+        ("biothings-api", "biothings"),
+    ],
+)
+async def test_query_backend_returns_canonical_header(
+    test_annotator: sanic.Sanic, monkeypatch, query_backend, canonical_backend
+):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "elasticsearch" if canonical_backend == "biothings" else "biothings")
     mock_annotation = AsyncMock(return_value={"result": "ok"})
 
     with patch.object(Annotator, "annotate_curie", mock_annotation), patch(
@@ -604,7 +717,7 @@ async def test_elasticsearch_query_backend_returns_canonical_header(test_annotat
     mock_annotator_class.assert_called_once_with(query_backend=query_backend)
     mock_annotation.assert_awaited_once()
     assert response.status_code == 200
-    assert response.headers["X-Query-Backend"] == "elasticsearch"
+    assert response.headers["X-Query-Backend"] == canonical_backend
     assert SKIPPED_CURIE_PREFIXES_HEADER not in response.headers
 
 
@@ -613,7 +726,6 @@ async def test_elasticsearch_query_backend_returns_canonical_header(test_annotat
 @pytest.mark.parametrize(
     "method,url,json_body",
     [
-        ("get", "/curie/PMID:31763219?query_backend=biothings", None),
         ("post", "/curie/?query_backend=biothings", {"ids": ["PMID:31763219"]}),
         (
             "post",
@@ -632,19 +744,10 @@ async def test_elasticsearch_query_backend_returns_canonical_header(test_annotat
 )
 async def test_backend_unavailable_prefix_is_reported_in_response_header(
     test_annotator: sanic.Sanic,
-    monkeypatch,
     method: str,
     url: str,
     json_body: dict,
 ):
-    async def sources_without_pubmed(api_host):
-        del api_host
-        return frozenset()
-
-    monkeypatch.setattr(
-        "biothings_annotator.annotator.annotator.get_biothings_sources",
-        sources_without_pubmed,
-    )
     request_kwargs = {"method": method, "url": url}
     if json_body is not None:
         request_kwargs["json"] = json_body
@@ -685,11 +788,11 @@ async def test_backend_unavailable_prefix_is_reported_in_response_header(
 @pytest.mark.parametrize(
     "method,url,json_body,is_trapi",
     [
-        ("get", "/curie/{curie}?query_backend=biothings", None, False),
-        ("post", "/curie/?query_backend=biothings", {"ids": ["{curie}"]}, False),
+        ("get", "/curie/{curie}?query_backend=elasticsearch", None, False),
+        ("post", "/curie/?query_backend=elasticsearch", {"ids": ["{curie}"]}, False),
         (
             "post",
-            "/trapi/?query_backend=biothings",
+            "/trapi/?query_backend=elasticsearch",
             {
                 "message": {
                     "knowledge_graph": {
@@ -710,7 +813,7 @@ async def test_backend_unavailable_prefix_is_reported_in_response_header(
         ("PMID:3176321900", True),
     ],
 )
-async def test_available_biothings_pubmed_uses_normal_result_contract(
+async def test_elasticsearch_pubmed_uses_normal_result_contract(
     test_annotator: sanic.Sanic,
     monkeypatch,
     method: str,
@@ -734,15 +837,7 @@ async def test_available_biothings_pubmed_uses_normal_result_contract(
                 for query in query_list
             ]
 
-    async def sources_with_pubmed(api_host):
-        del api_host
-        return frozenset({"pubmed"})
-
     client = FakePubMedClient()
-    monkeypatch.setattr(
-        "biothings_annotator.annotator.annotator.get_biothings_sources",
-        sources_with_pubmed,
-    )
     monkeypatch.setattr(
         "biothings_annotator.annotator.annotator.get_client",
         lambda node_type, api_host: client,
@@ -766,7 +861,7 @@ async def test_available_biothings_pubmed_uses_normal_result_contract(
         else [{"query": curie, "_id": curie, "pubmed": {"title": "Example title"}}]
     )
     assert response.status_code == 200
-    assert response.headers["X-Query-Backend"] == "biothings"
+    assert response.headers["X-Query-Backend"] == "elasticsearch"
     assert SKIPPED_CURIE_PREFIXES_HEADER not in response.headers
     assert response.headers["Cache-Control"] != "no-store"
     if is_trapi:
@@ -782,64 +877,6 @@ async def test_available_biothings_pubmed_uses_normal_result_contract(
         }
     else:
         assert response.json == {curie: expected_result}
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio(loop_scope="module")
-@pytest.mark.parametrize(
-    "method,url,json_body,expected_endpoint",
-    [
-        ("get", "/curie/PMID:31763219?query_backend=biothings", None, "/curie/"),
-        (
-            "post",
-            "/curie/?query_backend=biothings",
-            {"ids": ["PMID:31763219"]},
-            "/curie/",
-        ),
-        (
-            "post",
-            "/trapi/?query_backend=biothings",
-            {
-                "message": {
-                    "knowledge_graph": {
-                        "nodes": {
-                            "PMID:31763219": {},
-                        }
-                    }
-                }
-            },
-            "/trapi/",
-        ),
-    ],
-)
-async def test_source_discovery_failure_returns_retryable_error_without_skip(
-    test_annotator: sanic.Sanic,
-    monkeypatch,
-    method: str,
-    url: str,
-    json_body: dict,
-    expected_endpoint: str,
-):
-    async def fail_source_discovery(api_host):
-        del api_host
-        raise SourceDiscoveryError()
-
-    monkeypatch.setattr(
-        "biothings_annotator.annotator.annotator.get_biothings_sources",
-        fail_source_discovery,
-    )
-    request_kwargs = {"method": method, "url": url}
-    if json_body is not None:
-        request_kwargs["json"] = json_body
-
-    _, response = await test_annotator.asgi_client.request(**request_kwargs)
-
-    assert response.status_code == 503
-    assert response.json["endpoint"] == expected_endpoint
-    assert response.json["message"] == "Unable to determine BioThings source availability."
-    assert response.json["source"] == "pubmed"
-    assert SKIPPED_CURIE_PREFIXES_HEADER not in response.headers
-    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.unit
@@ -1012,3 +1049,74 @@ async def test_concurrent_query_backend_overrides_are_request_local(test_annotat
     assert biothings_response.headers["X-Query-Backend"] == "biothings"
     assert elasticsearch_response.json == {"backend": "elasticsearch"}
     assert elasticsearch_response.headers["X-Query-Backend"] == "elasticsearch"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("curie", ["PMID:31763219", "doi:10.1234/example", "DOI:10.1234/example", "PMC:PMC123", "pmc:PMC123"])
+@pytest.mark.parametrize("explicit_backend", [False, True])
+async def test_single_pubmed_biothings_request_is_rejected_without_network(test_annotator, monkeypatch, curie, explicit_backend):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "biothings")
+    query = AsyncMock(side_effect=AssertionError("No backend may be queried for this rejected request"))
+    monkeypatch.setattr(Annotator, "query_annotations", query)
+    url = f"/curie/{quote(curie, safe='')}"
+    if explicit_backend:
+        url += "?query_backend=biothings"
+
+    _, response = await test_annotator.asgi_client.get(url)
+
+    assert response.status_code == 422
+    assert response.json == {
+        "input": curie,
+        "endpoint": "/curie/",
+        "error": "unsupported_source_backend",
+        "message": "Source 'pubmed' is not supported by the 'biothings' backend. Use query_backend=elasticsearch.",
+        "source": "pubmed",
+        "query_backend": "biothings",
+        "supported_backends": ["elasticsearch"],
+    }
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["X-Query-Backend"] == "biothings"
+    assert SKIPPED_CURIE_PREFIXES_HEADER not in response.headers
+    query.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("endpoint", ["curie", "trapi"])
+async def test_mixed_biothings_request_annotates_gene_and_reports_pubmed_skip(test_annotator, monkeypatch, endpoint):
+    ids = ["NCBIGene:1017", "PMID:31763219", "doi:10.1234/example", "PMC:PMC123"]
+    query = AsyncMock(return_value={"1017": [{"_id": "1017", "query": "1017"}]})
+    monkeypatch.setattr(Annotator, "query_annotations", query)
+    body = {"ids": ids} if endpoint == "curie" else {
+        "message": {"knowledge_graph": {"nodes": {curie: {"name": curie} for curie in ids}}}
+    }
+
+    _, response = await test_annotator.asgi_client.post(
+        f"/{endpoint}/?query_backend=biothings&raw=true&include_extra=false", json=body
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-Query-Backend"] == "biothings"
+    assert response.headers[SKIPPED_CURIE_PREFIXES_HEADER] == "PMID, doi, PMC"
+    assert response.headers["Cache-Control"] == "no-store"
+    query.assert_awaited_once_with("gene", ["1017"], fields=None, scopes=["entrezgene", "retired"])
+    result = response.json
+    for curie in ids[1:]:
+        if endpoint == "trapi":
+            assert result[curie]["name"] == curie
+            attribute = result[curie]["attributes"][0]
+            assert attribute["attribute_type_id"] == "biothings_query_status"
+            skipped = attribute["value"]
+        else:
+            skipped = result[curie]
+        assert skipped == [{
+            "query": curie,
+            "notfound": True,
+            "skipped": True,
+            "reason": "source_unavailable_for_backend",
+            "source": "pubmed",
+            "query_backend": "biothings",
+        }]
+    gene = result[ids[0]]["attributes"][0]["value"] if endpoint == "trapi" else result[ids[0]]
+    assert gene == [{"_id": "1017", "query": "1017"}]

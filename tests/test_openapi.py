@@ -23,6 +23,174 @@ QUERY_OPERATIONS = (
 
 
 @pytest.mark.unit
+def test_status_contract_documents_service_metadata_and_health_check_failures():
+    with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
+        specification = json.load(openapi_file)
+
+    status = specification["paths"]["/status"]
+    assert set(status) == {"get", "head"}
+    responses = status["get"]["responses"]
+    assert set(responses) == {"200", "400", "500"}
+    success = responses["200"]["content"]["application/json"]["schema"]
+    assert set(success["required"]) == {
+        "status", "deployment_environment", "version", "query_backend", "available_query_backends"
+    }
+    assert set(success["properties"]) == set(success["required"])
+    assert success["properties"]["status"]["enum"] == ["running"]
+    assert success["properties"]["deployment_environment"]["type"] == "string"
+    assert success["properties"]["version"]["example"] == specification["info"]["version"]
+    assert success["properties"]["query_backend"]["enum"] == ["biothings", "elasticsearch"]
+    assert success["properties"]["available_query_backends"]["required"] == ["biothings-api", "elasticsearch"]
+
+    for operation in status.values():
+        assert set(operation["responses"]) == {"200", "400", "500"}
+        for response in operation["responses"].values():
+            assert response["headers"]["Cache-Control"] == {"$ref": "#/components/headers/StatusCacheControl"}
+    assert all("content" not in response for response in status["head"]["responses"].values())
+    assert specification["components"]["headers"]["StatusCacheControl"]["schema"] == {
+        "type": "string",
+        "enum": ["no-store"],
+    }
+
+    for code in ("400", "500"):
+        error = responses[code]["content"]["application/json"]["schema"]
+        assert set(error["required"]) == {"success", "error"}
+        assert error["properties"]["success"] == {"type": "boolean", "enum": [False]}
+        assert error["properties"]["error"]["type"] == "string"
+
+
+@pytest.mark.unit
+def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versions():
+    with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
+        specification = json.load(openapi_file)
+
+    schemas = specification["components"]["schemas"]
+    success = specification["paths"]["/status"]["get"]["responses"]["200"]["content"]["application/json"]
+    backend_properties = success["schema"]["properties"]["available_query_backends"]["properties"]
+    for backend_name, schema_name, dataset_schema in (
+        ("biothings-api", "StatusBioThingsBackend", "StatusBioThingsDataset"),
+        ("elasticsearch", "StatusElasticsearchBackend", "StatusElasticsearchDataset"),
+    ):
+        assert backend_properties[backend_name] == {"$ref": f"#/components/schemas/{schema_name}"}
+        backend = schemas[schema_name]
+        assert backend["required"] == ["checked_at"]
+        assert backend["properties"]["checked_at"]["format"] == "date-time"
+        assert backend["properties"]["sources"]["additionalProperties"] == {
+            "$ref": f"#/components/schemas/{dataset_schema}"
+        }
+        # Collection failure may replace sources with an informational error.
+        assert {"required": ["error"]} in backend["oneOf"]
+        assert backend["properties"]["error"] == {"$ref": "#/components/schemas/StatusMetadataError"}
+        assert backend["properties"]["refresh_error"]["allOf"] == [
+            {"$ref": "#/components/schemas/StatusMetadataError"}
+        ]
+
+    assert {"required": ["connection", "sources"]} in schemas["StatusElasticsearchBackend"]["oneOf"]
+    connection = schemas["StatusElasticsearchBackend"]["properties"]["connection"]
+    assert set(connection["enum"]) == {
+        "ci_cluster_forwarded", "test_cluster_forwarded", "prod_cluster_forwarded",
+        "ci_cluster", "test_cluster", "prod_cluster", "unknown_cluster",
+        "unknown_cluster_forwarded", "local", "unknown",
+    }
+    versions_reference = {"$ref": "#/components/schemas/StatusSourceMetadata"}
+    assert versions_reference in schemas["StatusBioThingsDataset"]["oneOf"]
+    elasticsearch_dataset = schemas["StatusElasticsearchDataset"]
+    assert elasticsearch_dataset["required"] == ["alias"]
+    assert set(elasticsearch_dataset["properties"]) == {"alias", "index", "error"}
+    assert elasticsearch_dataset["properties"]["alias"]["nullable"] is True
+    concrete_index = elasticsearch_dataset["properties"]["index"]
+    assert set(concrete_index["required"]) == {"name", "build_version", "sources"}
+    assert set(concrete_index["properties"]) == {"name", "build_version", "sources"}
+    assert concrete_index["properties"]["name"]["type"] == "string"
+    assert concrete_index["properties"]["build_version"]["nullable"] is True
+    index_sources = concrete_index["properties"]["sources"]
+    assert index_sources["type"] == "array"
+    upstream_reference = {"$ref": "#/components/schemas/StatusUpstreamSource"}
+    assert index_sources["items"] == upstream_reference
+    upstream_source = schemas["StatusUpstreamSource"]
+    assert upstream_source["type"] == "object"
+    assert set(upstream_source["required"]) == {"name", "source_version"}
+    assert set(upstream_source["properties"]) == {"name", "source_version"}
+    assert upstream_source["properties"]["source_version"]["nullable"] is True
+    assert elasticsearch_dataset["oneOf"] == [{"required": ["index"]}, {"required": ["error"]}]
+
+    versions = schemas["StatusSourceMetadata"]
+    assert set(versions["required"]) == {"build_version", "sources"}
+    assert set(versions["properties"]) == {"build_version", "sources"}
+    assert versions["properties"]["build_version"]["nullable"] is True
+    assert versions["properties"]["sources"]["type"] == "array"
+    assert versions["properties"]["sources"]["items"] == upstream_reference
+    assert schemas["StatusMetadataError"]["required"] == ["code"]
+    assert "metadata_unavailable" in schemas["StatusMetadataError"]["properties"]["code"]["enum"]
+    assert "multiple_indices" in schemas["StatusMetadataError"]["properties"]["code"]["enum"]
+    assert schemas["StatusMetadataError"]["properties"]["http_status"]["type"] == "integer"
+
+    example = success["example"]
+    backend_name = {"biothings": "biothings-api"}.get(example["query_backend"], example["query_backend"])
+    assert backend_name in example["available_query_backends"]
+    biothings_gene = example["available_query_backends"]["biothings-api"]["sources"]["mygene"]
+    elasticsearch_gene = example["available_query_backends"]["elasticsearch"]["sources"]["mygene"]
+    assert biothings_gene["sources"] == [
+        {"name": "ensembl", "source_version": "116"},
+        {"name": "entrez", "source_version": "20261009"},
+        {"name": "uniprot", "source_version": "20260903"},
+    ]
+    assert elasticsearch_gene["alias"] == "gene"
+    assert elasticsearch_gene["index"]["name"] == "mygene_allspecies_20260705_bgks2qnv"
+    assert elasticsearch_gene["index"]["sources"] == [
+        {"name": "ensembl", "source_version": "116"},
+        {"name": "entrez", "source_version": "20260705"},
+        {"name": "uniprot", "source_version": "20260610"},
+    ]
+    assert example["available_query_backends"]["elasticsearch"]["sources"]["hpo"]["alias"] == "hpo"
+    assert "hpo" in example["available_query_backends"]["biothings-api"]["sources"]
+    assert example["available_query_backends"]["elasticsearch"]["connection"] == "ci_cluster"
+    assert biothings_gene["build_version"] != elasticsearch_gene["index"]["build_version"]
+    assert example["status"] == "running"
+    assert "pubmed" not in example["available_query_backends"]["biothings-api"]["sources"]
+    pubmed = example["available_query_backends"]["elasticsearch"]["sources"]["pubmed"]
+    assert pubmed == {
+        "alias": "annotator-pubmed",
+        "index": {
+            "name": "pubmed_20260814_ew8jmctk_202608201240",
+            "build_version": "20260814",
+            "sources": [{"name": "pubmed_metadata", "source_version": "2026aug5"}],
+        },
+    }
+    assert "error" in example["available_query_backends"]["elasticsearch"]["sources"]["annotator_extra"]
+
+
+@pytest.mark.unit
+def test_pubmed_backend_restriction_documents_single_error_and_batch_skips():
+    with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
+        specification = json.load(openapi_file)
+
+    single = specification["paths"]["/curie/{curie}"]["get"]
+    rejected = single["responses"]["422"]
+    assert rejected["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/UnsupportedSourceBackendError"
+    }
+    assert rejected["headers"]["X-Query-Backend"] == {"$ref": "#/components/headers/QueryBackend"}
+    assert rejected["headers"]["Cache-Control"]["schema"] == {"type": "string", "enum": ["no-store"]}
+    error = specification["components"]["schemas"]["UnsupportedSourceBackendError"]
+    assert set(error["required"]) == {
+        "input", "endpoint", "error", "message", "source", "query_backend", "supported_backends"
+    }
+    assert error["properties"]["error"]["enum"] == ["unsupported_source_backend"]
+    assert error["properties"]["supported_backends"]["example"] == ["elasticsearch"]
+    assert error["properties"]["input"]["example"].startswith("PMID:")
+
+    for path in ("/curie", "/trapi"):
+        batch = specification["paths"][path]["post"]
+        assert "422" not in batch["responses"]
+        assert "PubMed" in batch["description"]
+        assert "skip" in batch["description"].lower()
+        assert batch["responses"]["200"]["headers"]["X-Skipped-Curie-Prefixes"] == {
+            "$ref": "#/components/headers/SkippedCuriePrefixes"
+        }
+
+
+@pytest.mark.unit
 def test_query_backend_override_is_documented_for_all_query_operations():
     with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
         specification = json.load(openapi_file)
@@ -36,6 +204,10 @@ def test_query_backend_override_is_documented_for_all_query_operations():
     assert "Unsupported values are ignored and use the deployment default" in query_backend_parameter[
         "description"
     ]
+    assert "case-insensitively with surrounding whitespace trimmed" in query_backend_parameter["description"]
+    assert {example["value"] for example in query_backend_parameter["examples"].values()} == {
+        "biothings", "biothings-api", "elasticsearch", "es"
+    }
 
     for path, method in QUERY_OPERATIONS:
         operation = specification["paths"][path][method]
@@ -49,20 +221,11 @@ def test_query_backend_override_is_documented_for_all_query_operations():
         assert operation["responses"]["200"]["headers"]["Cache-Control"] == {
             "$ref": "#/components/headers/AnnotationCacheControl"
         }
-        assert operation["responses"]["503"]["content"]["application/json"]["schema"] == {
-            "$ref": "#/components/schemas/SourceDiscoveryError"
-        }
-        assert operation["responses"]["503"]["headers"]["Cache-Control"] == {
-            "$ref": "#/components/headers/TransientErrorCacheControl"
-        }
+        assert "503" not in operation["responses"]
 
     skipped_prefixes_header = specification["components"]["headers"]["SkippedCuriePrefixes"]
     assert skipped_prefixes_header["schema"] == {"type": "string", "example": "PMID"}
-    assert "source discovery confirmed" in skipped_prefixes_header["description"]
-    assert specification["components"]["headers"]["TransientErrorCacheControl"]["schema"] == {
-        "type": "string",
-        "enum": ["no-store"],
-    }
+    assert "selected backend does not support their source" in skipped_prefixes_header["description"]
 
     skipped_result = specification["components"]["schemas"]["BackendSkipResult"]
     assert skipped_result["type"] == "array"
@@ -80,12 +243,8 @@ def test_query_backend_override_is_documented_for_all_query_operations():
     assert skipped_hit["properties"]["skipped"] == {"type": "boolean", "enum": [True]}
     assert skipped_hit["properties"]["reason"]["enum"] == ["source_unavailable_for_backend"]
 
-    discovery_error = specification["components"]["schemas"]["SourceDiscoveryError"]
-    assert discovery_error["required"] == ["input", "endpoint", "message", "source"]
-    assert discovery_error["properties"]["message"]["enum"] == [
-        "Unable to determine BioThings source availability."
-    ]
-
+    assert "SourceDiscoveryError" not in json.dumps(specification)
+    assert "TransientErrorCacheControl" not in specification["components"]["headers"]
     assert "InvalidQueryBackendError" not in json.dumps(specification)
 
 

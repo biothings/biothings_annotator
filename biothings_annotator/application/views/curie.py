@@ -14,7 +14,7 @@ from biothings_annotator.annotator import Annotator
 from biothings_annotator.annotator.exceptions import (
     InvalidCurieError,
     InvalidQueryBackendError,
-    SourceDiscoveryError,
+    UnsupportedSourceBackendError,
 )
 from biothings_annotator.application.views.headers import annotation_response_headers
 
@@ -64,16 +64,19 @@ class CurieView(HTTPMethodView):
             return sanic.json(annotated_node, headers=response_headers)
         except InvalidQueryBackendError:
             return _query_backend_configuration_error_response()
-        except SourceDiscoveryError as discovery_error:
+        except UnsupportedSourceBackendError as backend_error:
             return sanic.json(
                 {
                     "input": curie,
                     "endpoint": "/curie/",
-                    "message": discovery_error.message,
-                    "source": discovery_error.source,
+                    "error": "unsupported_source_backend",
+                    "message": backend_error.message,
+                    "source": backend_error.source,
+                    "query_backend": backend_error.query_backend,
+                    "supported_backends": backend_error.supported_backends,
                 },
-                status=503,
-                headers={"Cache-Control": "no-store"},
+                status=422,
+                headers={"Cache-Control": "no-store", "X-Query-Backend": backend_error.query_backend},
             )
         except InvalidCurieError as curie_err:
             error_context = {
@@ -146,17 +149,6 @@ class CurieView(HTTPMethodView):
             return sanic.json(annotated_node, headers=response_headers)
         except InvalidQueryBackendError:
             return _query_backend_configuration_error_response()
-        except SourceDiscoveryError as discovery_error:
-            return sanic.json(
-                {
-                    "input": curie_list,
-                    "endpoint": "/curie/",
-                    "message": discovery_error.message,
-                    "source": discovery_error.source,
-                },
-                status=503,
-                headers={"Cache-Control": "no-store"},
-            )
         except InvalidCurieError as curie_err:
             error_context = {
                 "input": curie_list,

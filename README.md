@@ -184,6 +184,209 @@ python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12 -
 
 ##### Runtime configuration
 
+`SERVICE_PROVIDER_API_HOST` overrides the BioThings host used for HPO, NCIT, and extra
+annotation endpoints and their metadata. When unset, it falls back to
+`https://biothings.transltr.io` in every deployment environment. Set it explicitly in the
+container environment to use a matching CI or test BioThings API, such as
+`https://biothings.ci.transltr.io` or `https://biothings.test.transltr.io`, and restart the service.
+The Helm chart requires `containers.service_provider_api_host` and passes it to the container
+as `SERVICE_PROVIDER_API_HOST`. Set it in the environment's values file (`values-ncats.yaml`
+when using `deploy/deploy.sh`), for example:
+
+```yaml
+containers:
+  service_provider_api_host: https://biothings.ci.transltr.io
+```
+
+Use `https://biothings.test.transltr.io` for test and `https://biothings.transltr.io` for
+production. Helm rendering fails when the value is missing or blank, so each deployment
+must explicitly choose its BioThings API host. The deployment environment label does not
+select this host. With the `biothings` query backend, primary gene, chemical, and disease
+queries continue to use the public MyGene, MyChem, and MyDisease APIs.
+
+##### Service status
+
+`GET /status` verifies that the configured query backend can annotate `NCBIGene:1017` and
+returns the common NodeNorm status fields plus source build versions for **both** backends.
+`query_backend` identifies the deployment's default backend. `available_query_backends` lists
+metadata for `biothings-api` and `elasticsearch`; the `biothings-api` entry corresponds to the
+canonical `biothings` query backend. This abbreviated example uses illustrative versions; each
+backend lists all sources it supports:
+
+```json
+{
+  "status": "running",
+  "deployment_environment": "ci",
+  "version": "1.0",
+  "query_backend": "elasticsearch",
+  "available_query_backends": {
+    "biothings-api": {
+      "checked_at": "2026-10-20T18:00:00+00:00",
+      "sources": {
+        "mygene": {
+          "build_version": "20261019",
+          "sources": [
+            {"name": "ensembl", "source_version": "116"},
+            {"name": "entrez", "source_version": "20261009"},
+            {"name": "uniprot", "source_version": "20260903"}
+          ]
+        },
+        "hpo": {
+          "build_version": "20250120",
+          "sources": [
+            {"name": "hpo", "source_version": "2025-01-19"}
+          ]
+        }
+      }
+    },
+    "elasticsearch": {
+      "connection": "ci_cluster",
+      "checked_at": "2026-10-20T18:00:00+00:00",
+      "sources": {
+        "mygene": {
+          "alias": "gene",
+          "index": {
+            "name": "mygene_allspecies_20260705_bgks2qnv",
+            "build_version": "20260705",
+            "sources": [
+              {"name": "ensembl", "source_version": "116"},
+              {"name": "entrez", "source_version": "20260705"},
+              {"name": "uniprot", "source_version": "20260610"}
+            ]
+          }
+        },
+        "hpo": {
+          "alias": "hpo",
+          "index": {
+            "name": "hpo_20251027_b3jbx7z4",
+            "build_version": "20251027",
+            "sources": [
+              {"name": "hpo", "source_version": "2025-10-26"}
+            ]
+          }
+        },
+        "pubmed": {
+          "alias": "annotator-pubmed",
+          "index": {
+            "name": "pubmed_20260814_ew8jmctk_202608201240",
+            "build_version": "20260814",
+            "sources": [
+              {"name": "pubmed_metadata", "source_version": "2026aug5"}
+            ]
+          }
+        },
+        "annotator_extra": {
+          "alias": "annotator-annotations",
+          "error": {"code": "http_error", "http_status": 404}
+        }
+      }
+    }
+  }
+}
+```
+
+The `version` field is the API version from the served OpenAPI specification. The separate
+`/version` endpoint reports the build's Git commit from `version.txt`, together with the active
+query backend.
+
+For local development, set `ANNOTATOR_DEPLOYMENT_ENV=local` (or configure the deployment environment
+as `local`). If `version.txt` is missing, `/version` uses a Git snapshot of the loaded package's
+checkout captured at startup: the full HEAD commit, with `-dirty` appended for tracked, staged,
+or untracked changes. Restart the service to refresh that snapshot. `version.txt` always takes
+precedence. Outside the `local` environment, a missing file returns `Unknown` without querying
+Git; the local fallback also returns `Unknown` if Git or the checkout is unavailable or the
+query fails. Local `/version` responses send `Cache-Control: no-store`.
+
+Source availability follows `ANNOTATOR_CLIENTS` and its backend support. Both backends share
+status display names derived from the client configuration. Typed SDK clients use their
+configured `<service>.info` hostname, yielding `mygene`, `mychem`, and `mydisease` without a
+per-source mapping. Endpoint-based clients use their configured endpoint, yielding `hpo`,
+`ncit`, and `annotator_extra`. Sources without an API client retain their configured key;
+`pubmed` appears only under Elasticsearch. Custom client URLs outside the `<service>.info`
+convention, unresolved client configurations, and conflicting names fall back to the configured
+source key. Names do not depend on a successful metadata request. These are status labels only:
+internal source keys, annotation routing, and Elasticsearch aliases remain unchanged.
+Missing optional sources supported by that backend remain visible with an
+`error` instead of disappearing. BioThings versions come from each API's `/metadata`;
+Elasticsearch versions come from index mapping `_meta`, with the configured alias or direct index
+in `alias`. The singular `index` object contains the resolved concrete `name` and `build_version`.
+For Elasticsearch, `index.sources` lists every upstream source recorded in that index's
+mapping `_meta.src`. For BioThings APIs, `sources` sits alongside `build_version` and lists every
+upstream source in that API's `/metadata` `src`. Both lists are sorted by name and use
+`{"name": "...", "source_version": "..."}` entries from each `src` entry's `version` field.
+There is no whitelist or entry limit; the example above abbreviates the gene sources. API versions
+describe the data served by each API, while Elasticsearch versions describe the data used for
+that indexed build; these can differ.
+Scalar versions are normalized to strings. Missing, blank, boolean, or structured versions are
+`null`, and those sources stay in the list. An absent `src` produces an empty list. Versions
+are never inferred from build versions, index names, or timestamps.
+Elasticsearch metadata failures retain `alias` and report `error` in place of `index`. If an alias unexpectedly
+resolves to multiple indices, its source reports `error.code: multiple_indices`; no index is
+selected arbitrarily. `connection` describes the configured
+Elasticsearch target:
+
+| `ELASTICSEARCH_CONNECTION` | Status `connection` |
+| --- | --- |
+| `ci_forward` | `ci_cluster_forwarded` |
+| `test_forward` | `test_cluster_forwarded` |
+| `prod_forward` | `prod_cluster_forwarded` |
+| `in_cluster` | `<deployment_environment>_cluster` for `ci`, `test`, or `prod`; otherwise `unknown_cluster` |
+| `local` | `local` |
+
+Forwarded environments come from the selected preset's `forwarded_environment` metadata,
+independently of annotator's deployment environment. A loopback address alone cannot identify
+which cluster is forwarded. The preset records the intended target; it does not verify the
+tunnel's destination or establish a tunnel. Verifying the actual destination would require a
+trusted mapping from Elasticsearch cluster UUIDs to environments, or metadata supplied by the
+tunnel launcher. A forwarded preset with an unrecognized environment reports
+`unknown_cluster_forwarded`; an unrecognized preset reports `unknown`. Connection URLs,
+credentials, and raw upstream errors are not included in the status response.
+
+The `annotator_extra` status source uses the BioThings `/annotator_extra` API and the
+Elasticsearch `annotator-annotations` alias, which remains visible in its `alias` field.
+
+`build_version` identifies each source's build. Unknown versions are `null`; an index name is
+never used to infer a version. Metadata failures use a static
+`error.code`, optionally with `http_status`, at the affected source. These metadata errors are
+informational and do not change the health check's HTTP status.
+
+Each worker warms its source metadata at startup and refreshes it every **10 minutes** in
+the background, independently of incoming requests. GET reads the current snapshot without
+waiting for a background refresh. `checked_at` is the UTC collection time represented by that
+snapshot. Upstream calls run concurrently with five-second deadlines; each complete collection
+has a 10-second deadline. Concurrent callers share a collection if no snapshot exists yet.
+
+Source-specific failures remain visible alongside healthy sources. Timeouts, connection errors,
+HTTP 429, and HTTP 5xx responses cause another collection after **30 seconds**. Consecutive
+transient failures double that delay (30, 60, 120 seconds, and so on), capped at the normal
+**10-minute** interval. A collection without transient errors resets the retry delay. Expected
+missing optional sources, configuration errors, and other source errors use the normal interval.
+An unexpected collection failure retains the previous snapshot and its `checked_at`, adds a
+backend-level `refresh_error` with code `metadata_unavailable`, and uses the same retry backoff.
+If no snapshot exists, it reports a backend-level `error` with that code instead of `sources`.
+The next completed collection clears `refresh_error`. Worker shutdown cancels pending collections
+and the background timer. Metadata refresh does not change annotation routing.
+
+GET and HEAD share a separate annotation health cache, scoped to the worker and backend
+configuration. Successful checks are cached for **5 seconds**, failures for **1 second**, and
+each check has a 10-second total deadline. Concurrent probes share one check; a disconnected
+caller cannot cancel it for the others. An expired healthy result is never served after a
+failed check. Failures retain `{"success": false, "error": "..."}`: HTTP 500 when the expected
+annotation is missing, or HTTP 400 when the check raises an exception or times out.
+Exception details are logged server-side; the public error uses a fixed message.
+`HEAD /status` uses the same health result without reading source metadata or returning a body.
+All GET and HEAD status responses, including failures, send `Cache-Control: no-store`.
+
+Set `ANNOTATOR_DEPLOYMENT_ENV` to the deployment environment, for example `ci`, `test`, or
+`prod`. It takes precedence over `application.configuration.DEPLOYMENT_ENVIRONMENT` in the
+JSON configuration when nonempty. The value is loaded at startup, trimmed, and defaults to
+`unknown` when unset or blank; request headers and hostnames do not determine it. Restart the
+service after changing the deployment environment or OpenAPI version.
+
+Kubernetes deployments populate `ANNOTATOR_DEPLOYMENT_ENV` from the pod's
+`gov.nih.ncats.appenv` label through the Downward API. Set that label under `ncats.labels` in
+the environment's Helm values; the chart defaults to `unknown`.
+
 ##### OpenTelemetry tracing
 
 The service can export Sanic request spans and downstream HTTPX spans to a
@@ -205,7 +408,9 @@ to override the configured route exclusions. The Helm deployment enables
 tracing and targets `http://jaeger-otel-collector.sri:4318` by default.
 
 The annotator query backend is controlled with `ANNOTATOR_QUERY_BACKEND`. Supported values are
-`biothings` and `elasticsearch`; when unset, the service uses `biothings`.
+`biothings`, `biothings-api`, `elasticsearch`, and `es`. Values are case-insensitive and surrounding
+whitespace is trimmed. `biothings-api` resolves to `biothings`, and `es` resolves to
+`elasticsearch`; when unset, the service uses `biothings`.
 The checked-in Helm defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch` and
 `ELASTICSEARCH_CONNECTION=in_cluster`; set `ANNOTATOR_QUERY_BACKEND` to `biothings` during deployment
 to switch back.
@@ -214,23 +419,28 @@ Set `ELASTICSEARCH_CONNECTION` to one of the named presets in
 `http://elasticsearch.es-core-components.svc.cluster.local:9200` and is used by both CI and test
 deployments. The `local` preset targets Elasticsearch on `localhost:9200`. The `ci_forward` and
 `test_forward` presets also connect to `localhost:9200`, for an already-established port-forward,
-and send the corresponding environment's ingress host header.
+and send the corresponding environment's ingress host header. `prod_forward` connects to
+`localhost:9200` without an ingress host override, for a direct forward to the production
+Elasticsearch service. Each forwarded preset records its target environment in
+`forwarded_environment`; the status endpoint uses that metadata to format `connection`.
 The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
-the selected `elasticsearch_connection`. For a live check of a directly constructed Python instance,
+the selected `elasticsearch_connection` preset name. For a live check of a directly constructed Python instance,
 see [Direct Python usage](#direct-python-usage).
 
 ##### Per-request query backend override
 
 The `GET /curie/{curie}`, `POST /curie`, and `POST /trapi` endpoints accept an optional
 `query_backend` query parameter. Omit it to use the backend selected for the deployment by
-`ANNOTATOR_QUERY_BACKEND`. Use the canonical values `biothings` or `elasticsearch` to override the
-backend for only that request; `es` is accepted as an alias for `elasticsearch`.
+`ANNOTATOR_QUERY_BACKEND`. Accepted values are `biothings`, `biothings-api`, `elasticsearch`, and
+`es`, case-insensitively with surrounding whitespace trimmed. `biothings-api` is an alias for
+`biothings`, and `es` is an alias for `elasticsearch`; either changes the backend for only that request.
 Unsupported values are ignored and the request uses the deployment default.
 Successful query responses include the canonical backend in the `X-Query-Backend` response header.
-When a recognized CURIE prefix is unavailable through that backend, its result contains a structured
-`skipped` status with the source, selected backend, and `source_unavailable_for_backend` reason.
-`X-Skipped-Curie-Prefixes` also summarizes the affected prefixes as comma-separated values. Unknown
-CURIE prefixes are not included in this header.
+PubMed supports only Elasticsearch. A single PubMed CURIE requested through BioThings returns
+HTTP 422; bulk and TRAPI requests retain their supported results and mark PubMed entries as
+`skipped`, with the source, selected backend, and `source_unavailable_for_backend` reason.
+`X-Skipped-Curie-Prefixes` summarizes skipped prefixes as comma-separated values. Unknown CURIE
+prefixes are not included in this header. See the PubMed section below for examples.
 
 ```shell
 curl 'http://localhost:9000/curie/NCBIGene:1017?query_backend=biothings'
@@ -251,14 +461,32 @@ source is built and indexed there, the default annotation response includes its 
 biomedical sources, PubMed has its own annotator client configuration rather than being merged into
 `annotator_extra`.
 
-For the `biothings` query backend, the annotator discovers available sources from the API's
-`/api/list` endpoint using a short-lived, per-host cache. Discovery requests revalidate intermediary
-caches, concurrent refreshes share one request, and discovery failures use a brief retry backoff.
-While `pubmed` is absent from that authoritative list, PMID requests return a one-item,
-not-found-shaped skipped result without making a downstream PubMed annotation query and set
-`X-Skipped-Curie-Prefixes: PMID`. Skipped responses use `Cache-Control: no-store`. The `notfound`
-field preserves the normal result shape, while `skipped` indicates that the PubMed annotation lookup
-was not made:
+PubMed is supported only by the `elasticsearch` backend. This applies to the `PMID`, `doi`,
+`DOI`, `PMC`, and `pmc` CURIE prefixes. When the selected backend is `biothings`, the annotator
+does not query a PubMed API and does not switch to Elasticsearch automatically.
+URL-encode CURIEs used in the GET path, including the slash in DOI values.
+
+A single request such as `GET /curie/PMID:30690000?query_backend=biothings` returns HTTP 422
+with `Cache-Control: no-store`, `X-Query-Backend: biothings`, and this error:
+
+```json
+{
+  "input": "PMID:30690000",
+  "endpoint": "/curie/",
+  "error": "unsupported_source_backend",
+  "message": "Source 'pubmed' is not supported by the 'biothings' backend. Use query_backend=elasticsearch.",
+  "source": "pubmed",
+  "query_backend": "biothings",
+  "supported_backends": ["elasticsearch"]
+}
+```
+
+Bulk `POST /curie` requests still return HTTP 200 and annotate supported CURIEs. PubMed entries
+receive a one-item skipped result, as shown below. TRAPI requests also return HTTP 200, preserve
+the affected nodes, and add the skipped result in a `biothings_query_status` attribute. Both
+responses set `X-Skipped-Curie-Prefixes` to the affected prefixes and use `Cache-Control: no-store`.
+The `notfound` field preserves the normal result shape; `skipped` means no annotation lookup
+was attempted, rather than that PubMed contained no matching record:
 
 ```json
 {
@@ -275,11 +503,9 @@ was not made:
 }
 ```
 
-The future BioThings endpoint is already configured as `/pubmed`. Once `pubmed` appears in the
-source list and its metadata is available, the annotator automatically constructs that client and
-queries it without another code or configuration change. A source-discovery timeout, invalid
-response, or server error returns HTTP 503 with `Cache-Control: no-store` rather than incorrectly
-reporting a skip.
+Select `query_backend=elasticsearch` to annotate PubMed CURIEs. The dedicated publication
+metadata endpoints below already use Elasticsearch. `/status` lists PubMed only under
+`available_query_backends.elasticsearch.sources`.
 
 ```shell
 curl 'http://localhost:9000/curie/PMID:12345678?query_backend=elasticsearch'
@@ -344,8 +570,8 @@ follow from the transport rather than the service:
 
 These routes are deliberately separate from the generic annotation pipeline. They always read the
 `annotator-pubmed` Elasticsearch alias and retrieve only the `pubmed` source object. They do not
-perform BioThings source discovery, CURIE grouping, extra annotation lookup, or per-request backend
-selection. The request has a two-second total backend deadline by default (configurable with
+perform CURIE grouping, extra annotation lookup, or per-request backend selection. The request has a
+two-second total backend deadline by default (configurable with
 `DOCUMENT_METADATA_REQUEST_TIMEOUT`) so a degraded Elasticsearch service fails quickly.
 
 PMIDs are the document `_id`, so they resolve through one exact-ID Elasticsearch `_mget` for the whole

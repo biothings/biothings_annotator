@@ -6,6 +6,7 @@ from .annotator import (
     InvalidCurieError,
     ResponseTransformer,
     TRAPIInputError,
+    UnsupportedSourceBackendError,
     utils,
 )
 
@@ -15,6 +16,7 @@ __all__ = [
     "ResponseTransformer",
     "InvalidCurieError",
     "TRAPIInputError",
+    "UnsupportedSourceBackendError",
     "BIOLINK_PREFIX_to_BioThings",
     "ANNOTATOR_CLIENTS",
     "utils",

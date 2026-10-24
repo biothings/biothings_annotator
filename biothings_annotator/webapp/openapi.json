@@ -21,38 +21,242 @@
       "get": {
         "operationId": "get~status_endpoint",
         "summary": "Checks the health status of the annotator service",
-        "tags": ["health"],
+        "description": "Checks that the deployment default query backend can annotate NCBIGene:1017 and returns service information plus source build versions for both backends. query_backend identifies the default; request query parameters do not override it. The API version comes from this specification; /version separately reports the build Git commit. Source metadata is informational and does not affect HTTP health or annotation routing. Each worker warms metadata at startup and refreshes it every 600 seconds in the background, independently of incoming requests. GET reads the current snapshot while a refresh runs; concurrent callers share collection when no snapshot exists. Upstream metadata calls run concurrently with five-second deadlines and collection has a 10-second total deadline. Source-local errors remain visible; timeouts, connection errors, HTTP 429 and HTTP 5xx cause a retry after 30 seconds. Other source errors use the normal interval. Unexpected collection failure retains the previous snapshot and checked_at, exposes backend refresh_error with code metadata_unavailable, and retries after 30 seconds; without an existing snapshot it exposes backend error instead of sources. GET and HEAD share an annotation health cache per worker and backend configuration: 5 seconds for success, 1 second for failure, and a 10-second total deadline. Concurrent health probes share one check. Expired success is not served after failure. All status responses send Cache-Control: no-store.",
+        "tags": [
+          "health"
+        ],
         "responses": {
           "200": {
-            "description": "A successful network status check",
+            "description": "Successful annotation health check, cached for up to five seconds, including any informational source metadata errors",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "status",
+                    "deployment_environment",
+                    "version",
+                    "query_backend",
+                    "available_query_backends"
+                  ],
                   "properties": {
-                    "success": {
-                      "type": "boolean"
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "running"
+                      ],
+                      "description": "Service status after a successful health check.",
+                      "example": "running"
+                    },
+                    "deployment_environment": {
+                      "type": "string",
+                      "description": "Explicit deployment environment loaded at startup from ANNOTATOR_DEPLOYMENT_ENV or application.configuration.DEPLOYMENT_ENVIRONMENT. Kubernetes supplies the environment variable from the gov.nih.ncats.appenv pod label. Defaults to unknown when unset; it is not inferred from request headers or hostnames.",
+                      "example": "ci"
+                    },
+                    "version": {
+                      "type": "string",
+                      "description": "Translator Annotation Service API version from the served OpenAPI specification.",
+                      "example": "1.0"
+                    },
+                    "query_backend": {
+                      "type": "string",
+                      "enum": [
+                        "biothings",
+                        "elasticsearch"
+                      ],
+                      "description": "Deployment default backend used by this health check.",
+                      "example": "elasticsearch"
+                    },
+                    "available_query_backends": {
+                      "type": "object",
+                      "description": "Metadata for each available backend. The biothings-api entry corresponds to the canonical biothings query backend.",
+                      "required": [
+                        "biothings-api",
+                        "elasticsearch"
+                      ],
+                      "properties": {
+                        "biothings-api": {
+                          "$ref": "#/components/schemas/StatusBioThingsBackend"
+                        },
+                        "elasticsearch": {
+                          "$ref": "#/components/schemas/StatusElasticsearchBackend"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "status": "running",
+                  "deployment_environment": "ci",
+                  "version": "1.0",
+                  "query_backend": "elasticsearch",
+                  "available_query_backends": {
+                    "biothings-api": {
+                      "checked_at": "2026-10-20T18:00:00+00:00",
+                      "sources": {
+                        "mygene": {
+                          "build_version": "20261019",
+                          "sources": [
+                            {"name": "ensembl", "source_version": "116"},
+                            {"name": "entrez", "source_version": "20261009"},
+                            {"name": "uniprot", "source_version": "20260903"}
+                          ]
+                        },
+                        "hpo": {
+                          "build_version": "20250120",
+                          "sources": [
+                            {"name": "hpo", "source_version": "2025-01-19"}
+                          ]
+                        }
+                      }
+                    },
+                    "elasticsearch": {
+                      "connection": "ci_cluster",
+                      "checked_at": "2026-10-20T18:00:00+00:00",
+                      "sources": {
+                        "mygene": {
+                          "alias": "gene",
+                          "index": {
+                            "name": "mygene_allspecies_20260705_bgks2qnv",
+                            "build_version": "20260705",
+                            "sources": [
+                              {"name": "ensembl", "source_version": "116"},
+                              {"name": "entrez", "source_version": "20260705"},
+                              {"name": "uniprot", "source_version": "20260610"}
+                            ]
+                          }
+                        },
+                        "hpo": {
+                          "alias": "hpo",
+                          "index": {
+                            "name": "hpo_20251027_b3jbx7z4",
+                            "build_version": "20251027",
+                            "sources": [
+                              {"name": "hpo", "source_version": "2025-10-26"}
+                            ]
+                          }
+                        },
+                        "pubmed": {
+                          "alias": "annotator-pubmed",
+                          "index": {
+                            "name": "pubmed_20260814_ew8jmctk_202608201240",
+                            "build_version": "20260814",
+                            "sources": [
+                              {"name": "pubmed_metadata", "source_version": "2026aug5"}
+                            ]
+                          }
+                        },
+                        "annotator_extra": {
+                          "alias": "annotator-annotations",
+                          "error": {
+                            "code": "http_error",
+                            "http_status": 404
+                          }
+                        }
+                      }
                     }
                   }
                 }
               }
+            },
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
             }
           },
           "400": {
-            "description": "An unsuccessful network status check",
+            "description": "The health check raised an exception",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
                   "properties": {
                     "success": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
                     },
                     "error": {
                       "type": "string"
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
+            }
+          },
+          "500": {
+            "description": "The health check did not return the expected annotation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "Service unavailable due to a failed data check!"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "operationId": "head~status_endpoint",
+        "summary": "Checks service health without collecting source metadata",
+        "description": "Shares GET's annotation health cache without reading source metadata or returning a response body. Success is cached for five seconds and failure for one second per worker and backend configuration, concurrent probes share one check, and each check has a ten-second deadline. Worker startup independently warms source metadata and starts its background refresh.",
+        "tags": [
+          "health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful annotation health check, cached for up to five seconds",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
+            }
+          },
+          "400": {
+            "description": "The health check raised an exception",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
+              }
+            }
+          },
+          "500": {
+            "description": "The health check did not return the expected annotation",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/StatusCacheControl"
               }
             }
           }
@@ -63,17 +267,19 @@
       "get": {
         "operationId": "get~version_endpoint",
         "summary": "Checks the version of the annotator service",
+        "description": "Reports the build commit and active backend. version.txt takes precedence. Only when that file is missing and the resolved deployment environment is local does the service use a startup Git snapshot of the loaded package checkout: full HEAD with -dirty for tracked, staged, or untracked changes. Restart to refresh the snapshot. Missing files outside local, or an unavailable local Git snapshot, produce Unknown. Local responses use Cache-Control: no-store. The API version remains available separately in /status.",
         "tags": ["metadata"],
         "responses": {
           "200": {
-            "description": "Successful github commit hash generation",
+            "description": "Build commit or Unknown, together with the active query backend",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "version": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Contents of version.txt; if missing in the local environment, the startup Git commit with an optional -dirty suffix; otherwise Unknown."
                     },
                     "query_backend": {
                       "type": "string",
@@ -272,6 +478,7 @@
       "get": {
         "operationId": "get~curie_endpoint",
         "summary": "Retrieve annotation objects based on a CURIE ID",
+        "description": "PubMed identifiers (PMID, doi, DOI, PMC, and pmc) require query_backend=elasticsearch. If the selected backend is biothings, returns HTTP 422 before an annotation query. The service does not switch backends automatically.",
         "tags": ["translator"],
         "parameters": [
           {
@@ -398,7 +605,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A CURIE-keyed annotation object, or a not-found-shaped BackendSkipResult when source discovery confirms that the CURIE source is unavailable through the selected backend.",
+            "description": "A CURIE-keyed annotation object. PubMed requested through BioThings is rejected with HTTP 422 before an annotation query.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/AnnotationCacheControl"
@@ -487,18 +694,18 @@
               }
             }
           },
-          "503": {
-            "description": "BioThings source availability could not be determined. This is retryable and is not reported as a skipped source.",
+          "422": {
+            "description": "The selected backend does not support this source. PubMed requires Elasticsearch; no BioThings annotation request is made.",
             "headers": {
               "Cache-Control": {
-                "$ref": "#/components/headers/TransientErrorCacheControl"
-              }
+                "description": "Backend rejection responses must not be cached.",
+                "schema": {"type": "string", "enum": ["no-store"]}
+              },
+              "X-Query-Backend": {"$ref": "#/components/headers/QueryBackend"}
             },
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SourceDiscoveryError"
-                }
+                "schema": {"$ref": "#/components/schemas/UnsupportedSourceBackendError"}
               }
             }
           },
@@ -555,6 +762,7 @@
       "post": {
         "operationId": "post~curie_endpoint",
         "summary": "For a list of curie IDs, return the expanded annotation objects",
+        "description": "PubMed identifiers (PMID, doi, DOI, PMC, and pmc) require Elasticsearch. With the biothings backend, PubMed entries receive BackendSkipResult and supported entries are still annotated in an HTTP 200 response. No PubMed annotation query or automatic backend switch occurs. Skipped responses include X-Skipped-Curie-Prefixes and Cache-Control: no-store.",
         "tags": ["translator"],
         "parameters": [
           {
@@ -634,7 +842,7 @@
         },
         "responses": {
           "200": {
-            "description": "A CURIE-keyed annotation object. CURIEs whose source is confirmed absent from the selected backend contain a not-found-shaped BackendSkipResult.",
+            "description": "A CURIE-keyed annotation object. CURIEs whose source is not supported by the selected backend contain a not-found-shaped BackendSkipResult.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/AnnotationCacheControl"
@@ -1333,21 +1541,6 @@
               }
             }
           },
-          "503": {
-            "description": "BioThings source availability could not be determined. This is retryable and is not reported as a skipped source.",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/TransientErrorCacheControl"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SourceDiscoveryError"
-                }
-              }
-            }
-          },
           "400": {
             "description": "A response indicating an improperly formatted query",
             "content": {
@@ -1411,6 +1604,7 @@
       "post": {
         "operationId": "post~trapi_endpoint",
         "summary": "Provides an annotated response based off the TRAPI body provided",
+        "description": "PubMed identifiers require Elasticsearch. With the biothings backend, affected nodes are preserved with a skipped result in their biothings_query_status attribute; supported nodes are still annotated and the response is HTTP 200. No PubMed annotation query or automatic backend switch occurs. Skipped responses include X-Skipped-Curie-Prefixes and Cache-Control: no-store.",
         "tags": ["translator"],
         "parameters": [
           {
@@ -1530,7 +1724,7 @@
         },
         "responses": {
           "200": {
-            "description": "A node-keyed annotation object. CURIEs whose source is confirmed absent from the selected backend receive a biothings_query_status attribute containing a not-found-shaped BackendSkipResult.",
+            "description": "A node-keyed annotation object. CURIEs whose source is not supported by the selected backend receive a biothings_query_status attribute containing a not-found-shaped BackendSkipResult.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/AnnotationCacheControl"
@@ -1841,21 +2035,6 @@
               }
             }
           },
-          "503": {
-            "description": "BioThings source availability could not be determined. This is retryable and is not reported as a skipped source.",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/TransientErrorCacheControl"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SourceDiscoveryError"
-                }
-              }
-            }
-          },
           "400": {
             "description": "A response indicating an improperly formatted query",
             "content": {
@@ -1949,18 +2128,20 @@
   },
   "components": {
     "headers": {
+      "StatusCacheControl": {
+        "description": "HTTP responses, including health-check failures, must not be cached. Internal source snapshots refresh every 600 seconds in the background; annotation health uses a separate five-second success and one-second failure cache.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "no-store"
+          ]
+        }
+      },
       "AnnotationCacheControl": {
-        "description": "Normal annotation responses use the configured public cache lifetime. A response containing a BackendSkipResult uses no-store so newly deployed sources can activate promptly.",
+        "description": "Normal annotation responses use the configured public cache lifetime. Responses containing a BackendSkipResult use no-store.",
         "schema": {
           "type": "string",
           "example": "no-store"
-        }
-      },
-      "TransientErrorCacheControl": {
-        "description": "Source-discovery errors are transient and must not be cached.",
-        "schema": {
-          "type": "string",
-          "enum": ["no-store"]
         }
       },
       "QueryBackend": {
@@ -1971,7 +2152,7 @@
         }
       },
       "SkippedCuriePrefixes": {
-        "description": "Comma-separated recognized CURIE prefixes skipped because source discovery confirmed they are unavailable through the selected query backend. This header is omitted when no known prefixes were skipped.",
+        "description": "Comma-separated recognized CURIE prefixes skipped because the selected backend does not support their source. Bulk and TRAPI PubMed requests through BioThings use this header. It is omitted when no known prefixes were skipped.",
         "schema": {
           "type": "string",
           "example": "PMID"
@@ -1979,6 +2160,265 @@
       }
     },
     "schemas": {
+      "UnsupportedSourceBackendError": {
+        "type": "object",
+        "required": ["input", "endpoint", "error", "message", "source", "query_backend", "supported_backends"],
+        "description": "A single-CURIE request selected a backend that does not support its source. No annotation request is sent, and the service does not switch backends.",
+        "properties": {
+          "input": {"type": "string", "example": "PMID:30690000"},
+          "endpoint": {"type": "string", "enum": ["/curie/"]},
+          "error": {"type": "string", "enum": ["unsupported_source_backend"]},
+          "message": {
+            "type": "string",
+            "example": "Source 'pubmed' is not supported by the 'biothings' backend. Use query_backend=elasticsearch."
+          },
+          "source": {"type": "string", "example": "pubmed"},
+          "query_backend": {"type": "string", "enum": ["biothings", "elasticsearch"], "example": "biothings"},
+          "supported_backends": {
+            "type": "array",
+            "items": {"type": "string", "enum": ["biothings", "elasticsearch"]},
+            "example": ["elasticsearch"]
+          }
+        }
+      },
+      "StatusSourceMetadata": {
+        "type": "object",
+        "required": [
+          "build_version",
+          "sources"
+        ],
+        "properties": {
+          "build_version": {
+            "type": "string",
+            "nullable": true,
+            "description": "Build version supplied by metadata, or null when unknown. Never inferred from the index name."
+          },
+          "sources": {
+            "type": "array",
+            "description": "All upstream sources recorded in this API's /metadata src, sorted by name, without a whitelist or entry limit. Empty when src is absent. Versions describe the data served by this API.",
+            "items": {
+              "$ref": "#/components/schemas/StatusUpstreamSource"
+            }
+          }
+        }
+      },
+      "StatusUpstreamSource": {
+        "type": "object",
+        "required": [
+          "name",
+          "source_version"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Source name exactly as recorded in the backend's metadata src."
+          },
+          "source_version": {
+            "type": "string",
+            "nullable": true,
+            "description": "Scalar src entry version, normalized to a string; null when missing, blank, boolean, or structured. Never inferred from build_version, an index name, or timestamps."
+          }
+        }
+      },
+      "StatusMetadataError": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "description": "Informational metadata failure. Contains a static code and optional HTTP status, without upstream URLs, credentials, or raw error text.",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "timeout",
+              "http_error",
+              "connection_error",
+              "invalid_metadata",
+              "configuration_error",
+              "metadata_unavailable",
+              "multiple_indices"
+            ]
+          },
+          "http_status": {
+            "type": "integer",
+            "description": "Upstream HTTP error status, when available."
+          }
+        }
+      },
+      "StatusBioThingsDataset": {
+        "description": "Build version and all upstream source versions from this source API /metadata, or a source-local metadata error.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StatusSourceMetadata"
+          },
+          {
+            "type": "object",
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "$ref": "#/components/schemas/StatusMetadataError"
+              }
+            }
+          }
+        ]
+      },
+      "StatusElasticsearchDataset": {
+        "type": "object",
+        "required": [
+          "alias"
+        ],
+        "description": "Configured alias and one concrete index with its mapping _meta build version and all upstream source versions, or a source-local metadata error. An alias resolving to multiple indices reports multiple_indices instead of selecting one.",
+        "properties": {
+          "alias": {
+            "type": "string",
+            "nullable": true,
+            "description": "Configured alias or index; null if missing from configuration."
+          },
+          "index": {
+            "type": "object",
+            "required": [
+              "name",
+              "build_version",
+              "sources"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Concrete index name resolved by Elasticsearch."
+              },
+              "build_version": {
+                "type": "string",
+                "nullable": true,
+                "description": "Build version supplied by index mapping _meta, or null when unknown. Never inferred from the index name."
+              },
+              "sources": {
+                "type": "array",
+                "description": "All upstream sources recorded in this concrete index's mapping _meta.src, sorted by name, without a whitelist or entry limit. Empty when src is absent. Versions describe the data used for this indexed build.",
+                "items": {
+                  "$ref": "#/components/schemas/StatusUpstreamSource"
+                }
+              }
+            }
+          },
+          "error": {
+            "$ref": "#/components/schemas/StatusMetadataError"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "index"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          }
+        ]
+      },
+      "StatusBioThingsBackend": {
+        "type": "object",
+        "required": [
+          "checked_at"
+        ],
+        "properties": {
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC time of the metadata collection represented by this snapshot. Workers refresh every 600 seconds in the background; a later unexpected collection failure retains this timestamp and exposes refresh_error.",
+            "example": "2026-10-20T18:00:00+00:00"
+          },
+          "sources": {
+            "type": "object",
+            "description": "Status display names are shared with Elasticsearch and derived from client configuration: typed SDK clients use their <service>.info hostname, yielding mygene, mychem, and mydisease; endpoint-based clients yield hpo, ncit, and annotator_extra. Custom URLs outside this convention, unresolved configurations, and conflicting names fall back to the configured source key. Names remain stable through metadata request failures. Internal source keys and query routing are unchanged. PubMed is Elasticsearch-only and is omitted here. The example abbreviates this set and uses illustrative versions.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StatusBioThingsDataset"
+            }
+          },
+          "error": {
+            "$ref": "#/components/schemas/StatusMetadataError"
+          },
+          "refresh_error": {
+            "allOf": [{"$ref": "#/components/schemas/StatusMetadataError"}],
+            "description": "A later collection failed unexpectedly. The previous snapshot and checked_at remain available, and collection retries after 30 seconds. Cleared by a completed collection."
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "sources"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          }
+        ],
+        "description": "BioThings source metadata refreshed in the background. Unexpected collection failure retains a previous snapshot with refresh_error; without a snapshot it reports a metadata_unavailable error in place of sources. Source-specific failures remain local."
+      },
+      "StatusElasticsearchBackend": {
+        "type": "object",
+        "required": [
+          "checked_at"
+        ],
+        "properties": {
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC time of the metadata collection represented by this snapshot. Workers refresh every 600 seconds in the background; a later unexpected collection failure retains this timestamp and exposes refresh_error.",
+            "example": "2026-10-20T18:00:00+00:00"
+          },
+          "connection": {
+            "type": "string",
+            "description": "Configured cluster target. Forwarded presets use their forwarded_environment metadata to report ci_cluster_forwarded, test_cluster_forwarded, or prod_cluster_forwarded, independently of deployment_environment. The in_cluster preset uses deployment_environment to report ci_cluster, test_cluster, or prod_cluster; an unrecognized environment reports unknown_cluster. The local preset reports local. A forwarded preset with an unknown environment reports unknown_cluster_forwarded; an unrecognized preset reports unknown. These labels describe configured targets, not verified tunnel destinations or successful connectivity. Connection URLs and credentials are not exposed.",
+            "enum": [
+              "ci_cluster_forwarded",
+              "test_cluster_forwarded",
+              "prod_cluster_forwarded",
+              "ci_cluster",
+              "test_cluster",
+              "prod_cluster",
+              "unknown_cluster",
+              "unknown_cluster_forwarded",
+              "local",
+              "unknown"
+            ],
+            "example": "ci_cluster"
+          },
+          "sources": {
+            "type": "object",
+            "description": "Uses the same status display names as BioThings: mygene, mychem, mydisease, hpo, ncit, and annotator_extra, derived from client configuration. Sources without an API client retain their configured key, including the Elasticsearch-only pubmed source. Custom URLs outside the <service>.info convention, unresolved configurations, and conflicting names fall back to the configured source key. These are status labels only; alias preserves the configured Elasticsearch alias or index, and index contains the resolved concrete name and build_version. Multiple resolved indices produce a multiple_indices metadata error. Internal source keys and query routing are unchanged. Supported sources remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StatusElasticsearchDataset"
+            }
+          },
+          "error": {
+            "$ref": "#/components/schemas/StatusMetadataError"
+          },
+          "refresh_error": {
+            "allOf": [{"$ref": "#/components/schemas/StatusMetadataError"}],
+            "description": "A later collection failed unexpectedly. The previous snapshot and checked_at remain available, and collection retries after 30 seconds. Cleared by a completed collection."
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "connection",
+              "sources"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          }
+        ],
+        "description": "Elasticsearch source metadata refreshed in the background. Unexpected collection failure retains a previous snapshot with refresh_error; without a snapshot it reports a metadata_unavailable error in place of connection and sources. Source-specific failures remain local."
+      },
       "PublicationId": {
         "type": "string",
         "description": "Publication identifier. PMID resolves against the document _id; PMC and doi resolve against alternate identifiers in pubmed.identifiers. A PMCID keeps PubMed's doubled form, PMC:PMC1904490 rather than PMC:1904490. Prefix casing is matched case-insensitively, which is what the character classes in the pattern encode.",
@@ -2093,7 +2533,7 @@
       },
       "BackendSkipResult": {
         "type": "array",
-        "description": "Per-CURIE status returned in the same list shape as a not-found annotation result when source discovery confirms that a recognized source is unavailable through the selected backend. The skipped flag distinguishes this status from a completed query with no match.",
+        "description": "Per-CURIE status in the same list shape as a not-found result when the selected backend does not support a source. Bulk and TRAPI PubMed requests through BioThings use this shape; single-CURIE requests return HTTP 422 instead. The skipped flag means the lookup was not attempted.",
         "minItems": 1,
         "maxItems": 1,
         "items": {
@@ -2126,24 +2566,6 @@
             }
           }
         }
-      },
-      "SourceDiscoveryError": {
-        "type": "object",
-        "required": ["input", "endpoint", "message", "source"],
-        "properties": {
-          "input": {},
-          "endpoint": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string",
-            "enum": ["Unable to determine BioThings source availability."]
-          },
-          "source": {
-            "type": "string",
-            "example": "pubmed"
-          }
-        }
       }
     },
     "parameters": {
@@ -2161,7 +2583,7 @@
         "in": "query",
         "required": false,
         "allowEmptyValue": true,
-        "description": "Backend to use for this request. Omit the parameter to use the deployment default. The canonical values are `biothings` and `elasticsearch`; `es` is accepted as an alias for `elasticsearch`. Unsupported values are ignored and use the deployment default.",
+        "description": "Backend to use for this request. Omit the parameter to use the deployment default. Accepted values are `biothings`, `biothings-api`, `elasticsearch`, and `es`, case-insensitively with surrounding whitespace trimmed. The canonical values are `biothings` and `elasticsearch`; `biothings-api` is an alias for `biothings`, and `es` is an alias for `elasticsearch`. Unsupported values are ignored and use the deployment default.",
         "schema": {
           "type": "string"
         },
@@ -2169,6 +2591,10 @@
           "biothings": {
             "summary": "Use the BioThings client for this request",
             "value": "biothings"
+          },
+          "biothingsAlias": {
+            "summary": "Use the BioThings API alias",
+            "value": "biothings-api"
           },
           "elasticsearch": {
             "summary": "Use Elasticsearch for this request",

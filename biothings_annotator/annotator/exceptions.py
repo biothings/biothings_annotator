@@ -36,10 +36,18 @@ class BackendVerificationError(RuntimeError):
         super().__init__(self.message)
 
 
-class SourceDiscoveryError(RuntimeError):
-    def __init__(self, source=None):
+class UnsupportedSourceBackendError(ValueError):
+    """The selected backend cannot serve this source."""
+
+    def __init__(self, source: str, query_backend: str, supported_backends: List[str]):
         self.source = source
-        self.message = "Unable to determine BioThings source availability."
+        self.query_backend = query_backend
+        self.supported_backends = list(supported_backends)
+        choices = ", ".join(self.supported_backends)
+        self.message = (
+            f"Source '{source}' is not supported by the '{query_backend}' backend. "
+            f"Use query_backend={choices}."
+        )
         super().__init__(self.message)
 
 
