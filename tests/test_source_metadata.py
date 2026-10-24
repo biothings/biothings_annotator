@@ -50,13 +50,12 @@ async def test_collects_actual_client_urls_and_distinct_backend_build_versions(
         requests.append(request)
         if request.url.host == "localhost":
             assert request.headers["host"] == "core-components-es.ci.transltr.io"
-            assert request.url.params["filter_path"] == "*.mappings._meta.build_version,*.settings.index.uuid"
+            assert request.url.params["filter_path"] == (
+                "*.mappings._meta.build_version,*.mappings._meta.src,*.settings.index.uuid"
+            )
             return httpx.Response(
                 200,
                 json={
-                    "older-index": {
-                        "mappings": {"_meta": {"build_version": "20260705", "src": {"entrez": {"version": "old"}}}}
-                    },
                     "newer-index": {
                         "mappings": {"_meta": {"build_version": "20260805", "src": {"entrez": {"version": "new"}}}}
                     },
@@ -86,13 +85,19 @@ async def test_collects_actual_client_urls_and_distinct_backend_build_versions(
     }
     assert result["biothings"]["sources"]["mygene"] == {
         "build_version": "20260922",
+        "sources": [
+            {"name": "entrez", "source_version": "current"},
+            {"name": "numeric", "source_version": "42"},
+            {"name": "unknown", "source_version": None},
+        ],
     }
     assert result["elasticsearch"]["connection"] == "ci_forward"
     assert result["elasticsearch"]["sources"]["mygene"] == {
-        "index": "gene",
-        "indices": {
-            "older-index": {"build_version": "20260705"},
-            "newer-index": {"build_version": "20260805"},
+        "alias": "gene",
+        "index": {
+            "name": "newer-index",
+            "build_version": "20260805",
+            "sources": [{"name": "entrez", "source_version": "new"}],
         },
     }
 
@@ -125,11 +130,11 @@ async def test_biothings_service_names_come_from_client_urls(
     mock_metadata_transport(handler)
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert result["biothings"]["sources"] == {expected_name: {"build_version": "current"}}
+    assert result["biothings"]["sources"] == {expected_name: {"build_version": "current", "sources": []}}
     assert set(result["elasticsearch"]["sources"]) == {expected_name}
     assert result["elasticsearch"]["sources"][expected_name] == {
-        "index": "original_alias",
-        "indices": {"concrete_index": {"build_version": "older"}},
+        "alias": "original_alias",
+        "index": {"name": "concrete_index", "build_version": "older", "sources": []},
     }
     assert len(requests) == 2
     assert requests[0].url.host == f"{expected_name}.info"
@@ -161,7 +166,7 @@ async def test_endpoint_source_names_are_shared_by_both_backends(mock_metadata_t
 
     assert set(result["biothings"]["sources"]) == {endpoint}
     assert set(result["elasticsearch"]["sources"]) == {endpoint}
-    assert result["elasticsearch"]["sources"][endpoint]["index"] == "original_alias"
+    assert result["elasticsearch"]["sources"][endpoint]["alias"] == "original_alias"
     assert set(requests) == {f"https://custom.example.org/{endpoint}/metadata", "http://localhost:9200/original_alias"}
 
 
@@ -188,7 +193,10 @@ async def test_es_only_source_can_use_a_client_name_without_querying_the_api(moc
 
     assert result["biothings"]["sources"] == {}
     assert result["elasticsearch"]["sources"] == {
-        "mygene": {"index": "original_alias", "indices": {"concrete_index": {"build_version": "current"}}}
+        "mygene": {
+            "alias": "original_alias",
+            "index": {"name": "concrete_index", "build_version": "current", "sources": []},
+        }
     }
 
 
@@ -208,8 +216,8 @@ async def test_custom_client_url_names_have_a_predictable_fallback(
 
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert result["biothings"]["sources"][expected_name] == {"build_version": "current"}
-    assert result["biothings"]["sources"]["hpo"] == {"build_version": "current"}
+    assert result["biothings"]["sources"][expected_name] == {"build_version": "current", "sources": []}
+    assert result["biothings"]["sources"]["hpo"] == {"build_version": "current", "sources": []}
 
 
 async def test_shared_service_names_preserve_all_sources(mock_metadata_transport, two_datasets):
@@ -226,7 +234,7 @@ async def test_shared_service_names_preserve_all_sources(mock_metadata_transport
     assert result["biothings"]["sources"]["chem"]["build_version"] == "/v1/metadata"
 
 
-async def test_retains_indices_with_no_metadata_without_inferring_versions(mock_metadata_transport, two_datasets):
+async def test_retains_index_with_no_metadata_without_inferring_versions(mock_metadata_transport, two_datasets):
     def handler(request):
         payload = (
             {"gene_20260922": {"settings": {"index": {"uuid": "not-a-version"}}}}
@@ -238,10 +246,80 @@ async def test_retains_indices_with_no_metadata_without_inferring_versions(mock_
     mock_metadata_transport(handler)
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
-    assert result["biothings"]["sources"]["mygene"] == {"build_version": None}
-    assert result["elasticsearch"]["sources"]["mygene"]["indices"] == {
-        "gene_20260922": {"build_version": None}
+    assert result["biothings"]["sources"]["mygene"] == {"build_version": None, "sources": []}
+    assert result["elasticsearch"]["sources"]["mygene"] == {
+        "alias": "gene",
+        "index": {"name": "gene_20260922", "build_version": None, "sources": []},
     }
+
+
+@pytest.mark.parametrize("backend", ["biothings", "elasticsearch"])
+async def test_all_upstream_sources_are_retained_with_normalized_versions(mock_metadata_transport, two_datasets, backend):
+    upstream_sources = {f"unlisted_source_{number:02d}": {"version": str(number)} for number in range(37)}
+    upstream_sources.update(
+        {
+            "entrez": {"version": "20260705", "code": "private uploader details"},
+            "missing": {},
+            "numeric": {"version": 42},
+            "float": {"version": 1.5},
+            "boolean": {"version": False},
+            "structured": {"version": {"release": "not a scalar"}},
+            "blank": {"version": "  "},
+            "malformed": None,
+        }
+    )
+
+    def handler(request):
+        if request.url.host != "localhost":
+            return httpx.Response(200, json={"build_version": "api-build", "src": upstream_sources})
+        return httpx.Response(
+            200,
+            json={"concrete-index": {"mappings": {"_meta": {"build_version": "es-build", "src": upstream_sources}}}},
+        )
+
+    mock_metadata_transport(handler)
+    result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
+
+    metadata = result[backend]["sources"]["mygene"]
+    if backend == "elasticsearch":
+        metadata = metadata["index"]
+    assert metadata["build_version"] == ("es-build" if backend == "elasticsearch" else "api-build")
+    assert [entry["name"] for entry in metadata["sources"]] == sorted(upstream_sources)
+    assert all(set(entry) == {"name", "source_version"} for entry in metadata["sources"])
+    versions = {entry["name"]: entry["source_version"] for entry in metadata["sources"]}
+    assert versions["entrez"] == "20260705"
+    assert versions["numeric"] == "42"
+    assert versions["float"] == "1.5"
+    assert all(versions[name] is None for name in ("missing", "boolean", "structured", "blank", "malformed"))
+    assert "private" not in repr(result)
+
+
+async def test_multi_index_alias_is_reported_without_choosing_an_index(mock_metadata_transport, two_datasets):
+    def handler(request):
+        if request.url.host != "localhost":
+            return httpx.Response(200, json={"build_version": "current"})
+        if request.url.path == "/gene":
+            return httpx.Response(
+                200,
+                json={
+                    "older-index": {"mappings": {"_meta": {"build_version": "old"}}},
+                    "newer-index": {"mappings": {"_meta": {"build_version": "new"}}},
+                },
+            )
+        return httpx.Response(200, json={"hpo-index": {"mappings": {"_meta": {"build_version": "hpo-version"}}}})
+
+    mock_metadata_transport(handler)
+    result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
+
+    assert result["elasticsearch"]["sources"]["mygene"] == {
+        "alias": "gene",
+        "error": {"code": "multiple_indices"},
+    }
+    assert result["elasticsearch"]["sources"]["hpo"] == {
+        "alias": "hpo",
+        "index": {"name": "hpo-index", "build_version": "hpo-version", "sources": []},
+    }
+    assert result["biothings"]["sources"]["mygene"] == {"build_version": "current", "sources": []}
 
 
 async def test_pubmed_metadata_uses_elasticsearch_only(mock_metadata_transport):
@@ -252,7 +330,13 @@ async def test_pubmed_metadata_uses_elasticsearch_only(mock_metadata_transport):
         if request.url.host == "localhost":
             return httpx.Response(
                 200,
-                json={"pubmed-build": {"mappings": {"_meta": {"build_version": "20260814"}}}},
+                json={
+                    "pubmed-build": {
+                        "mappings": {
+                            "_meta": {"build_version": "20260814", "src": {"pubmed_metadata": {"version": "2026aug5"}}}
+                        }
+                    }
+                },
             )
         assert request.url.path != "/pubmed/metadata"
         return httpx.Response(200, json={"build_version": "other-source"})
@@ -262,8 +346,12 @@ async def test_pubmed_metadata_uses_elasticsearch_only(mock_metadata_transport):
 
     assert "pubmed" not in result["biothings"]["sources"]
     assert result["elasticsearch"]["sources"]["pubmed"] == {
-        "index": "annotator-pubmed",
-        "indices": {"pubmed-build": {"build_version": "20260814"}},
+        "alias": "annotator-pubmed",
+        "index": {
+            "name": "pubmed-build",
+            "build_version": "20260814",
+            "sources": [{"name": "pubmed_metadata", "source_version": "2026aug5"}],
+        },
     }
     assert any(request.url.host == "localhost" and request.url.path == "/annotator-pubmed" for request in requests)
     assert all(request.url.path != "/pubmed/metadata" for request in requests)
@@ -322,7 +410,7 @@ async def test_individual_errors_are_sanitized_and_other_sources_survive(
     assert result["biothings"]["sources"]["mygene"] == {"error": expected}
     assert result["biothings"]["sources"]["hpo"]["build_version"] == "good"
     assert result["elasticsearch"]["sources"]["mygene"] == {
-        "index": "gene",
+        "alias": "gene",
         "error": {"code": "http_error", "http_status": 404},
     }
     assert "private" not in repr(result)
@@ -342,7 +430,7 @@ async def test_invalid_es_connection_does_not_prevent_biothings_metadata(mock_me
     assert len(requests) == 2
     assert result["biothings"]["sources"]["mygene"]["build_version"] == "good"
     assert result["elasticsearch"]["sources"]["mygene"] == {
-        "index": "gene",
+        "alias": "gene",
         "error": {"code": "configuration_error"},
     }
 
@@ -386,7 +474,11 @@ async def test_all_datasets_fetch_concurrently_with_total_deadlines(mock_metadat
 
 @pytest.mark.parametrize(
     "payload",
-    [[], {}, {"index": []}, {"index": {"mappings": []}}, {"index": {"mappings": {"_meta": []}}}],
+    [
+        [], {}, {"index": []}, {"index": {"mappings": []}}, {"index": {"mappings": {"_meta": []}}},
+        {"index": {"mappings": {"_meta": {"src": []}}}},
+        {"index": {"mappings": {"_meta": {"src": None}}}},
+    ],
 )
 async def test_malformed_es_metadata_is_reported(mock_metadata_transport, two_datasets, payload):
     def handler(request):
@@ -396,6 +488,18 @@ async def test_malformed_es_metadata_is_reported(mock_metadata_transport, two_da
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
     assert result["elasticsearch"]["sources"]["mygene"]["error"] == {"code": "invalid_metadata"}
+
+
+@pytest.mark.parametrize("payload", [[], {"src": []}, {"src": None}])
+async def test_malformed_api_metadata_is_isolated(mock_metadata_transport, two_datasets, payload):
+    def handler(request):
+        return httpx.Response(200, json=payload if request.url.host == "mygene.info" else {})
+
+    mock_metadata_transport(handler)
+    result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
+
+    assert result["biothings"]["sources"]["mygene"] == {"error": {"code": "invalid_metadata"}}
+    assert result["biothings"]["sources"]["hpo"] == {"build_version": None, "sources": []}
 
 
 async def test_missing_client_type_never_triggers_sdk_discovery(mock_metadata_transport, two_datasets, monkeypatch):
@@ -418,7 +522,7 @@ async def test_malformed_dataset_configuration_is_isolated(mock_metadata_transpo
     result = await source_metadata.collect_backend_metadata("https://custom.example.org", "local")
 
     assert result["elasticsearch"]["sources"]["mygene"] == {
-        "index": None,
+        "alias": None,
         "error": {"code": "configuration_error"},
     }
     assert result["biothings"]["sources"]["mygene"]["build_version"] == "good"

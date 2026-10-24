@@ -89,20 +89,37 @@ def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versio
         "ci_cluster", "test_cluster", "prod_cluster", "unknown_cluster",
         "unknown_cluster_forwarded", "local", "unknown",
     }
-    versions_reference = {"$ref": "#/components/schemas/StatusBuildVersion"}
+    versions_reference = {"$ref": "#/components/schemas/StatusSourceMetadata"}
     assert versions_reference in schemas["StatusBioThingsDataset"]["oneOf"]
     elasticsearch_dataset = schemas["StatusElasticsearchDataset"]
-    assert elasticsearch_dataset["required"] == ["index"]
-    assert elasticsearch_dataset["properties"]["index"]["nullable"] is True
-    assert elasticsearch_dataset["properties"]["indices"]["additionalProperties"] == versions_reference
-    assert elasticsearch_dataset["oneOf"] == [{"required": ["indices"]}, {"required": ["error"]}]
+    assert elasticsearch_dataset["required"] == ["alias"]
+    assert set(elasticsearch_dataset["properties"]) == {"alias", "index", "error"}
+    assert elasticsearch_dataset["properties"]["alias"]["nullable"] is True
+    concrete_index = elasticsearch_dataset["properties"]["index"]
+    assert set(concrete_index["required"]) == {"name", "build_version", "sources"}
+    assert set(concrete_index["properties"]) == {"name", "build_version", "sources"}
+    assert concrete_index["properties"]["name"]["type"] == "string"
+    assert concrete_index["properties"]["build_version"]["nullable"] is True
+    index_sources = concrete_index["properties"]["sources"]
+    assert index_sources["type"] == "array"
+    upstream_reference = {"$ref": "#/components/schemas/StatusUpstreamSource"}
+    assert index_sources["items"] == upstream_reference
+    upstream_source = schemas["StatusUpstreamSource"]
+    assert upstream_source["type"] == "object"
+    assert set(upstream_source["required"]) == {"name", "source_version"}
+    assert set(upstream_source["properties"]) == {"name", "source_version"}
+    assert upstream_source["properties"]["source_version"]["nullable"] is True
+    assert elasticsearch_dataset["oneOf"] == [{"required": ["index"]}, {"required": ["error"]}]
 
-    versions = schemas["StatusBuildVersion"]
-    assert versions["required"] == ["build_version"]
-    assert set(versions["properties"]) == {"build_version"}
+    versions = schemas["StatusSourceMetadata"]
+    assert set(versions["required"]) == {"build_version", "sources"}
+    assert set(versions["properties"]) == {"build_version", "sources"}
     assert versions["properties"]["build_version"]["nullable"] is True
+    assert versions["properties"]["sources"]["type"] == "array"
+    assert versions["properties"]["sources"]["items"] == upstream_reference
     assert schemas["StatusMetadataError"]["required"] == ["code"]
     assert "metadata_unavailable" in schemas["StatusMetadataError"]["properties"]["code"]["enum"]
+    assert "multiple_indices" in schemas["StatusMetadataError"]["properties"]["code"]["enum"]
     assert schemas["StatusMetadataError"]["properties"]["http_status"]["type"] == "integer"
 
     example = success["example"]
@@ -110,14 +127,34 @@ def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versio
     assert backend_name in example["available_query_backends"]
     biothings_gene = example["available_query_backends"]["biothings-api"]["sources"]["mygene"]
     elasticsearch_gene = example["available_query_backends"]["elasticsearch"]["sources"]["mygene"]
-    assert elasticsearch_gene["index"] == "gene"
-    assert example["available_query_backends"]["elasticsearch"]["sources"]["hpo"]["index"] == "hpo"
+    assert biothings_gene["sources"] == [
+        {"name": "ensembl", "source_version": "116"},
+        {"name": "entrez", "source_version": "20261009"},
+        {"name": "uniprot", "source_version": "20260903"},
+    ]
+    assert elasticsearch_gene["alias"] == "gene"
+    assert elasticsearch_gene["index"]["name"] == "mygene_allspecies_20260705_bgks2qnv"
+    assert elasticsearch_gene["index"]["sources"] == [
+        {"name": "ensembl", "source_version": "116"},
+        {"name": "entrez", "source_version": "20260705"},
+        {"name": "uniprot", "source_version": "20260610"},
+    ]
+    assert example["available_query_backends"]["elasticsearch"]["sources"]["hpo"]["alias"] == "hpo"
     assert "hpo" in example["available_query_backends"]["biothings-api"]["sources"]
     assert example["available_query_backends"]["elasticsearch"]["connection"] == "ci_cluster"
-    assert biothings_gene["build_version"] != next(iter(elasticsearch_gene["indices"].values()))["build_version"]
+    assert biothings_gene["build_version"] != elasticsearch_gene["index"]["build_version"]
     assert example["status"] == "running"
     assert "pubmed" not in example["available_query_backends"]["biothings-api"]["sources"]
-    assert "error" in example["available_query_backends"]["elasticsearch"]["sources"]["pubmed"]
+    pubmed = example["available_query_backends"]["elasticsearch"]["sources"]["pubmed"]
+    assert pubmed == {
+        "alias": "annotator-pubmed",
+        "index": {
+            "name": "pubmed_20260814_ew8jmctk_202608201240",
+            "build_version": "20260814",
+            "sources": [{"name": "pubmed_metadata", "source_version": "2026aug5"}],
+        },
+    }
+    assert "error" in example["available_query_backends"]["elasticsearch"]["sources"]["annotator_extra"]
 
 
 @pytest.mark.unit

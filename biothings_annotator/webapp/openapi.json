@@ -95,10 +95,18 @@
                       "checked_at": "2026-10-20T18:00:00+00:00",
                       "sources": {
                         "mygene": {
-                          "build_version": "20261018"
+                          "build_version": "20261019",
+                          "sources": [
+                            {"name": "ensembl", "source_version": "116"},
+                            {"name": "entrez", "source_version": "20261009"},
+                            {"name": "uniprot", "source_version": "20260903"}
+                          ]
                         },
                         "hpo": {
-                          "build_version": "20250120"
+                          "build_version": "20250120",
+                          "sources": [
+                            {"name": "hpo", "source_version": "2025-01-19"}
+                          ]
                         }
                       }
                     },
@@ -107,23 +115,39 @@
                       "checked_at": "2026-10-20T18:00:00+00:00",
                       "sources": {
                         "mygene": {
-                          "index": "gene",
-                          "indices": {
-                            "mygene_20261011": {
-                              "build_version": "20261011"
-                            }
+                          "alias": "gene",
+                          "index": {
+                            "name": "mygene_allspecies_20260705_bgks2qnv",
+                            "build_version": "20260705",
+                            "sources": [
+                              {"name": "ensembl", "source_version": "116"},
+                              {"name": "entrez", "source_version": "20260705"},
+                              {"name": "uniprot", "source_version": "20260610"}
+                            ]
                           }
                         },
                         "hpo": {
-                          "index": "hpo",
-                          "indices": {
-                            "hpo_20250120": {
-                              "build_version": "20250120"
-                            }
+                          "alias": "hpo",
+                          "index": {
+                            "name": "hpo_20251027_b3jbx7z4",
+                            "build_version": "20251027",
+                            "sources": [
+                              {"name": "hpo", "source_version": "2025-10-26"}
+                            ]
                           }
                         },
                         "pubmed": {
-                          "index": "annotator-pubmed",
+                          "alias": "annotator-pubmed",
+                          "index": {
+                            "name": "pubmed_20260814_ew8jmctk_202608201240",
+                            "build_version": "20260814",
+                            "sources": [
+                              {"name": "pubmed_metadata", "source_version": "2026aug5"}
+                            ]
+                          }
+                        },
+                        "annotator_extra": {
+                          "alias": "annotator-annotations",
                           "error": {
                             "code": "http_error",
                             "http_status": 404
@@ -2209,16 +2233,42 @@
           }
         }
       },
-      "StatusBuildVersion": {
+      "StatusSourceMetadata": {
         "type": "object",
         "required": [
-          "build_version"
+          "build_version",
+          "sources"
         ],
         "properties": {
           "build_version": {
             "type": "string",
             "nullable": true,
             "description": "Build version supplied by metadata, or null when unknown. Never inferred from the index name."
+          },
+          "sources": {
+            "type": "array",
+            "description": "All upstream sources recorded in this API's /metadata src, sorted by name, without a whitelist or entry limit. Empty when src is absent. Versions describe the data served by this API.",
+            "items": {
+              "$ref": "#/components/schemas/StatusUpstreamSource"
+            }
+          }
+        }
+      },
+      "StatusUpstreamSource": {
+        "type": "object",
+        "required": [
+          "name",
+          "source_version"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Source name exactly as recorded in the backend's metadata src."
+          },
+          "source_version": {
+            "type": "string",
+            "nullable": true,
+            "description": "Scalar src entry version, normalized to a string; null when missing, blank, boolean, or structured. Never inferred from build_version, an index name, or timestamps."
           }
         }
       },
@@ -2237,7 +2287,8 @@
               "connection_error",
               "invalid_metadata",
               "configuration_error",
-              "metadata_unavailable"
+              "metadata_unavailable",
+              "multiple_indices"
             ]
           },
           "http_status": {
@@ -2247,10 +2298,10 @@
         }
       },
       "StatusBioThingsDataset": {
-        "description": "Build version from this source API /metadata, or a source-local metadata error.",
+        "description": "Build version and all upstream source versions from this source API /metadata, or a source-local metadata error.",
         "oneOf": [
           {
-            "$ref": "#/components/schemas/StatusBuildVersion"
+            "$ref": "#/components/schemas/StatusSourceMetadata"
           },
           {
             "type": "object",
@@ -2268,19 +2319,39 @@
       "StatusElasticsearchDataset": {
         "type": "object",
         "required": [
-          "index"
+          "alias"
         ],
-        "description": "Configured index or alias and build version from each concrete index mapping _meta, or a source-local metadata error.",
+        "description": "Configured alias and one concrete index with its mapping _meta build version and all upstream source versions, or a source-local metadata error. An alias resolving to multiple indices reports multiple_indices instead of selecting one.",
         "properties": {
-          "index": {
+          "alias": {
             "type": "string",
             "nullable": true,
             "description": "Configured alias or index; null if missing from configuration."
           },
-          "indices": {
+          "index": {
             "type": "object",
-            "additionalProperties": {
-              "$ref": "#/components/schemas/StatusBuildVersion"
+            "required": [
+              "name",
+              "build_version",
+              "sources"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Concrete index name resolved by Elasticsearch."
+              },
+              "build_version": {
+                "type": "string",
+                "nullable": true,
+                "description": "Build version supplied by index mapping _meta, or null when unknown. Never inferred from the index name."
+              },
+              "sources": {
+                "type": "array",
+                "description": "All upstream sources recorded in this concrete index's mapping _meta.src, sorted by name, without a whitelist or entry limit. Empty when src is absent. Versions describe the data used for this indexed build.",
+                "items": {
+                  "$ref": "#/components/schemas/StatusUpstreamSource"
+                }
+              }
             }
           },
           "error": {
@@ -2290,7 +2361,7 @@
         "oneOf": [
           {
             "required": [
-              "indices"
+              "index"
             ]
           },
           {
@@ -2368,7 +2439,7 @@
           },
           "sources": {
             "type": "object",
-            "description": "Uses the same status display names as BioThings: mygene, mychem, mydisease, hpo, ncit, and annotator_extra, derived from client configuration. Sources without an API client retain their configured key, including the Elasticsearch-only pubmed source. Custom URLs outside the <service>.info convention, unresolved configurations, and conflicting names fall back to the configured source key. These are status labels only; index preserves the configured Elasticsearch alias or index, and indices preserves concrete index names. Internal source keys and query routing are unchanged. Supported sources remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
+            "description": "Uses the same status display names as BioThings: mygene, mychem, mydisease, hpo, ncit, and annotator_extra, derived from client configuration. Sources without an API client retain their configured key, including the Elasticsearch-only pubmed source. Custom URLs outside the <service>.info convention, unresolved configurations, and conflicting names fall back to the configured source key. These are status labels only; alias preserves the configured Elasticsearch alias or index, and index contains the resolved concrete name and build_version. Multiple resolved indices produce a multiple_indices metadata error. Internal source keys and query routing are unchanged. Supported sources remain included when unavailable. The example abbreviates this set and uses illustrative versions.",
             "additionalProperties": {
               "$ref": "#/components/schemas/StatusElasticsearchDataset"
             }

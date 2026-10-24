@@ -2,7 +2,7 @@
 
 import asyncio
 from collections import Counter
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from urllib.parse import quote
 
 import biothings_client
@@ -27,24 +27,37 @@ def _version(value: object) -> Optional[str]:
 def _normalize_metadata(payload: object) -> Dict:
     if not isinstance(payload, dict):
         raise ValueError("Metadata must be an object")
-    return {"build_version": _version(payload.get("build_version"))}
+    return {
+        "build_version": _version(payload.get("build_version")),
+        "sources": _normalize_sources(payload.get("src", {})),
+    }
 
 
-def _normalize_indices(payload: object) -> Dict:
+def _normalize_sources(payload: object) -> List[Dict]:
+    if not isinstance(payload, dict):
+        raise ValueError("Source metadata must be an object")
+    return [
+        {"name": name, "source_version": _version(details.get("version")) if isinstance(details, dict) else None}
+        for name, details in sorted(payload.items())
+    ]
+
+
+def _normalize_index(payload: object) -> Dict:
     if not isinstance(payload, dict) or not payload:
-        raise ValueError("Elasticsearch metadata must identify at least one index")
-    indices = {}
-    for index, details in payload.items():
-        if not isinstance(details, dict):
-            raise ValueError("Elasticsearch index metadata must be an object")
-        mappings = details.get("mappings", {})
-        if not isinstance(mappings, dict):
-            raise ValueError("Elasticsearch mappings must be an object")
-        metadata = mappings.get("_meta", {})
-        # A response anchor identifies an index even when its mapping has no
-        # _meta. Its name alone is not evidence of an upstream build version.
-        indices[index] = _normalize_metadata(metadata)
-    return {"indices": indices}
+        raise ValueError("Elasticsearch metadata must identify one index")
+    if len(payload) > 1:
+        return _error("multiple_indices")
+    name, details = next(iter(payload.items()))
+    if not isinstance(name, str) or not name.strip() or not isinstance(details, dict):
+        raise ValueError("Elasticsearch index metadata must be a named object")
+    mappings = details.get("mappings", {})
+    if not isinstance(mappings, dict):
+        raise ValueError("Elasticsearch mappings must be an object")
+    # Keep the concrete name even when its mapping has no _meta. Its name
+    # alone is not evidence of an upstream build version.
+    metadata = mappings.get("_meta", {})
+    normalized = _normalize_metadata(metadata)
+    return {"index": {"name": name, **normalized}}
 
 
 def _base_url(value: str) -> str:
@@ -141,25 +154,26 @@ async def _elasticsearch_dataset(
     settings: Dict,
     elasticsearch_connection: str,
 ) -> Dict:
-    result = {"index": None}
+    result = {"alias": None}
     try:
-        index = settings.get("elasticsearch", {}).get("index")
-        result["index"] = index
-        if not isinstance(index, str) or not index.strip():
+        alias = settings.get("elasticsearch", {}).get("index")
+        result["alias"] = alias
+        if not isinstance(alias, str) or not alias.strip():
             raise ValueError("An Elasticsearch index is required")
         connection = get_elasticsearch_connection(elasticsearch_connection)
-        url = f"{_base_url(connection['host'])}/{quote(index, safe='')}"
+        url = f"{_base_url(connection['host'])}/{quote(alias, safe='')}"
     except (AttributeError, KeyError, TypeError, ValueError, httpx.InvalidURL):
         return {**result, **_error("configuration_error")}
 
     metadata = await _fetch_metadata(
         client,
         url,
-        _normalize_indices,
+        _normalize_index,
         headers=connection["headers"],
         # UUID retains metadata-less indices in the filtered response without
         # downloading field mappings. It is not exposed or treated as a version.
-        params={"filter_path": "*.mappings._meta.build_version,*.settings.index.uuid"},
+        # Fetch the whole src object so sources lacking a version remain visible.
+        params={"filter_path": "*.mappings._meta.build_version,*.mappings._meta.src,*.settings.index.uuid"},
     )
     return {**result, **metadata}
 

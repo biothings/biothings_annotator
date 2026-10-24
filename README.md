@@ -223,8 +223,20 @@ backend lists all sources it supports:
     "biothings-api": {
       "checked_at": "2026-10-20T18:00:00+00:00",
       "sources": {
-        "mygene": {"build_version": "20261018"},
-        "hpo": {"build_version": "20250120"}
+        "mygene": {
+          "build_version": "20261019",
+          "sources": [
+            {"name": "ensembl", "source_version": "116"},
+            {"name": "entrez", "source_version": "20261009"},
+            {"name": "uniprot", "source_version": "20260903"}
+          ]
+        },
+        "hpo": {
+          "build_version": "20250120",
+          "sources": [
+            {"name": "hpo", "source_version": "2025-01-19"}
+          ]
+        }
       }
     },
     "elasticsearch": {
@@ -232,19 +244,39 @@ backend lists all sources it supports:
       "checked_at": "2026-10-20T18:00:00+00:00",
       "sources": {
         "mygene": {
-          "index": "gene",
-          "indices": {
-            "mygene_20261011": {"build_version": "20261011"}
+          "alias": "gene",
+          "index": {
+            "name": "mygene_allspecies_20260705_bgks2qnv",
+            "build_version": "20260705",
+            "sources": [
+              {"name": "ensembl", "source_version": "116"},
+              {"name": "entrez", "source_version": "20260705"},
+              {"name": "uniprot", "source_version": "20260610"}
+            ]
           }
         },
         "hpo": {
-          "index": "hpo",
-          "indices": {
-            "hpo_20250120": {"build_version": "20250120"}
+          "alias": "hpo",
+          "index": {
+            "name": "hpo_20251027_b3jbx7z4",
+            "build_version": "20251027",
+            "sources": [
+              {"name": "hpo", "source_version": "2025-10-26"}
+            ]
           }
         },
         "pubmed": {
-          "index": "annotator-pubmed",
+          "alias": "annotator-pubmed",
+          "index": {
+            "name": "pubmed_20260814_ew8jmctk_202608201240",
+            "build_version": "20260814",
+            "sources": [
+              {"name": "pubmed_metadata", "source_version": "2026aug5"}
+            ]
+          }
+        },
+        "annotator_extra": {
+          "alias": "annotator-annotations",
           "error": {"code": "http_error", "http_status": 404}
         }
       }
@@ -276,8 +308,21 @@ source key. Names do not depend on a successful metadata request. These are stat
 internal source keys, annotation routing, and Elasticsearch aliases remain unchanged.
 Missing optional sources supported by that backend remain visible with an
 `error` instead of disappearing. BioThings versions come from each API's `/metadata`;
-Elasticsearch versions come from index mapping `_meta`, with the configured alias or index in
-`index` and each resolved concrete index under `indices`. `connection` describes the configured
+Elasticsearch versions come from index mapping `_meta`, with the configured alias or direct index
+in `alias`. The singular `index` object contains the resolved concrete `name` and `build_version`.
+For Elasticsearch, `index.sources` lists every upstream source recorded in that index's
+mapping `_meta.src`. For BioThings APIs, `sources` sits alongside `build_version` and lists every
+upstream source in that API's `/metadata` `src`. Both lists are sorted by name and use
+`{"name": "...", "source_version": "..."}` entries from each `src` entry's `version` field.
+There is no whitelist or entry limit; the example above abbreviates the gene sources. API versions
+describe the data served by each API, while Elasticsearch versions describe the data used for
+that indexed build; these can differ.
+Scalar versions are normalized to strings. Missing, blank, boolean, or structured versions are
+`null`, and those sources stay in the list. An absent `src` produces an empty list. Versions
+are never inferred from build versions, index names, or timestamps.
+Elasticsearch metadata failures retain `alias` and report `error` in place of `index`. If an alias unexpectedly
+resolves to multiple indices, its source reports `error.code: multiple_indices`; no index is
+selected arbitrarily. `connection` describes the configured
 Elasticsearch target:
 
 | `ELASTICSEARCH_CONNECTION` | Status `connection` |
@@ -298,7 +343,7 @@ tunnel launcher. A forwarded preset with an unrecognized environment reports
 credentials, and raw upstream errors are not included in the status response.
 
 The `annotator_extra` status source uses the BioThings `/annotator_extra` API and the
-Elasticsearch `annotator-annotations` alias, which remains visible in its `index` field.
+Elasticsearch `annotator-annotations` alias, which remains visible in its `alias` field.
 
 `build_version` identifies each source's build. Unknown versions are `null`; an index name is
 never used to infer a version. Metadata failures use a static
