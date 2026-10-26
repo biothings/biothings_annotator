@@ -66,5 +66,6 @@ class VersionView(HTTPMethodView):
 
         except Exception as exc:
             logger.error(f"Error getting GitHub commit hash: {exc}")
-            result = self.build_response_body("Unknown")
-            return sanic.json(result, headers=self.default_headers)
+            # Backend configuration may have caused the failure. Do not rebuild
+            # an Annotator while reporting the fallback response.
+            return sanic.json({"version": "Unknown"}, headers=self.default_headers)

@@ -293,6 +293,9 @@ Both `/status` and `/version` send `Cache-Control: no-store` in every deployment
 browsers and proxies from storing deployment information across releases. Responses already
 cached by an older release may require a forced reload or a URL with a new query string.
 
+If runtime backend metadata cannot be constructed, `/version` returns HTTP 200 with the
+minimal body `{"version": "Unknown"}` and `Cache-Control: no-store`, omitting backend fields.
+
 For local development, set `ANNOTATOR_DEPLOYMENT_ENV=local` (or configure the deployment environment
 as `local`). If `version.txt` is missing, `/version` uses a Git snapshot of the loaded package's
 checkout captured at startup: the full HEAD commit, with `-dirty` appended for tracked, staged,

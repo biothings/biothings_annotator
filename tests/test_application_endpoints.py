@@ -389,19 +389,33 @@ async def test_version_get_outer_exception_keeps_cache_header(
     with patch.object(
         VersionView,
         "build_response_body",
-        side_effect=[
-            Exception("Simulated response error"),
-            {"version": "Unknown", "query_backend": "biothings"},
-        ],
+        side_effect=Exception("Simulated response error"),
     ) as mock_build_response_body:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-        assert mock_build_response_body.call_count == 2
+        mock_build_response_body.assert_called_once()
 
         assert request.method == "GET"
         assert response.status_code == 200
         assert response.headers["Cache-Control"] == "no-store"
-        assert response.json == {"version": "Unknown", "query_backend": "biothings"}
+        assert response.json == {"version": "Unknown"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("endpoint", ["/version", "/version/"])
+async def test_version_get_invalid_query_backend_returns_uncached_fallback(
+    test_annotator: sanic.Sanic, endpoint: str, monkeypatch
+):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, "unsupported-backend")
+
+    with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123") as mock_file_read:
+        _, response = await test_annotator.asgi_client.get(endpoint)
+
+    mock_file_read.assert_called_once()
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.json == {"version": "Unknown"}
 
 
 @pytest.mark.unit
