@@ -18,10 +18,9 @@ class VersionView(HTTPMethodView):
     def __init__(self):
         super().__init__()
         application = sanic.Sanic.get_app()
-        cache = application.config.CACHE_MAX_AGE
         self.is_local = application.config.get("DEPLOYMENT_ENVIRONMENT") == "local"
         self.local_git_version = getattr(application.ctx, "local_git_version", "Unknown")
-        self.default_headers = {"Cache-Control": "no-store" if self.is_local else f"max-age={cache}, public"}
+        self.default_headers = {"Cache-Control": "no-store"}
 
     def open_version_file(self):
         with open("version.txt", "r") as version_file:

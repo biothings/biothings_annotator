@@ -155,21 +155,24 @@ def test_status_failure_does_not_report_a_commit_as_clean(tmp_path, monkeypatch)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("environment", ["unknown", "ci", "test", "prod", "Local"])
-async def test_nonlocal_version_never_inspects_git_and_retains_caching(
-    application_configuration, tmp_path, monkeypatch, environment
+@pytest.mark.parametrize("version", [None, "a" * 40])
+async def test_nonlocal_version_is_not_cached_and_never_inspects_git(
+    application_configuration, tmp_path, monkeypatch, environment, version
 ):
     application_configuration["application"]["configuration"]["DEPLOYMENT_ENVIRONMENT"] = environment
     snapshot = Mock(side_effect=AssertionError("Only explicitly local deployments may inspect Git"))
     monkeypatch.setattr(application_module, "get_local_git_version", snapshot)
     monkeypatch.chdir(tmp_path)
+    if version is not None:
+        (tmp_path / "version.txt").write_text(version + "\n", encoding="utf-8")
     application = build_application(application_configuration)
 
     _, response = await application.asgi_client.get("/version")
 
     snapshot.assert_not_called()
     assert response.status_code == 200
-    assert response.json["version"] == "Unknown"
-    assert response.headers["Cache-Control"] == f"max-age={application.config.CACHE_MAX_AGE}, public"
+    assert response.json["version"] == (version or "Unknown")
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.asyncio
@@ -213,11 +216,12 @@ async def test_version_file_takes_precedence_over_local_snapshot(application_con
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("environment", ["local", "ci"])
 @pytest.mark.parametrize("read_error", [PermissionError("unreadable file"), UnicodeError("invalid contents")])
-async def test_local_version_read_errors_do_not_use_git_fallback(
-    application_configuration, monkeypatch, read_error
+async def test_version_read_errors_do_not_use_git_fallback(
+    application_configuration, monkeypatch, read_error, environment
 ):
-    application_configuration["application"]["configuration"]["DEPLOYMENT_ENVIRONMENT"] = "local"
+    application_configuration["application"]["configuration"]["DEPLOYMENT_ENVIRONMENT"] = environment
     monkeypatch.setattr(application_module, "get_local_git_version", Mock(return_value="a" * 40 + "-dirty"))
     monkeypatch.setattr(VersionView, "open_version_file", Mock(side_effect=read_error))
     application = build_application(application_configuration)
