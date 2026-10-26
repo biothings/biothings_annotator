@@ -400,8 +400,7 @@ async def test_version_get_outer_exception_keeps_cache_header(
 
         assert request.method == "GET"
         assert response.status_code == 200
-        expected_cache_control = f"max-age={test_annotator.config.CACHE_MAX_AGE}, public"
-        assert response.headers["Cache-Control"] == expected_cache_control
+        assert response.headers["Cache-Control"] == "no-store"
         assert response.json == {"version": "Unknown", "query_backend": "biothings"}
 
 
