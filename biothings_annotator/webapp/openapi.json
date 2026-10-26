@@ -267,11 +267,11 @@
       "get": {
         "operationId": "get~version_endpoint",
         "summary": "Checks the version of the annotator service",
-        "description": "Reports the build commit and active backend. version.txt takes precedence. Only when that file is missing and the resolved deployment environment is local does the service use a startup Git snapshot of the loaded package checkout: full HEAD with -dirty for tracked, staged, or untracked changes. Restart to refresh the snapshot. Missing files outside local, or an unavailable local Git snapshot, produce Unknown. Local responses use Cache-Control: no-store. The API version remains available separately in /status.",
+        "description": "Reports the build commit and active backend. version.txt takes precedence. Only when that file is missing and the resolved deployment environment is local does the service use a startup Git snapshot of the loaded package checkout: full HEAD with -dirty for tracked, staged, or untracked changes. Restart to refresh the snapshot. Missing files outside local, or an unavailable local Git snapshot, produce Unknown. If runtime backend metadata cannot be constructed, the response keeps version but omits query_backend and elasticsearch_connection. All responses send Cache-Control: no-store. The API version remains available separately in /status.",
         "tags": ["metadata"],
         "responses": {
           "200": {
-            "description": "Build commit or Unknown, together with the active query backend",
+            "description": "Build commit or Unknown, together with the active query backend when backend metadata can be constructed",
             "content": {
               "application/json": {
                 "schema": {
@@ -291,6 +291,12 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Version responses, including those without backend fields, must not be cached.",
+                "schema": {"type": "string", "enum": ["no-store"]}
               }
             }
           }

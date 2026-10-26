@@ -287,14 +287,9 @@ backend lists all sources it supports:
 
 The `version` field is the API version from the served OpenAPI specification. The separate
 `/version` endpoint reports the build's Git commit from `version.txt`, together with the active
-query backend.
-
-Both `/status` and `/version` send `Cache-Control: no-store` in every deployment to prevent
-browsers and proxies from storing deployment information across releases. Responses already
-cached by an older release may require a forced reload or a URL with a new query string.
-
-If runtime backend metadata cannot be constructed, `/version` returns HTTP 200 with the
-minimal body `{"version": "Unknown"}` and `Cache-Control: no-store`, omitting backend fields.
+query backend. If runtime backend metadata cannot be constructed, `/version` still returns
+HTTP 200 with `version`, omitting `query_backend` and `elasticsearch_connection`. All
+`/version` responses send `Cache-Control: no-store`.
 
 For local development, set `ANNOTATOR_DEPLOYMENT_ENV=local` (or configure the deployment environment
 as `local`). If `version.txt` is missing, `/version` uses a Git snapshot of the loaded package's

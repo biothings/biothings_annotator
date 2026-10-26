@@ -47,6 +47,7 @@ class VersionView(HTTPMethodView):
 
         For local deployments, a missing version file uses the startup Git snapshot.
         Otherwise, an unreadable version file reports "Unknown".
+        If backend metadata cannot be built, the response reports only the version.
         """
         try:
             version = "Unknown"
@@ -65,7 +66,7 @@ class VersionView(HTTPMethodView):
             return sanic.json(result, headers=self.default_headers)
 
         except Exception as exc:
-            logger.error(f"Error getting GitHub commit hash: {exc}")
-            # Backend configuration may have caused the failure. Do not rebuild
-            # an Annotator while reporting the fallback response.
-            return sanic.json({"version": "Unknown"}, headers=self.default_headers)
+            logger.error(f"Error getting version backend metadata: {exc}")
+            # Backend configuration may have caused the failure. Keep the version
+            # already read, and do not rebuild an Annotator for the fallback.
+            return sanic.json({"version": version}, headers=self.default_headers)

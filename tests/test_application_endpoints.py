@@ -381,24 +381,22 @@ async def test_version_get_outer_exception_keeps_cache_header(
     test_annotator: sanic.Sanic, endpoint: str, monkeypatch
 ):
     """
-    Test the Version endpoint preserves default headers on the outer fallback path.
+    Test the Version endpoint preserves the version and default headers on the outer fallback path.
     """
     monkeypatch.delenv(QUERY_BACKEND_ENV, raising=False)
     monkeypatch.delenv("ELASTICSEARCH_CONNECTION", raising=False)
 
-    with patch.object(
-        VersionView,
-        "build_response_body",
-        side_effect=Exception("Simulated response error"),
+    with patch.object(VersionView, "open_version_file", return_value="GITHUB_HASH_VERSION_ABC123"), patch.object(
+        VersionView, "build_response_body", side_effect=Exception("Simulated response error")
     ) as mock_build_response_body:
         request, response = await test_annotator.asgi_client.request(method="get", url=endpoint)
 
-        mock_build_response_body.assert_called_once()
+        mock_build_response_body.assert_called_once_with("GITHUB_HASH_VERSION_ABC123")
 
         assert request.method == "GET"
         assert response.status_code == 200
         assert response.headers["Cache-Control"] == "no-store"
-        assert response.json == {"version": "Unknown"}
+        assert response.json == {"version": "GITHUB_HASH_VERSION_ABC123"}
 
 
 @pytest.mark.unit
@@ -415,7 +413,7 @@ async def test_version_get_invalid_query_backend_returns_uncached_fallback(
     mock_file_read.assert_called_once()
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "no-store"
-    assert response.json == {"version": "Unknown"}
+    assert response.json == {"version": "GITHUB_HASH_VERSION_ABC123"}
 
 
 @pytest.mark.unit

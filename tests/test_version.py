@@ -216,13 +216,25 @@ async def test_version_file_takes_precedence_over_local_snapshot(application_con
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("environment", ["local", "ci"])
 @pytest.mark.parametrize("read_error", [PermissionError("unreadable file"), UnicodeError("invalid contents")])
-async def test_version_read_errors_do_not_use_git_fallback(
-    application_configuration, monkeypatch, read_error, environment
+async def test_local_version_read_errors_do_not_use_git_fallback(
+    application_configuration, monkeypatch, read_error
 ):
-    application_configuration["application"]["configuration"]["DEPLOYMENT_ENVIRONMENT"] = environment
+    application_configuration["application"]["configuration"]["DEPLOYMENT_ENVIRONMENT"] = "local"
     monkeypatch.setattr(application_module, "get_local_git_version", Mock(return_value="a" * 40 + "-dirty"))
+    monkeypatch.setattr(VersionView, "open_version_file", Mock(side_effect=read_error))
+    application = build_application(application_configuration)
+
+    _, response = await application.asgi_client.get("/version")
+
+    assert response.json["version"] == "Unknown"
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("read_error", [PermissionError("unreadable file"), UnicodeError("invalid contents")])
+async def test_nonlocal_version_read_errors_are_not_cached(application_configuration, monkeypatch, read_error):
+    application_configuration["application"]["configuration"]["DEPLOYMENT_ENVIRONMENT"] = "ci"
     monkeypatch.setattr(VersionView, "open_version_file", Mock(side_effect=read_error))
     application = build_application(application_configuration)
 

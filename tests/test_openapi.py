@@ -161,6 +161,19 @@ def test_status_contract_distinguishes_backend_dataset_and_concrete_index_versio
 
 
 @pytest.mark.unit
+def test_version_contract_documents_no_store_and_optional_backend_fields():
+    with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
+        specification = json.load(openapi_file)
+
+    success = specification["paths"]["/version"]["get"]["responses"]["200"]
+    assert success["headers"]["Cache-Control"]["schema"] == {"type": "string", "enum": ["no-store"]}
+    schema = success["content"]["application/json"]["schema"]
+    assert set(schema["properties"]) == {"version", "query_backend", "elasticsearch_connection"}
+    # A backend metadata failure returns only the version.
+    assert not {"query_backend", "elasticsearch_connection"} & set(schema.get("required", []))
+
+
+@pytest.mark.unit
 def test_pubmed_backend_restriction_documents_single_error_and_batch_skips():
     with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
         specification = json.load(openapi_file)
