@@ -287,7 +287,9 @@ backend lists all sources it supports:
 
 The `version` field is the API version from the served OpenAPI specification. The separate
 `/version` endpoint reports the build's Git commit from `version.txt`, together with the active
-query backend.
+query backend. If runtime backend metadata cannot be constructed, `/version` still returns
+HTTP 200 with `version`, omitting `query_backend` and `elasticsearch_connection`. All
+`/version` responses send `Cache-Control: no-store`.
 
 For local development, set `ANNOTATOR_DEPLOYMENT_ENV=local` (or configure the deployment environment
 as `local`). If `version.txt` is missing, `/version` uses a Git snapshot of the loaded package's
@@ -295,7 +297,7 @@ checkout captured at startup: the full HEAD commit, with `-dirty` appended for t
 or untracked changes. Restart the service to refresh that snapshot. `version.txt` always takes
 precedence. Outside the `local` environment, a missing file returns `Unknown` without querying
 Git; the local fallback also returns `Unknown` if Git or the checkout is unavailable or the
-query fails. Local `/version` responses send `Cache-Control: no-store`.
+query fails.
 
 Source availability follows `ANNOTATOR_CLIENTS` and its backend support. Both backends share
 status display names derived from the client configuration. Typed SDK clients use their

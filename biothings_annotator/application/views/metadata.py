@@ -18,10 +18,9 @@ class VersionView(HTTPMethodView):
     def __init__(self):
         super().__init__()
         application = sanic.Sanic.get_app()
-        cache = application.config.CACHE_MAX_AGE
         self.is_local = application.config.get("DEPLOYMENT_ENVIRONMENT") == "local"
         self.local_git_version = getattr(application.ctx, "local_git_version", "Unknown")
-        self.default_headers = {"Cache-Control": "no-store" if self.is_local else f"max-age={cache}, public"}
+        self.default_headers = {"Cache-Control": "no-store"}
 
     def open_version_file(self):
         with open("version.txt", "r") as version_file:
@@ -48,6 +47,7 @@ class VersionView(HTTPMethodView):
 
         For local deployments, a missing version file uses the startup Git snapshot.
         Otherwise, an unreadable version file reports "Unknown".
+        If backend metadata cannot be built, the response reports only the version.
         """
         try:
             version = "Unknown"
@@ -66,6 +66,7 @@ class VersionView(HTTPMethodView):
             return sanic.json(result, headers=self.default_headers)
 
         except Exception as exc:
-            logger.error(f"Error getting GitHub commit hash: {exc}")
-            result = self.build_response_body("Unknown")
-            return sanic.json(result, headers=self.default_headers)
+            logger.error(f"Error getting version backend metadata: {exc}")
+            # Backend configuration may have caused the failure. Keep the version
+            # already read, and do not rebuild an Annotator for the fallback.
+            return sanic.json({"version": version}, headers=self.default_headers)
