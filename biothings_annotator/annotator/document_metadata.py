@@ -266,7 +266,16 @@ class DocumentMetadataService:
         """
         document_lookup = client.mget(document_ids, fields=PUBMED_SOURCE_FIELDS) if document_ids else _empty_hits()
         search_lookup = DocumentMetadataService._fetch_search_hits(client, search_ids) if search_ids else _empty_hits()
-        document_hits, search_hits = await asyncio.gather(document_lookup, search_lookup)
+        lookup_tasks = [asyncio.create_task(document_lookup), asyncio.create_task(search_lookup)]
+        try:
+            document_hits, search_hits = await asyncio.gather(*lookup_tasks)
+        except BaseException:
+            # gather does not cancel a sibling when one lookup fails. Finish
+            # both tasks' cleanup before this request propagates the failure.
+            for task in lookup_tasks:
+                task.cancel()
+            await asyncio.gather(*lookup_tasks, return_exceptions=True)
+            raise
 
         hits_by_id: Dict[str, Dict] = {}
         for hit in [*document_hits, *search_hits]:

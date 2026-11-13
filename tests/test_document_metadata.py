@@ -1032,6 +1032,94 @@ async def test_bulk_lookup_runs_mget_and_search_concurrently_without_pruning():
     assert set(hits) == {"PMID:30690000", "doi:10.1000/first", "doi:10.1242/jcs.03153"}
 
 
+class _ControlledLookupClient:
+    def __init__(self, failing_leg):
+        self.failing_leg = failing_leg
+        self.error = RuntimeError("Backend lookup failed")
+        self.tasks = {}
+        self.started = asyncio.Event()
+        self.fail_now = asyncio.Event()
+        self.finalizers = set()
+        self.cleanup_started = asyncio.Event()
+        self.finish_cleanup = asyncio.Event()
+        self.finished = set()
+
+    async def _lookup(self, leg):
+        self.tasks[leg] = asyncio.current_task()
+        if len(self.tasks) == 2:
+            self.started.set()
+        if leg == self.failing_leg:
+            await self.fail_now.wait()
+            raise self.error
+        try:
+            await asyncio.Event().wait()
+        finally:
+            self.finalizers.add(leg)
+            if len(self.finalizers) == (1 if self.failing_leg else 2):
+                self.cleanup_started.set()
+            await self.finish_cleanup.wait()
+            self.finished.add(leg)
+
+    async def mget(self, ids, fields=None):
+        return await self._lookup("mget")
+
+    async def search_terms(self, query_list, field, fields=None, size=None):
+        return await self._lookup("search")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stop", ["mget-error", "search-error", "mget-cancel", "search-cancel", "caller-cancel", "deadline"]
+)
+async def test_bulk_lookup_awaits_backend_cleanup_before_propagating_failure(monkeypatch, stop):
+    failing_leg = stop.split("-", 1)[0] if stop.startswith(("mget-", "search-")) else None
+    client = _ControlledLookupClient(failing_leg)
+    if failing_leg and stop.endswith("-cancel"):
+        client.error = asyncio.CancelledError("Backend lookup cancelled")
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: client,
+    )
+    service = DocumentMetadataService(request_timeout=0.05 if stop == "deadline" else 5)
+    request = asyncio.create_task(service.get_publications([PMID, DOI]))
+    cleanup_started = asyncio.create_task(client.cleanup_started.wait())
+    try:
+        await asyncio.wait_for(client.started.wait(), timeout=1)
+        if failing_leg:
+            client.fail_now.set()
+        elif stop == "caller-cancel":
+            request.cancel()
+
+        # An early return also wakes this wait, exposing leaked siblings without
+        # leaving a test blocked on cleanup that the implementation never starts.
+        await asyncio.wait({request, cleanup_started}, timeout=1, return_when=asyncio.FIRST_COMPLETED)
+        assert client.cleanup_started.is_set()
+        assert not request.done(), "The request escaped before asynchronous backend cleanup finished"
+
+        client.finish_cleanup.set()
+        if failing_leg:
+            expected = type(client.error)
+        elif stop == "caller-cancel":
+            expected = asyncio.CancelledError
+        else:
+            expected = asyncio.TimeoutError
+        with pytest.raises(expected) as raised:
+            await asyncio.wait_for(asyncio.shield(request), timeout=1)
+        if failing_leg and isinstance(client.error, RuntimeError):
+            assert raised.value is client.error
+        assert request.done()
+        assert client.finished == ({"mget", "search"} - {failing_leg})
+        assert all(task.done() for task in client.tasks.values())
+    finally:
+        client.finish_cleanup.set()
+        tasks = {request, cleanup_started, *client.tasks.values()}
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=1)
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_bulk_lookup_fans_one_document_out_to_doi_pmcid_and_case_variants():
