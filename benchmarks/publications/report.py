@@ -1,10 +1,10 @@
 """Rendering for ``/publications`` benchmark results."""
 
 import json
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
 from benchmarks.publications.metrics import SLO_QUANTILE, LatencySummary, StageReport
-from benchmarks.publications.runner import ComparisonResult, ComparisonStage, PairedObservation, RunResult
+from benchmarks.publications.runner import RunResult
 from benchmarks.publications.users import MIN_STEADY_STATE_THINK_TIMES, capacity_table
 
 _COLUMNS = (
@@ -21,22 +21,6 @@ _COLUMNS = (
     ("client p99", 11),
     ("net p90", 8),
 )
-
-_COMPARISON_COLUMNS = (
-    ("stage", 7),
-    ("strategy", 17),
-    ("ok", 9),
-    ("found", 7),
-    ("resp kB", 9),
-    ("server p50", 12),
-    ("server p90", 12),
-    ("server p99", 12),
-    ("client p50", 12),
-    ("client p90", 12),
-    ("client p99", 12),
-)
-
-BenchmarkResult = Union[RunResult, ComparisonResult]
 
 
 def _cell(value: object, width: int) -> str:
@@ -65,168 +49,6 @@ def _stage_row(stage: StageReport) -> str:
         f"{overhead.p90:.0f}" if overhead else "-",
     ]
     return "".join(_cell(value, width) for value, (_, width) in zip(values, _COLUMNS))
-
-
-def _comparison_arm_row(stage: ComparisonStage, strategy: str) -> str:
-    arm = stage.arm_report(strategy)
-    identifiers = arm.identifier_stats
-    values = [
-        stage.label,
-        strategy,
-        f"{len(arm.successful)}/{len(arm.samples)}",
-        f"{identifiers.get('found_ratio', 0) * 100:.0f}%" if identifiers.get("requests") else "-",
-        identifiers.get("mean_response_kb", "-"),
-        *_latency_cells(arm.server_latency()),
-        *_latency_cells(arm.client_latency()),
-    ]
-    return "".join(_cell(value, width) for value, (_, width) in zip(values, _COMPARISON_COLUMNS))
-
-
-def _pair_latency(pair: PairedObservation, strategy: str, basis: str) -> Optional[float]:
-    sample = pair.sample_for(strategy)
-    if basis == "client":
-        return sample.client_ms
-    if basis == "server":
-        return float(sample.server_ms) if sample.server_ms is not None else None
-    raise ValueError("basis must be 'client' or 'server'")
-
-
-def _paired_delta_values(
-    stage: ComparisonStage,
-    basis: str,
-    first_strategy: Optional[str] = None,
-) -> List[float]:
-    values: List[float] = []
-    first, second = stage.strategies
-    for pair in stage.valid_pairs:
-        if first_strategy is not None and pair.first_strategy != first_strategy:
-            continue
-        first_latency = _pair_latency(pair, first, basis)
-        second_latency = _pair_latency(pair, second, basis)
-        if first_latency is not None and second_latency is not None:
-            values.append(second_latency - first_latency)
-    return values
-
-
-def _delta_summary(values: List[float], faster_strategy: str) -> Optional[Dict[str, object]]:
-    summary = LatencySummary.from_values(values)
-    if summary is None:
-        return None
-    rendered: Dict[str, object] = summary.as_dict()
-    faster_key = f"{faster_strategy.replace('-', '_')}_faster_fraction"
-    rendered[faster_key] = round(sum(value < 0 for value in values) / len(values), 4)
-    return rendered
-
-
-def _comparison_delta_dict(stage: ComparisonStage, basis: str) -> Dict[str, object]:
-    first, second = stage.strategies
-    return {
-        "all": _delta_summary(_paired_delta_values(stage, basis), second),
-        stage.order_key(first): _delta_summary(_paired_delta_values(stage, basis, first), second),
-        stage.order_key(second): _delta_summary(_paired_delta_values(stage, basis, second), second),
-    }
-
-
-def _comparison_p90_difference(stage: ComparisonStage, basis: str) -> Optional[float]:
-    first, second = stage.strategies
-    first_summary = (
-        stage.arm_report(first).server_latency() if basis == "server" else stage.arm_report(first).client_latency()
-    )
-    second_summary = (
-        stage.arm_report(second).server_latency() if basis == "server" else stage.arm_report(second).client_latency()
-    )
-    if first_summary is None or second_summary is None:
-        return None
-    return round(second_summary.p90 - first_summary.p90, 2)
-
-
-def _comparison_p90_percent(stage: ComparisonStage, basis: str) -> Optional[float]:
-    first, second = stage.strategies
-    first_summary = (
-        stage.arm_report(first).server_latency() if basis == "server" else stage.arm_report(first).client_latency()
-    )
-    second_summary = (
-        stage.arm_report(second).server_latency() if basis == "server" else stage.arm_report(second).client_latency()
-    )
-    if first_summary is None or second_summary is None or first_summary.p90 == 0:
-        return None
-    return round((second_summary.p90 - first_summary.p90) / first_summary.p90 * 100, 2)
-
-
-def _comparison_arm_dict(stage: ComparisonStage, strategy: str, threshold_ms: float) -> Dict[str, object]:
-    arm = stage.arm_report(strategy)
-    client = arm.client_latency()
-    server = arm.server_latency()
-    overhead = arm.overhead_latency()
-    client_verdict = arm.verdict("client", threshold_ms)
-    server_verdict = arm.verdict("server", threshold_ms)
-    return {
-        "requests": len(arm.samples),
-        "successful": len(arm.successful),
-        "success_rate": round(arm.success_rate, 4),
-        "status_counts": arm.status_counts,
-        "lookup_strategy_counts": arm.lookup_strategy_counts,
-        "lookup_fallback_counts": arm.lookup_fallback_counts,
-        "identifiers": arm.identifier_stats,
-        "client_latency": client.as_dict() if client else None,
-        "server_latency": server.as_dict() if server else None,
-        "network_overhead": overhead.as_dict() if overhead else None,
-        "slo": {
-            "client": client_verdict.as_dict() if client_verdict else None,
-            "server": server_verdict.as_dict() if server_verdict else None,
-        },
-    }
-
-
-def _comparison_stage_dict(stage: ComparisonStage, threshold_ms: float) -> Dict[str, object]:
-    first, second = stage.strategies
-    delta_meaning = f"{second} minus {first}; negative is faster"
-    return {
-        "label": stage.label,
-        "concurrency": stage.concurrency,
-        "wall_seconds": round(stage.wall_seconds, 3),
-        "pairs": len(stage.pairs),
-        "valid_pairs": len(stage.valid_pairs),
-        "invalid_pairs": len(stage.pairs) - len(stage.valid_pairs),
-        "order_counts": stage.order_counts,
-        "order_balanced": stage.order_balanced,
-        "changed_path_pairs": stage.changed_path_pair_count,
-        "changed_path_order_counts": stage.changed_path_order_counts,
-        "changed_path_order_balanced": stage.changed_path_order_balanced,
-        "alternative_order_counts": stage.alternative_order_counts,
-        "alternative_order_balanced": stage.alternative_order_balanced,
-        "alternative_identifiers": stage.alternative_identifier_count,
-        "pairs_with_alternative_identifiers": stage.pairs_with_alternative_identifiers,
-        "integrity": {
-            "request_id_mismatches": sum(pair.request_id_mismatches for pair in stage.pairs),
-            "lookup_strategy_mismatches": sum(pair.lookup_strategy_mismatches for pair in stage.pairs),
-            "lookup_fallback_samples": stage.lookup_fallback_samples,
-            "lookup_fallback_attribution_missing": stage.lookup_fallback_attribution_missing,
-            "semantic_mismatches": stage.semantic_mismatches,
-            "unresolved_pairs": stage.unresolved_pairs,
-            "unresolved_identifiers": stage.unresolved_identifiers,
-        },
-        "arms": {strategy: _comparison_arm_dict(stage, strategy, threshold_ms) for strategy in stage.strategies},
-        "p90_difference_ms": {
-            "meaning": delta_meaning,
-            "server": _comparison_p90_difference(stage, "server"),
-            "client": _comparison_p90_difference(stage, "client"),
-        },
-        "p90_difference_percent": {
-            "meaning": delta_meaning,
-            "server": _comparison_p90_percent(stage, "server"),
-            "client": _comparison_p90_percent(stage, "client"),
-        },
-        "paired_delta_ms": {
-            "meaning": delta_meaning,
-            "first_strategy": first,
-            "second_strategy": second,
-            "control_strategy": first,
-            "experiment_strategy": second,
-            "server": _comparison_delta_dict(stage, "server"),
-            "client": _comparison_delta_dict(stage, "client"),
-        },
-    }
 
 
 # A stage shedding more than this fraction of its load is not serving that load,
@@ -361,192 +183,8 @@ def _user_lines(result: RunResult) -> List[str]:
     return lines
 
 
-def _comparison_delta_line(
-    stage: ComparisonStage,
-    basis: str,
-    label: str,
-    first_strategy: Optional[str] = None,
-) -> str:
-    values = _paired_delta_values(stage, basis, first_strategy)
-    summary = LatencySummary.from_values(values)
-    if summary is None:
-        return f"  {stage.label:<7} {basis:<7} {label:<17} no valid pairs"
-    faster = sum(value < 0 for value in values) / len(values)
-    second = stage.strategies[1]
-    return (
-        f"  {stage.label:<7} {basis:<7} {label:<23} n={summary.count:<4} "
-        f"p50 {summary.p50:>+7.1f}  p90 {summary.p90:>+7.1f}  p99 {summary.p99:>+7.1f}  "
-        f"{second} faster {faster:>6.1%}"
-    )
-
-
-def _comparison_caveats(result: ComparisonResult) -> List[str]:
-    first, second = result.strategies
-    notes = [
-        "each pair is sequential, so its second request can benefit from Elasticsearch state warmed by its "
-        f"first; balanced {first}-first/{second}-first ordering controls first-order bias but cannot produce two "
-        "cold observations on one shared deployment",
-        "the two implementations share one mixed load during this run, so its wall time is not a standalone "
-        "capacity measurement; use single-strategy --ramp runs for absolute capacity",
-    ]
-    if any(stage.cache_primed for stage in result.stages):
-        notes.append(
-            "the corpus was verified before measuring, which primes the backend cache: these are warm-cache "
-            "latencies"
-        )
-    if result.plan.workload.uses_identifier_pool:
-        notes.append(
-            f"pairs sample repeatedly from a fixed pool of {len(result.plan.workload.identifier_pool)} real "
-            "identifiers, so the backend continues to warm during the run"
-        )
-    elif result.plan.workload.pmid_ratio < 1.0:
-        notes.append(
-            "the synthesized PMCID and DOI values usually miss; use --identifier-file with resolving identifiers "
-            "before deciding between source-fetch strategies"
-        )
-    if result.lookup_fallback_samples:
-        notes.append(
-            f"{result.lookup_fallback_samples} successful response sample(s) reported lookup fallback; "
-            "they are excluded from paired deltas because they did not measure the requested normal path"
-        )
-    if result.lookup_fallback_attribution_missing:
-        notes.append(
-            f"{result.lookup_fallback_attribution_missing} successful response sample(s) omitted the "
-            "lookup-fallback attribution marker; they are excluded because this usually indicates a stale "
-            "or mixed deployment"
-        )
-    overheads = [
-        arm.overhead_latency() for stage in result.stages for arm in (stage.arm_report(first), stage.arm_report(second))
-    ]
-    measured = [summary.p90 for summary in overheads if summary is not None]
-    if measured and max(measured) > 20:
-        notes.append(
-            f"network overhead adds up to {max(measured):.0f} ms at p90 from this vantage point; use server "
-            "latency for the implementation decision"
-        )
-    for stage in result.stages:
-        if stage.changed_path_pair_count == 0:
-            notes.append(
-                f"{stage.label} has zero pairs that exercise code differing between {first} and {second}; "
-                "this is a no-change control and cannot select a winner"
-            )
-        if not stage.changed_path_order_balanced:
-            notes.append(
-                f"{stage.label} does not contain a balanced changed-path pair in both request orders; "
-                "do not declare a winner"
-            )
-        first_arm_first = LatencySummary.from_values(_paired_delta_values(stage, "server", first))
-        second_arm_first = LatencySummary.from_values(_paired_delta_values(stage, "server", second))
-        if first_arm_first and second_arm_first and first_arm_first.p50 * second_arm_first.p50 <= 0:
-            notes.append(
-                f"{stage.label} has zero or opposite-signed median server deltas between {first}-first "
-                f"and {second}-first pairs; the result is order/cache-sensitive, so do not declare a winner"
-            )
-    return notes
-
-
-def _comparison_workload_description(result: ComparisonResult) -> str:
-    description = result.plan.workload.describe()
-    suffix = f", {result.plan.workload.lookup_strategy} lookup"
-    if description.endswith(suffix):
-        description = description[: -len(suffix)]
-    return f"{description}, paired {result.strategies[0]} vs {result.strategies[1]}"
-
-
-def _render_comparison_text(result: ComparisonResult) -> str:
-    plan = result.plan
-    first, second = result.strategies
-    delta_label = f"{second} minus {first}"
-    lines = [
-        "/publications paired lookup-strategy benchmark",
-        f"  target     {plan.normalized_base_url}",
-        f"  workload   {_comparison_workload_description(result)}",
-        f"  load       {plan.requests} measured pairs per stage ({plan.requests * 2} HTTP requests), "
-        f"{plan.warmup_requests} discarded warmup pairs, {plan.timeout_seconds:g}s timeout",
-        f"  objective  p90 < {plan.threshold_ms:g} ms at the 90th percentile (CCWG#15)",
-        "",
-        "per-arm latency in milliseconds; mixed-run wall time is not standalone throughput",
-        "".join(_cell(name, width) for name, width in _COMPARISON_COLUMNS),
-        "-" * sum(width for _, width in _COMPARISON_COLUMNS),
-    ]
-    for stage in result.stages:
-        lines.extend(_comparison_arm_row(stage, strategy) for strategy in result.strategies)
-
-    lines.extend(["", f"per-arm p90 difference ({delta_label})"])
-    for stage in result.stages:
-        differences = []
-        for basis in ("server", "client"):
-            difference = _comparison_p90_difference(stage, basis)
-            percent = _comparison_p90_percent(stage, basis)
-            if difference is None or percent is None:
-                differences.append(f"{basis} unavailable")
-            else:
-                differences.append(f"{basis} {difference:+.1f} ms ({percent:+.1f}%)")
-        lines.append(f"  {stage.label:<7} " + ", ".join(differences))
-
-    lines.extend(["", f"paired delta in milliseconds ({delta_label}; negative is faster)"])
-    for stage in result.stages:
-        for basis in ("server", "client"):
-            lines.append(_comparison_delta_line(stage, basis, "all"))
-            lines.append(_comparison_delta_line(stage, basis, f"{first}-first", first))
-            lines.append(_comparison_delta_line(stage, basis, f"{second}-first", second))
-
-    lines.extend(["", "SLO verdict by arm"])
-    for stage in result.stages:
-        for strategy in result.strategies:
-            arm = stage.arm_report(strategy)
-            for basis in ("server", "client"):
-                verdict = arm.verdict(basis, plan.threshold_ms)
-                if verdict is None:
-                    lines.append(f"  {stage.label:<7} {strategy:<16} {basis:<7} no successful samples")
-                    continue
-                status = "PASS" if verdict.met else "FAIL"
-                lines.append(
-                    f"  {stage.label:<7} {strategy:<16} {basis:<7} {status}  "
-                    f"p90 {verdict.p90_ms:>7.1f} ms  {verdict.fraction_under_threshold:>6.1%} under "
-                    f"{plan.threshold_ms:g} ms"
-                )
-
-    integrity_status = "PASS" if result.integrity_ok else "FAIL"
-    lines.extend(["", f"comparison integrity {integrity_status}"])
-    for stage in result.stages:
-        first_key = stage.order_key(first)
-        second_key = stage.order_key(second)
-        lines.append(
-            f"  {stage.label:<7} {len(stage.valid_pairs)}/{len(stage.pairs)} valid pairs; "
-            f"{first}-first {stage.order_counts[first_key]}, "
-            f"{second}-first {stage.order_counts[second_key]} "
-            f"({'balanced' if stage.order_balanced else 'NOT BALANCED'}); "
-            f"changed-path {stage.changed_path_pair_count}/{len(stage.pairs)} pairs: "
-            f"{first}-first {stage.changed_path_order_counts[first_key]}, "
-            f"{second}-first {stage.changed_path_order_counts[second_key]} "
-            f"({'balanced' if stage.changed_path_order_balanced else 'NOT BALANCED'}); "
-            f"semantic mismatches {stage.semantic_mismatches}; "
-            f"fallback samples {stage.lookup_fallback_samples}; "
-            f"fallback attribution missing {stage.lookup_fallback_attribution_missing}; "
-            f"unresolved {stage.unresolved_identifiers} IDs across {stage.unresolved_pairs} pairs; "
-            f"alternative IDs {stage.alternative_identifier_count} across "
-            f"{stage.pairs_with_alternative_identifiers}/{len(stage.pairs)} pairs"
-        )
-    lines.append(f"  request_id round-trip mismatches       {result.request_id_mismatches}")
-    lines.append(f"  lookup strategy attribution mismatches {result.lookup_strategy_mismatches}")
-    lines.append(f"  lookup fallback samples                {result.lookup_fallback_samples}")
-    lines.append(f"  lookup fallback attribution missing    {result.lookup_fallback_attribution_missing}")
-    lines.append(f"  semantic response mismatches            {result.semantic_mismatches}")
-    lines.append(f"  pairs containing unresolved identifiers {result.unresolved_pairs}")
-    lines.append(f"  unresolved identifiers                  {result.unresolved_identifiers}")
-    lines.append(f"  incomplete or invalid pairs             {result.invalid_pairs}")
-
-    lines.extend(["", "read this with"])
-    lines.extend(f"  - {note}" for note in _comparison_caveats(result))
-    return "\n".join(lines)
-
-
-def render_text(result: BenchmarkResult) -> str:
+def render_text(result: RunResult) -> str:
     """Render a run as an aligned latency table with an SLO verdict per stage."""
-    if isinstance(result, ComparisonResult):
-        return _render_comparison_text(result)
-
     plan = result.plan
     threshold = plan.threshold_ms
     lines = [
@@ -599,8 +237,6 @@ def render_text(result: BenchmarkResult) -> str:
         lines.extend(["", f"non-200 and transport failures  {failures}"])
     if result.request_id_mismatches:
         lines.append(f"request_id round-trip mismatches  {result.request_id_mismatches}")
-    if result.lookup_strategy_mismatches:
-        lines.append(f"lookup strategy attribution mismatches  {result.lookup_strategy_mismatches}")
 
     lines.extend(_user_lines(result))
     lines.extend(_capacity_lines(result))
@@ -640,7 +276,7 @@ def _caveats(result: RunResult) -> List[str]:
     if plan.workload.uses_identifier_pool:
         notes.append(
             f"requests sample repeatedly from a fixed pool of {len(plan.workload.identifier_pool)} real identifiers, "
-            "so backend caches warm during the run; compare strategies with the same seed and run shape"
+            "so backend caches can warm during the run"
         )
     elif plan.workload.unique_ratio >= 1.0 and result.user_model is None:
         notes.append(
@@ -650,8 +286,8 @@ def _caveats(result: RunResult) -> List[str]:
     if not plan.workload.uses_identifier_pool and plan.workload.pmid_ratio < 1.0:
         notes.append(
             "the default mixed workload synthesizes PMCID and DOI values that usually report not_found; "
-            "they exercise the _msearch miss path but cannot compare source-fetch strategies — use "
-            "--identifier-file with real resolving identifiers for that"
+            "they exercise the bulk alternative-identifier search miss path, so use --identifier-file "
+            "with real resolving identifiers to measure hit-path work"
         )
     found_ratios = [
         stage.identifier_stats.get("found_ratio", 0.0)
@@ -666,65 +302,11 @@ def _caveats(result: RunResult) -> List[str]:
     return notes
 
 
-def render_json(result: BenchmarkResult) -> str:
+def render_json(result: RunResult) -> str:
     return json.dumps(as_dict(result), indent=2)
 
 
-def _comparison_as_dict(result: ComparisonResult) -> Dict[str, object]:
-    plan = result.plan
-    return {
-        "mode": "paired_lookup_strategy_comparison",
-        "target": plan.normalized_base_url,
-        "objective": {
-            "source": "NCATSTranslator/Core-Components-Working-Group#15",
-            "threshold_ms": plan.threshold_ms,
-            "quantile": SLO_QUANTILE,
-        },
-        "workload": {
-            "description": _comparison_workload_description(result),
-            "batch_size": plan.workload.batch_size,
-            "method": plan.workload.normalized_method,
-            "lookup_strategies": list(result.strategies),
-            "pmid_ratio": None if plan.workload.uses_identifier_pool else plan.workload.pmid_ratio,
-            "unique_ratio": None if plan.workload.uses_identifier_pool else plan.workload.unique_ratio,
-            "identifier_pool": (
-                {
-                    "source": plan.workload.identifier_pool_source or "provided pool",
-                    "size": len(plan.workload.identifier_pool),
-                }
-                if plan.workload.uses_identifier_pool
-                else None
-            ),
-        },
-        "load": {
-            "pairs_per_stage": plan.requests,
-            "http_requests_per_stage": plan.requests * 2,
-            "warmup_pairs": plan.warmup_requests,
-            "timeout_seconds": plan.timeout_seconds,
-            "stages": list(plan.stages),
-            "seed": plan.seed,
-            "max_http_concurrency": max(plan.stages),
-        },
-        "integrity": {
-            "valid": result.integrity_ok,
-            "request_id_mismatches": result.request_id_mismatches,
-            "lookup_strategy_mismatches": result.lookup_strategy_mismatches,
-            "lookup_fallback_samples": result.lookup_fallback_samples,
-            "lookup_fallback_attribution_missing": result.lookup_fallback_attribution_missing,
-            "semantic_mismatches": result.semantic_mismatches,
-            "unresolved_pairs": result.unresolved_pairs,
-            "unresolved_identifiers": result.unresolved_identifiers,
-            "invalid_pairs": result.invalid_pairs,
-        },
-        "caveats": _comparison_caveats(result),
-        "stages": [_comparison_stage_dict(stage, plan.threshold_ms) for stage in result.stages],
-    }
-
-
-def as_dict(result: BenchmarkResult) -> Dict[str, object]:
-    if isinstance(result, ComparisonResult):
-        return _comparison_as_dict(result)
-
+def as_dict(result: RunResult) -> Dict[str, object]:
     plan = result.plan
     return {
         "target": plan.normalized_base_url,
@@ -737,7 +319,6 @@ def as_dict(result: BenchmarkResult) -> Dict[str, object]:
             "description": plan.workload.describe(),
             "batch_size": plan.workload.batch_size,
             "method": plan.workload.normalized_method,
-            "lookup_strategy": plan.workload.lookup_strategy,
             "pmid_ratio": None if plan.workload.uses_identifier_pool else plan.workload.pmid_ratio,
             "unique_ratio": None if plan.workload.uses_identifier_pool else plan.workload.unique_ratio,
             "identifier_pool": (
@@ -769,31 +350,18 @@ def as_dict(result: BenchmarkResult) -> Dict[str, object]:
             else None
         ),
         "request_id_mismatches": result.request_id_mismatches,
-        "lookup_strategy_mismatches": result.lookup_strategy_mismatches,
         "caveats": _caveats(result),
         "stages": [stage.as_dict(plan.threshold_ms) for stage in result.stages],
     }
 
 
-def slo_met(result: BenchmarkResult, basis: str) -> bool:
+def slo_met(result: RunResult, basis: str) -> bool:
     """Whether every stage met the objective on ``basis``.
 
-    A run with no successful samples or uncertain strategy attribution does not
-    count as meeting the objective.  In particular, accepting the latency of
-    only the correctly attributed subset would let a mixed/stale deployment
-    produce a misleading pass.
+    A run with no successful samples or mismatched request correlation does not
+    count as meeting the objective.
     """
-    if isinstance(result, ComparisonResult):
-        if not result.integrity_ok:
-            return False
-        verdicts = [
-            stage.arm_report(strategy).verdict(basis, result.plan.threshold_ms)
-            for stage in result.stages
-            for strategy in result.strategies
-        ]
-        return bool(verdicts) and all(verdict is not None and verdict.met for verdict in verdicts)
-
-    if result.request_id_mismatches or result.lookup_strategy_mismatches:
+    if result.request_id_mismatches:
         return False
     verdicts = [stage.verdict(basis, result.plan.threshold_ms) for stage in result.stages]
     return bool(verdicts) and all(verdict is not None and verdict.met for verdict in verdicts)

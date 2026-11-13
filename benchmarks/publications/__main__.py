@@ -7,7 +7,7 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import List, Optional, Sequence, Tuple
 
 from benchmarks.publications.corpus import (
     DEFAULT_MAX_PMID,
@@ -18,21 +18,14 @@ from benchmarks.publications.corpus import (
 )
 from benchmarks.publications.metrics import SLO_THRESHOLD_MS
 from benchmarks.publications.report import render_json, render_text, slo_met
-from benchmarks.publications.runner import ComparisonResult, RunResult, run_comparison_plan, run_plan, verify_pmid_pool
+from benchmarks.publications.runner import RunResult, run_plan, verify_pmid_pool
 from benchmarks.publications.users import (
     DEFAULT_CATALOG_SIZE,
     DEFAULT_ZIPF_EXPONENT,
     UserModel,
     run_user_plan,
 )
-from benchmarks.publications.workload import (
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_COMPARISON_STRATEGIES,
-    DEFAULT_LOOKUP_STRATEGY,
-    SUPPORTED_LOOKUP_STRATEGIES,
-    RunPlan,
-    Workload,
-)
+from benchmarks.publications.workload import DEFAULT_BATCH_SIZE, RunPlan, Workload
 
 # CI is the deployment CCWG#15 is being validated against.
 DEFAULT_BASE_URL = "https://annotator.ci.transltr.io"
@@ -64,40 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="identifiers per request; CCWG#15 caps this at 100",
     )
     parser.add_argument("--method", choices=("GET", "POST", "get", "post"), default="GET")
-    strategy_mode = parser.add_mutually_exclusive_group()
-    strategy_mode.add_argument(
-        "--lookup-strategy",
-        choices=SUPPORTED_LOOKUP_STRATEGIES,
-        # Keep the parser default distinct from every explicit choice. Python
-        # 3.10 and 3.11 can miss a mutually-exclusive-group conflict when an
-        # explicitly parsed value is identical to that action's default.
-        default=None,
-        help=f"temporary server-side lookup implementation to benchmark; defaults to {DEFAULT_LOOKUP_STRATEGY}",
-    )
-    strategy_mode.add_argument(
-        "--compare-lookup-strategies",
-        action="store_true",
-        help=(
-            "backwards-compatible shorthand for --compare-strategies current bulk-search; "
-            "--requests and --warmup then count pairs"
-        ),
-    )
-    strategy_mode.add_argument(
-        "--compare-strategies",
-        nargs=2,
-        choices=SUPPORTED_LOOKUP_STRATEGIES,
-        metavar=("CONTROL", "EXPERIMENT"),
-        help=(
-            "issue balanced pairs for two explicitly selected strategies; reports EXPERIMENT minus CONTROL, "
-            "so a negative delta favors EXPERIMENT"
-        ),
-    )
-    parser.add_argument(
-        "--requests",
-        type=int,
-        default=100,
-        help="measured requests per stage, or request pairs in comparison mode",
-    )
+    parser.add_argument("--requests", type=int, default=100, help="measured requests per stage")
     parser.add_argument("--concurrency", type=int, default=1, help="concurrent requests in flight")
     parser.add_argument(
         "--ramp",
@@ -106,12 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="1,2,4,8",
         help="sweep these concurrency levels instead of a single --concurrency stage",
     )
-    parser.add_argument(
-        "--warmup",
-        type=int,
-        default=10,
-        help="discarded requests before each stage, or request pairs in comparison mode",
-    )
+    parser.add_argument("--warmup", type=int, default=10, help="discarded requests before each stage")
     parser.add_argument(
         "--pmid-ratio",
         type=float,
@@ -202,7 +157,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bool]:
     """Build the workload from synthetic, file-backed, or verified identifiers."""
-    lookup_strategy = arguments.lookup_strategy or DEFAULT_LOOKUP_STRATEGY
     if arguments.identifier_file and arguments.verify_corpus:
         raise SystemExit("--identifier-file cannot be combined with --verify-corpus")
 
@@ -227,7 +181,6 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
         pmid_ratio=arguments.pmid_ratio,
         unique_ratio=arguments.unique_ratio,
         hot_pool_size=arguments.hot_pool,
-        lookup_strategy=lookup_strategy,
         identifier_pool=identifier_pool,
         identifier_pool_source=identifier_pool_source,
     )
@@ -241,12 +194,7 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
         CorpusConfig(min_pmid=arguments.min_pmid, max_pmid=arguments.max_pmid, seed=arguments.seed)
     )
     candidates = [sampler.fresh_pmid() for _ in range(candidate_count)]
-    resolved = await verify_pmid_pool(
-        arguments.base_url,
-        candidates,
-        arguments.timeout,
-        lookup_strategy=lookup_strategy,
-    )
+    resolved = await verify_pmid_pool(arguments.base_url, candidates, arguments.timeout)
     if len(resolved) < arguments.batch_size:
         raise SystemExit(
             f"corpus verification resolved only {len(resolved)} identifiers, "
@@ -261,7 +209,6 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
             # identifiers, which is only meaningful with reuse enabled.
             unique_ratio=0.0,
             hot_pool_size=len(resolved),
-            lookup_strategy=lookup_strategy,
             identifier_pool=tuple(resolved),
             identifier_pool_source="verified PMID pool",
         ),
@@ -269,22 +216,7 @@ async def _prepare_workload(arguments: argparse.Namespace) -> Tuple[Workload, bo
     )
 
 
-async def execute(arguments: argparse.Namespace) -> Union[RunResult, ComparisonResult]:
-    comparison_strategies: Optional[Tuple[str, str]] = None
-    if arguments.compare_lookup_strategies:
-        comparison_strategies = DEFAULT_COMPARISON_STRATEGIES
-    elif arguments.compare_strategies:
-        comparison_strategies = tuple(arguments.compare_strategies)
-
-    if comparison_strategies and comparison_strategies[0] == comparison_strategies[1]:
-        raise SystemExit("--compare-strategies requires two distinct lookup strategies")
-    if comparison_strategies and arguments.users is not None:
-        raise SystemExit("paired strategy comparison cannot be combined with --users")
-    if comparison_strategies and not arguments.identifier_file:
-        raise SystemExit("paired strategy comparison requires --identifier-file with real resolving identifiers")
-    if comparison_strategies and (arguments.requests < 2 or arguments.requests % 2):
-        raise SystemExit("paired strategy comparison requires an even --requests value of at least 2")
-
+async def execute(arguments: argparse.Namespace) -> RunResult:
     workload, cache_primed = await _prepare_workload(arguments)
     plan = RunPlan(
         base_url=arguments.base_url,
@@ -297,12 +229,6 @@ async def execute(arguments: argparse.Namespace) -> Union[RunResult, ComparisonR
         threshold_ms=arguments.threshold_ms,
         ramp=tuple(arguments.ramp or ()),
     )
-    if comparison_strategies:
-        return await run_comparison_plan(
-            plan,
-            cache_primed=cache_primed,
-            strategies=comparison_strategies,
-        )
     if arguments.users is None:
         return await run_plan(plan, cache_primed=cache_primed)
 

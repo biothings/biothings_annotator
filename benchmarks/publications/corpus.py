@@ -14,11 +14,11 @@ therefore opt-in (:func:`verify_pmid_pool`) and the report labels the run as
 cache-primed when it is used.
 
 PMCIDs and DOIs are synthesized by the default mixed workload. Because those
-values usually miss, a benchmark comparing implementations should instead load
-a curated file of known-resolving PMIDs, PMCIDs, and DOIs. A fixed pool is
-sampled without replacement within each request and with the same seeded random
-generator as the synthetic corpus, so two runs with the same seed issue the
-same batches.
+values usually miss, a benchmark intended to measure hit-path work should load a
+curated file of known-resolving PMIDs, PMCIDs, and DOIs. A fixed pool is sampled
+without replacement within each request and with the same seeded random
+generator as the synthetic corpus, so repeated runs with the same seed issue
+the same batches.
 """
 
 import random
@@ -71,9 +71,8 @@ class IdentifierCorpus:
     Instances are not thread-safe and are not safe to share across concurrent
     workers: they own a single :class:`random.Random`. The runner gives each
     worker its own corpus, which makes each worker's draw sequence reproducible.
-    Aggregate single-arm assignment can still vary when faster workers claim
-    more requests; paired comparison mode therefore precomputes every batch
-    before any timed request starts.
+    Aggregate request assignment can still vary when faster workers claim
+    more requests, but the workload remains reproducible at a fixed concurrency.
     """
 
     def __init__(
@@ -200,10 +199,10 @@ class IdentifierCorpus:
         """Build one request's identifier list.
 
         ``pmid_ratio`` splits the batch between the batched ``_mget`` path
-        (PMID) and the per-identifier ``_msearch`` path (PMCID and DOI, drawn in
-        alternation). ``unique_ratio`` splits it between fresh identifiers and
-        the hot pool, which is how a cold-cache run is told from a warm-cache
-        one.
+        (PMID) and the bulk alternative-identifier ``_search`` path (PMCID and
+        DOI, drawn in alternation). ``unique_ratio`` splits it between fresh
+        identifiers and the hot pool, which is how a cold-cache run is told
+        from a warm-cache one.
 
         The returned list is deduplicated, because the endpoint deduplicates
         before querying the backend and returning near-duplicate batches would
