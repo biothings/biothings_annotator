@@ -3,6 +3,7 @@
 import asyncio
 import os
 import re
+from copy import deepcopy
 
 import pytest
 import sanic
@@ -42,6 +43,20 @@ FORMATTED_METADATA = {
     "pub_day": "15",
     "abstract": "Example abstract",
 }
+PUBLICATION_TYPES = [
+    {"id": "MESH:D016454", "name": "Review"},
+    {"id": "MESH:D016428", "name": ""},
+    {"id": "MESH:D016428", "name": " Journal Article "},
+    {"id": "MESH:D016454", "name": "Review"},
+]
+
+
+@pytest.fixture(
+    params=[{}, {"publication_types": []}, {"publication_types": PUBLICATION_TYPES}],
+    ids=["missing", "empty", "ordered"],
+)
+def publication_type_fields(request):
+    return request.param
 
 
 @pytest.mark.unit
@@ -67,6 +82,14 @@ def test_format_publication_metadata_uses_empty_strings_and_date_precision():
         "pub_day": "",
         "abstract": "",
     }
+
+
+@pytest.mark.unit
+def test_format_publication_metadata_preserves_publication_types(publication_type_fields):
+    formatted = format_publication_metadata({**PUBMED_METADATA, **deepcopy(publication_type_fields)})
+
+    assert formatted == {**FORMATTED_METADATA, **publication_type_fields}
+    assert all(isinstance(formatted[field], str) for field in FORMATTED_METADATA)
 
 
 @pytest.mark.unit
@@ -139,6 +162,69 @@ def test_format_publication_metadata_reads_a_verbatim_date_from_pub_date(pub_dat
     in pub_date rather than pubdate_raw would silently lose the whole date.
     """
     formatted = format_publication_metadata({"pub_date": pub_date})
+
+    assert (formatted["pub_year"], formatted["pub_month"], formatted["pub_day"]) == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "components, expected",
+    [
+        ({}, ("", "", "")),
+        ({"pub_year": "2020"}, ("2020", "", "")),
+        ({"pub_year": "2020", "pub_month": "May", "pub_day": ""}, ("2020", "May", "")),
+        ({"pub_year": "2020", "pub_month": "5"}, ("2020", "May", "")),
+        ({"pub_year": "2020", "pub_month": "05"}, ("2020", "May", "")),
+        ({"pub_year": "2020", "pub_month": "12", "pub_day": "15"}, ("2020", "Dec", "15")),
+        ({"pub_year": "2020", "pub_month": "Spring"}, ("2020", "Spring", "")),
+        ({"pub_year": "1994", "pub_month": "Sep-Dec"}, ("1994", "Sep-Dec", "")),
+        ({"pub_year": "1998", "pub_month": "Dec-1999 Jan"}, ("1998", "Dec-1999 Jan", "")),
+        ({"pub_year": "1987-1988"}, ("1987-1988", "", "")),
+        ({"pub_month": "May"}, ("", "May", "")),
+        ({"pub_day": "15"}, ("", "", "15")),
+        ({"pub_year": "2020", "pub_month": "0"}, ("2020", "", "")),
+        ({"pub_year": "2020", "pub_month": "13"}, ("2020", "", "")),
+        ({"pub_year": None, "pub_month": ["May"], "pub_day": 15}, ("", "", "")),
+    ],
+)
+def test_format_publication_metadata_falls_back_to_preserved_components(components, expected):
+    formatted = format_publication_metadata(components)
+
+    assert (formatted["pub_year"], formatted["pub_month"], formatted["pub_day"]) == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "date_fields",
+    [
+        {"pubdate_raw": ""},
+        {"pubdate_raw": "n.d."},
+        {"pubdate_raw": None, "pub_date": None},
+        {"pubdate_raw": "n.d.", "pub_date": "n.d."},
+        {"pubdate_raw": {}, "pub_date": []},
+    ],
+)
+def test_format_publication_metadata_uses_preserved_components_after_unusable_dates(date_fields):
+    formatted = format_publication_metadata({"pub_year": "2020", "pub_month": "May", "pub_day": "", **date_fields})
+
+    assert (formatted["pub_year"], formatted["pub_month"], formatted["pub_day"]) == ("2020", "May", "")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "date_fields, expected",
+    [
+        ({"pubdate_raw": "1994 Sep-Dec", "pub_date": "2019-03-15"}, ("1994", "Sep-Dec", "")),
+        ({"pubdate_raw": "2019", "pub_date": "2019-03-15"}, ("2019", "", "")),
+        ({"pubdate_raw": "n.d.", "pub_date": "1998 Dec-1999 Jan"}, ("1998", "Dec-1999 Jan", "")),
+        ({"pubdate_raw": "n.d.", "pub_date": "2019-03-15"}, ("2019", "Mar", "15")),
+        ({"pub_date": "2026-07"}, ("2026", "Jul", "")),
+        ({"pub_date": "1987-1988"}, ("1987-1988", "", "")),
+        ({"pubdate_raw": "1987-1988"}, ("1987-1988", "", "")),
+    ],
+)
+def test_format_publication_metadata_keeps_date_precedence_over_preserved_components(date_fields, expected):
+    formatted = format_publication_metadata({"pub_year": "2020", "pub_month": "May", "pub_day": "26", **date_fields})
 
     assert (formatted["pub_year"], formatted["pub_month"], formatted["pub_day"]) == expected
 
@@ -498,6 +584,67 @@ async def test_publications_endpoint_returns_legacy_envelope_and_deduplicates(
     assert isinstance(response.json["_meta"]["processing_time_ms"], int)
     assert response.json["_meta"]["processing_time_ms"] >= 0
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", response.json["_meta"]["timestamp"])
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize(
+    "path, body",
+    [
+        (f"/publications?pubids={PMID}", None),
+        (f"/publications/{PMID}", None),
+        ("/publications", {"ids": [PMID]}),
+        ("/publications", [PMID]),
+    ],
+)
+async def test_publication_service_and_endpoints_project_preserved_metadata(
+    test_annotator: sanic.Sanic,
+    monkeypatch,
+    publication_type_fields,
+    path,
+    body,
+):
+    metadata = {
+        **PUBMED_METADATA,
+        "pub_date": "",
+        "pubdate_raw": "n.d.",
+        "pub_year": "2020",
+        "pub_month": "5",
+        "pub_day": "",
+        **deepcopy(publication_type_fields),
+    }
+    expected = {
+        **FORMATTED_METADATA,
+        "pub_year": "2020",
+        "pub_month": "May",
+        "pub_day": "",
+        **publication_type_fields,
+    }
+
+    class FakePubMedClient:
+        async def mget(self, query_list, fields):
+            assert query_list == [PMID]
+            assert fields == ["pubmed"]
+            return [{"query": PMID, "_id": PMID, "pubmed": metadata}]
+
+    monkeypatch.setattr(
+        "biothings_annotator.annotator.document_metadata.get_elasticsearch_client",
+        lambda node_type, elasticsearch_connection: FakePubMedClient(),
+    )
+
+    results, not_found = await DocumentMetadataService().get_publications([PMID])
+
+    assert results == {PMID: expected}
+    assert not_found == []
+
+    if body is None:
+        _, response = await test_annotator.asgi_client.get(path)
+    else:
+        _, response = await test_annotator.asgi_client.post(path, json=body)
+
+    assert response.status_code == 200
+    assert response.json["results"] == {PMID: expected}
+    assert response.json["not_found"] == []
 
 
 @pytest.mark.unit

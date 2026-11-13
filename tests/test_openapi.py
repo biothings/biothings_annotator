@@ -379,6 +379,37 @@ def test_documented_publication_id_pattern_matches_the_served_validation():
 
 
 @pytest.mark.unit
+def test_publication_metadata_documents_optional_publication_types():
+    with OPENAPI_PATH.open(encoding="utf-8") as openapi_file:
+        specification = json.load(openapi_file)
+
+    metadata = specification["components"]["schemas"]["PublicationMetadata"]
+    citation_fields = {
+        "journal_name",
+        "journal_abbrev",
+        "article_title",
+        "volume",
+        "issue",
+        "pub_year",
+        "pub_month",
+        "pub_day",
+        "abstract",
+    }
+    assert set(metadata["required"]) == citation_fields
+    assert all(metadata["properties"][field]["type"] == "string" for field in citation_fields)
+
+    publication_types = metadata["properties"]["publication_types"]
+    assert publication_types["type"] == "array"
+    assert publication_types.get("minItems", 0) == 0
+    assert publication_types.get("uniqueItems", False) is False
+    item = publication_types["items"]
+    assert item["type"] == "object"
+    assert set(item["required"]) == {"id", "name"}
+    assert item["properties"]["id"]["type"] == "string"
+    assert item["properties"]["name"] == {"type": "string"}
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("config_path", [DEFAULT_CONFIG_PATH, DEPLOY_CONFIG_PATH])
 def test_cors_configuration_uses_supported_keys(config_path):
     with config_path.open(encoding="utf-8") as config_file:

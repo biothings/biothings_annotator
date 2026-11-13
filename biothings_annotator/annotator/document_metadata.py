@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 from biothings_annotator.annotator.settings import (
     DEFAULT_ELASTICSEARCH_CONNECTION,
@@ -21,9 +21,10 @@ PUBMED_REQUIRED_INDEX_FIELDS = ("pubmed.identifiers",)
 # in-house transformation lands the verbatim value in pubmed.pubdate_raw, so that
 # is the field the capability probe checks.
 PUBMED_OPTIONAL_INDEX_FIELDS = ("pubmed.pubdate_raw",)
-# Used only by the numeric pub_date fallback. The verbatim pubdate_raw path
+# Used by the ISO and preserved-component fallbacks. The verbatim pubdate_raw path
 # already carries PubMed's own three-letter abbreviations.
 MONTH_ABBREVIATIONS = ("", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+PublicationMetadata = Dict[str, Union[str, List[Dict[str, str]]]]
 
 
 def _is_document_id(publication_id: str) -> bool:
@@ -127,13 +128,15 @@ def _iso_publication_date_components(publication_date: object) -> Tuple[str, str
 
 
 def _publication_date_components(metadata: Dict) -> Tuple[str, str, str]:
-    """Prefer PubMed's verbatim date, falling back to the indexed ISO date.
+    """Prefer verbatim dates, then ISO dates, then preserved upstream components.
 
     ``pubdate_raw`` is the richer source because it retains ranges that an exact
     calendar date cannot express, but it depends on an index revision that may
     not be deployed yet, and it is absent or unparseable for records with no
     stated date. The ISO fallback keeps those records projecting as they do
-    today.
+    today. When neither field supplies a usable date, the preserved ``pub_year``,
+    ``pub_month``, and ``pub_day`` strings retain partial dates. Earlier sources
+    win as a whole; missing parts are not filled from a lower-priority source.
 
     The index carries the verbatim value in ``pubdate_raw``, so the matching read
     of ``pub_date`` below is defensive: it costs one call and stops a verbatim
@@ -154,10 +157,23 @@ def _publication_date_components(metadata: Dict) -> Tuple[str, str, str]:
     year, month, day = _raw_publication_date_components(publication_date)
     if year:
         return year, month, day
-    return _iso_publication_date_components(publication_date)
+    year, month, day = _iso_publication_date_components(publication_date)
+    if year:
+        return year, month, day
+
+    year, month, day = (
+        value if isinstance(value, str) else ""
+        for value in (metadata.get("pub_year"), metadata.get("pub_month"), metadata.get("pub_day"))
+    )
+    # Preserve seasonal and ranged text; only ordinary numeric months need a
+    # conversion to the legacy response's English abbreviations.
+    if month.isdecimal():
+        month_number = int(month)
+        month = MONTH_ABBREVIATIONS[month_number] if 1 <= month_number <= 12 else ""
+    return year, month, day
 
 
-def format_publication_metadata(metadata: Dict) -> Dict[str, str]:
+def format_publication_metadata(metadata: Dict) -> PublicationMetadata:
     """Translate the compact indexed PubMed object into the legacy field names."""
     journal = metadata.get("journal")
     if not isinstance(journal, dict):
@@ -175,7 +191,10 @@ def format_publication_metadata(metadata: Dict) -> Dict[str, str]:
         "pub_day": publication_day,
         "abstract": metadata.get("abstract"),
     }
-    return {field: value if isinstance(value, str) else "" for field, value in fields.items()}
+    result: PublicationMetadata = {field: value if isinstance(value, str) else "" for field, value in fields.items()}
+    if "publication_types" in metadata:
+        result["publication_types"] = metadata["publication_types"]
+    return result
 
 
 def _is_searchable(field_capabilities: object) -> bool:
@@ -216,7 +235,9 @@ class DocumentMetadataService:
         if self.request_timeout <= 0:
             raise ValueError("Document metadata request timeout must be greater than zero")
 
-    async def get_publications(self, publication_ids: Iterable[str]) -> Tuple[Dict[str, Dict[str, str]], List[str]]:
+    async def get_publications(
+        self, publication_ids: Iterable[str]
+    ) -> Tuple[Dict[str, PublicationMetadata], List[str]]:
         """Return ordered publication results and missing identifiers."""
         publication_ids = list(publication_ids)
         if not publication_ids:
@@ -239,7 +260,7 @@ class DocumentMetadataService:
             self._fetch_hits(client, document_ids, search_ids), timeout=self.request_timeout
         )
 
-        results: Dict[str, Dict[str, str]] = {}
+        results: Dict[str, PublicationMetadata] = {}
         not_found: List[str] = []
         for publication_id in publication_ids:
             metadata = hits_by_id.get(_canonical_lookup_id(publication_id), {}).get("pubmed")
