@@ -538,10 +538,16 @@ Both batch forms accept at most 100 identifiers; the path form looks up one iden
 object as shown above.
 
 The response contains legacy-compatible `_meta`, `results`, and `not_found` sections, keyed by the
-identifier as submitted. Missing source values are returned as empty strings. The publication date is
-projected from PubMed's verbatim rendering when the index carries it, so month ranges survive as
-CCWG#15 specifies (`"pub_month": "Sep-Dec"` for `PMID:8000234`); otherwise it falls back to splitting
-the indexed ISO `pub_date` into year, month, and day.
+identifier as submitted. The nine citation fields (`journal_name`, `journal_abbrev`, `article_title`,
+`volume`, `issue`, `pub_year`, `pub_month`, `pub_day`, and `abstract`) remain strings, with missing source
+values returned as empty strings. Each publication also includes `publication_types` when that field is
+present in the indexed `pubmed` object: the full ordered array of `{id, name}` objects is returned without
+changing IDs, names (including blank names), ordering, or duplicates. An explicitly empty upstream array
+is returned as `[]`; an absent field is omitted from the response.
+
+The publication date is projected from PubMed's verbatim rendering when the index carries it, so month
+ranges survive as CCWG#15 specifies (`"pub_month": "Sep-Dec"` for `PMID:8000234`); otherwise it falls
+back to splitting the indexed ISO `pub_date` into year, month, and day.
 
 The index carries the verbatim value in `pubdate_raw` — whatever the upstream exporter emits, the
 in-house ingest transformation normalizes it to that field, which is also the field the capability probe
@@ -549,6 +555,14 @@ checks. `pub_date` is additionally read as a verbatim value purely defensively, 
 landing there is not flattened to empty strings if that transformation ever changes. It cannot misread
 anything: the verbatim and ISO parsers accept disjoint shapes, so `"2019-03-15"` is only ever read as an
 ISO date and `"1994 Sep-Dec"` only as a verbatim one.
+
+If neither raw nor ISO parsing supplies a usable date, the response falls back to the preserved upstream
+`pub_year`, `pub_month`, and `pub_day` strings under `pubmed`. For example, `"2020"` / `"May"` / `""`
+survives without `pubdate_raw` or `pub_date`; numeric months such as `"5"` and `"05"` become `"May"`.
+Seasons and ranges are retained, and unknown components remain empty strings. A usable earlier source
+wins as a whole, so missing parts are not filled from the preserved components. These components are
+stored by annotation-hub commit `f370db9` on `data/pubmed-nov-2026`; existing published data needs a fresh
+Hub upload and index build to gain them. The publication endpoints already retrieve all of `pubmed`.
 
 A bare year range is the one shape that collides with an ISO date, since both open with `YYYY-`. It is
 projected losslessly into `pub_year` — `"1987-1988"` gives `{"pub_year": "1987-1988", "pub_month": "",

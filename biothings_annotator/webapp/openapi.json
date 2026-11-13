@@ -2482,7 +2482,19 @@
           "pub_year": {"type": "string"},
           "pub_month": {"type": "string"},
           "pub_day": {"type": "string"},
-          "abstract": {"type": "string"}
+          "abstract": {"type": "string"},
+          "publication_types": {
+            "type": "array",
+            "description": "PubMed publication types in upstream order, preserving IDs and names, including blank names. Omitted when absent upstream; an explicitly empty upstream array is returned as an empty array.",
+            "items": {
+              "type": "object",
+              "required": ["id", "name"],
+              "properties": {
+                "id": {"type": "string"},
+                "name": {"type": "string"}
+              }
+            }
+          }
         }
       },
       "DocumentMetadataResponse": {
