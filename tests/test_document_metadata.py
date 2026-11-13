@@ -1192,6 +1192,8 @@ async def test_bulk_lookup_falls_back_when_one_identifier_belongs_to_multiple_do
     }
     identifier_map = {collision: "PMID:2", pmcid.lower(): "PMID:2"}
     bulk_response = {
+        "timed_out": False,
+        "failed_shards": 0,
         "total": 2,
         "total_relation": "eq",
         "hits": [

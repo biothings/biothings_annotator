@@ -596,6 +596,61 @@ async def test_elasticsearch_search_terms_preserves_an_incomplete_envelope_for_f
     assert result["hits"] is None
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source",
+    [
+        None,
+        42,
+        True,
+        "malformed",
+        ["malformed"],
+        [["pubmed", {"identifiers": ["doi:10.1242/jcs.03153"]}]],
+    ],
+    ids=["null", "number", "boolean", "string", "array", "dict-coercible-array"],
+)
+async def test_publication_bulk_lookup_falls_back_for_non_object_search_hit_sources(source):
+    from biothings_annotator.annotator.document_metadata import DocumentMetadataService
+
+    identifier = "doi:10.1242/jcs.03153"
+    metadata = {"identifiers": [identifier], "title": "Fallback publication"}
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        hit = {"_id": "PMID:1", "_source": {"pubmed": metadata}}
+        if request.url.path == "/annotator-pubmed/_search":
+            return httpx.Response(
+                200,
+                json={
+                    "timed_out": False,
+                    "_shards": {"failed": 0},
+                    "hits": {
+                        "total": {"value": 1, "relation": "eq"},
+                        "hits": [{**hit, "_source": source}],
+                    },
+                },
+            )
+        assert request.url.path == "/annotator-pubmed/_msearch"
+        return httpx.Response(
+            200,
+            json={"responses": [{"timed_out": False, "_shards": {"failed": 0}, "hits": {"hits": [hit]}}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+        hits = await DocumentMetadataService._fetch_hits(client, [], [identifier])
+
+    assert requests == ["/annotator-pubmed/_search", "/annotator-pubmed/_msearch"]
+    assert hits == {identifier: {"_id": "PMID:1", "pubmed": metadata, "query": identifier}}
+
+
 @pytest.mark.asyncio
 async def test_elasticsearch_client_supports_configured_headers():
     requests = []

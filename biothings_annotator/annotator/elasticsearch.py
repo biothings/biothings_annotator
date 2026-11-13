@@ -206,7 +206,15 @@ class ElasticsearchAnnotatorClient:
         raw_hits = hits_section.get("hits") if isinstance(hits_section, dict) else None
         formatted_hits = None
         if isinstance(raw_hits, list):
-            formatted_hits = [self._format_hit(hit) if isinstance(hit, dict) else hit for hit in raw_hits]
+            formatted_hits = []
+            for hit in raw_hits:
+                if not isinstance(hit, dict):
+                    formatted_hits.append(hit)
+                    continue
+                # Keep invalid sources unmappable so the caller can use its
+                # exact-search fallback instead of failing during formatting.
+                source = hit.get("_source")
+                formatted_hits.append(self._format_hit(hit) if isinstance(source, dict) else {"_id": hit.get("_id")})
 
         return {
             "took": payload.get("took"),
