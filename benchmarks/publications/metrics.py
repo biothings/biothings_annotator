@@ -37,16 +37,6 @@ class Sample:
     found: int = 0
     not_found: int = 0
     response_bytes: int = 0
-    lookup_strategy: Optional[str] = None
-    # Paired comparisons require an explicit false value from the endpoint.
-    # The default keeps synthetic/unit-test samples concise; response parsing
-    # records ``None`` when an actual deployment omits the attribution marker.
-    lookup_fallback: Optional[bool] = False
-    # Canonical digest of ``results`` plus ``not_found``. It is intentionally
-    # not rendered: paired A/B mode only needs to prove that both treatments
-    # returned the same semantic response without retaining every abstract a
-    # second time in memory.
-    semantic_signature: Optional[str] = None
     error: Optional[str] = None
 
     @property
@@ -258,32 +248,6 @@ class StageReport:
             "mean_response_kb": round(sum(sample.response_bytes for sample in successful) / len(successful) / 1024, 1),
         }
 
-    @property
-    def lookup_strategy_counts(self) -> Dict[str, int]:
-        """Strategies attributed by measured 200 responses, including rejected mismatches."""
-        counts: Dict[str, int] = {}
-        for sample in self.samples:
-            if sample.status == 200:
-                strategy = sample.lookup_strategy or "<missing>"
-                counts[strategy] = counts.get(strategy, 0) + 1
-        return dict(sorted(counts.items()))
-
-    @property
-    def lookup_fallback_counts(self) -> Dict[str, int]:
-        """Fallback attribution from measured 200 responses."""
-        counts: Dict[str, int] = {}
-        for sample in self.samples:
-            if sample.status != 200:
-                continue
-            if sample.lookup_fallback is True:
-                key = "true"
-            elif sample.lookup_fallback is False:
-                key = "false"
-            else:
-                key = "<missing>"
-            counts[key] = counts.get(key, 0) + 1
-        return dict(sorted(counts.items()))
-
     def as_dict(self, threshold_ms: float = SLO_THRESHOLD_MS) -> Dict[str, object]:
         client = self.client_latency()
         server = self.server_latency()
@@ -300,8 +264,6 @@ class StageReport:
             "throughput_rps": round(self.throughput_rps, 2),
             "status_counts": self.status_counts,
             "cache_primed": self.cache_primed,
-            "lookup_strategy_counts": self.lookup_strategy_counts,
-            "lookup_fallback_counts": self.lookup_fallback_counts,
             "identifiers": self.identifier_stats,
             "client_latency": client.as_dict() if client else None,
             "server_latency": server.as_dict() if server else None,

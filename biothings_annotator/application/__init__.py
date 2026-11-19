@@ -1,5 +1,6 @@
 from typing import Dict
 import logging
+import os
 import pathlib
 
 from sanic import Sanic
@@ -7,12 +8,22 @@ from sanic import Sanic
 from biothings_annotator.application.exceptions import build_exception_handers
 from biothings_annotator.application.middleware import build_middleware
 from biothings_annotator.application.static import build_static_routes, build_static_content
+from biothings_annotator.application.status_metadata import start_status_tasks, stop_status_tasks
 from biothings_annotator.application.telemetry import configure_telemetry
 from biothings_annotator.application.views import build_routes
+from biothings_annotator.application.version import get_local_git_version
 
 logging.basicConfig()
 logger = logging.getLogger("sanic-application")
 logger.setLevel(logging.DEBUG)
+
+
+def get_deployment_environment(configuration: Dict) -> str:
+    """Resolve the explicit deployment label, independently of request hosts."""
+    environment = os.getenv("ANNOTATOR_DEPLOYMENT_ENV") or configuration.get("DEPLOYMENT_ENVIRONMENT", "unknown")
+    if not isinstance(environment, str):
+        raise ValueError("DEPLOYMENT_ENVIRONMENT must be a string")
+    return environment.strip() or "unknown"
 
 
 def build_application(configuration: Dict = None) -> Sanic:
@@ -60,10 +71,16 @@ def build_application(configuration: Dict = None) -> Sanic:
     configuration_settings = {}
     configuration_settings.update(application_configuration)
     configuration_settings.update(extension_configuration["cors"])
+    configuration_settings["DEPLOYMENT_ENVIRONMENT"] = get_deployment_environment(application_configuration)
 
     application = Sanic(name="biothings-annotator")
     application.update_config(configuration_settings)
+    if application.config.DEPLOYMENT_ENVIRONMENT == "local":
+        # Keep the version tied to this startup if HEAD changes while the server runs.
+        application.ctx.local_git_version = get_local_git_version()
     configure_telemetry(application, configuration["application"].get("telemetry", {}))
+    application.register_listener(start_status_tasks, "before_server_start")
+    application.register_listener(stop_status_tasks, "after_server_stop")
 
     application_routes = build_routes()
     static_routes = build_static_routes()

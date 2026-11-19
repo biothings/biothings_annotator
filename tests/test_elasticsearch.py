@@ -22,6 +22,7 @@ from biothings_annotator.annotator.utils import (
     get_elasticsearch_client,
     get_elasticsearch_connection,
     get_elasticsearch_info_client,
+    get_query_client,
 )
 
 
@@ -59,6 +60,8 @@ def test_annotator_uses_query_backend_environment(monkeypatch):
     [
         ("biothings", "biothings"),
         (" BioThings ", "biothings"),
+        ("biothings-api", "biothings"),
+        (" BioThings-API ", "biothings"),
         ("elasticsearch", "elasticsearch"),
         (" Elasticsearch ", "elasticsearch"),
         ("es", "elasticsearch"),
@@ -73,12 +76,21 @@ def test_annotator_normalizes_explicit_query_backend(monkeypatch, requested_back
     assert annotator.query_backend == expected_backend
 
 
-def test_none_query_backend_uses_normalized_environment_alias(monkeypatch):
-    monkeypatch.setenv(QUERY_BACKEND_ENV, " ES ")
+@pytest.mark.parametrize(
+    "configured_backend, expected_backend",
+    [
+        ("es", "elasticsearch"),
+        (" ES ", "elasticsearch"),
+        ("biothings-api", "biothings"),
+        (" BioThings-API ", "biothings"),
+    ],
+)
+def test_none_query_backend_uses_normalized_environment_alias(monkeypatch, configured_backend, expected_backend):
+    monkeypatch.setenv(QUERY_BACKEND_ENV, configured_backend)
 
     annotator = Annotator(query_backend=None)
 
-    assert annotator.query_backend == "elasticsearch"
+    assert annotator.query_backend == expected_backend
 
 
 @pytest.mark.parametrize("requested_backend", ["", "   ", "solr", 42])
@@ -532,6 +544,8 @@ async def test_elasticsearch_querymany_formats_biothings_style_hits():
             json={
                 "responses": [
                     {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
                         "hits": {
                             "hits": [
                                 {
@@ -540,9 +554,13 @@ async def test_elasticsearch_querymany_formats_biothings_style_hits():
                                     "_source": {"symbol": "CDK2"},
                                 }
                             ]
-                        }
+                        },
                     },
-                    {"hits": {"hits": []}},
+                    {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
+                        "hits": {"hits": []},
+                    },
                 ]
             },
         )
@@ -692,6 +710,8 @@ async def test_elasticsearch_querymany_uses_mapped_uniprot_leaf_fields():
             json={
                 "responses": [
                     {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
                         "hits": {
                             "hits": [
                                 {
@@ -699,7 +719,7 @@ async def test_elasticsearch_querymany_uses_mapped_uniprot_leaf_fields():
                                     "_source": {"symbol": "EVC2"},
                                 }
                             ]
-                        }
+                        },
                     }
                 ]
             },
@@ -745,6 +765,8 @@ async def test_elasticsearch_querymany_exact_queries_only_the_confirmed_root_fie
             json={
                 "responses": [
                     {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
                         "hits": {
                             "hits": [
                                 {
@@ -753,9 +775,13 @@ async def test_elasticsearch_querymany_exact_queries_only_the_confirmed_root_fie
                                     "_source": {"pubmed": {"identifiers": ["PMC:PMC10492916"]}},
                                 }
                             ]
-                        }
+                        },
                     },
-                    {"hits": {"hits": []}},
+                    {
+                        "timed_out": False,
+                        "_shards": {"total": 5, "successful": 5, "failed": 0},
+                        "hits": {"hits": []},
+                    },
                 ]
             },
         )
@@ -783,6 +809,38 @@ async def test_elasticsearch_querymany_exact_queries_only_the_confirmed_root_fie
         },
         {"query": "doi:missing", "notfound": True},
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query_response",
+    [
+        {"timed_out": True, "hits": {"hits": []}},
+        {"timed_out": False, "_shards": {"failed": 1}, "hits": {"hits": []}},
+        {},
+    ],
+    ids=["timed-out", "failed-shard", "malformed"],
+)
+async def test_elasticsearch_querymany_exact_rejects_partial_or_malformed_responses(query_response):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/annotator-pubmed/_msearch"
+        return httpx.Response(200, json={"responses": [query_response]})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+        with pytest.raises(RuntimeError, match="Elasticsearch query"):
+            await client.querymany_exact(
+                ["doi:10.1242/jcs.03153"],
+                field="pubmed.identifiers",
+                fields=["pubmed"],
+                size=1,
+            )
 
 
 @pytest.mark.unit
@@ -893,138 +951,10 @@ async def test_elasticsearch_search_terms_uses_one_bounded_exact_search_and_repo
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_elasticsearch_search_ids_or_terms_combines_both_exact_paths_in_one_search():
-    document_ids = ["PMID:16954148"]
-    alternate_ids = ["pmc:pmc1904490", "doi:10.1242/jcs.03153"]
-    requests = []
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(
-            {
-                "method": request.method,
-                "path": request.url.path,
-                "body": json.loads(request.content),
-            }
-        )
-        return httpx.Response(
-            200,
-            json={
-                "took": 3,
-                "timed_out": False,
-                "_shards": {"total": 1, "successful": 1, "failed": 0},
-                "hits": {
-                    "total": {"value": 2, "relation": "eq"},
-                    "max_score": 1.0,
-                    "hits": [
-                        {
-                            "_id": "PMID:16954148",
-                            "_score": 1.0,
-                            "matched_queries": ["document_ids"],
-                            "_source": {"pubmed": {"title": "PMID-only"}},
-                        },
-                        {
-                            "_id": "PMID:17284678",
-                            "_score": 1.0,
-                            "matched_queries": ["alternative_identifiers"],
-                            "_source": {
-                                "pubmed": {
-                                    "identifiers": [
-                                        "PMC:PMC1904490",
-                                        "doi:10.1242/jcs.03153",
-                                    ]
-                                }
-                            },
-                        },
-                    ],
-                },
-            },
-        )
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        client = ElasticsearchAnnotatorClient(
-            "http://localhost:9200",
-            "annotator-pubmed",
-            http_client=http_client,
-        )
-        result = await client.search_ids_or_terms(
-            document_ids,
-            alternate_ids,
-            field="pubmed.identifiers",
-            fields=["pubmed"],
-            size=3,
-        )
-
-    assert requests == [
-        {
-            "method": "POST",
-            "path": "/annotator-pubmed/_search",
-            "body": {
-                "size": 3,
-                "track_total_hits": True,
-                "_source": ["pubmed"],
-                "query": {
-                    "constant_score": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "ids": {
-                                            "values": document_ids,
-                                            "_name": "document_ids",
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            "pubmed.identifiers": alternate_ids,
-                                            "_name": "alternative_identifiers",
-                                        }
-                                    },
-                                ],
-                                "minimum_should_match": 1,
-                            }
-                        }
-                    }
-                },
-            },
-        }
-    ]
-    assert result == {
-        "took": 3,
-        "timed_out": False,
-        "terminated_early": False,
-        "failed_shards": 0,
-        "total": 2,
-        "total_relation": "eq",
-        "max_score": 1.0,
-        "hits": [
-            {
-                "pubmed": {"title": "PMID-only"},
-                "_id": "PMID:16954148",
-                "_score": 1.0,
-                "_matched_queries": ["document_ids"],
-            },
-            {
-                "pubmed": {
-                    "identifiers": [
-                        "PMC:PMC1904490",
-                        "doi:10.1242/jcs.03153",
-                    ]
-                },
-                "_id": "PMID:17284678",
-                "_score": 1.0,
-                "_matched_queries": ["alternative_identifiers"],
-            },
-        ],
-    }
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_elasticsearch_search_ids_or_terms_preserves_an_incomplete_envelope_for_fallback():
+async def test_elasticsearch_search_terms_preserves_an_incomplete_envelope_for_fallback():
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/annotator-pubmed/_search"
-        return httpx.Response(200, json={"timed_out": False, "_shards": {}, "hits": {}})
+        return httpx.Response(200, json={})
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http_client:
@@ -1033,19 +963,73 @@ async def test_elasticsearch_search_ids_or_terms_preserves_an_incomplete_envelop
             "annotator-pubmed",
             http_client=http_client,
         )
-        result = await client.search_ids_or_terms(
-            ["PMID:16954148"],
-            [],
+        result = await client.search_terms(
+            ["doi:10.1242/jcs.03153"],
             field="pubmed.identifiers",
             fields=["pubmed"],
             size=1,
         )
 
-    assert result["timed_out"] is False
+    assert result["timed_out"] is None
     assert result["failed_shards"] is None
     assert result["total"] is None
     assert result["total_relation"] is None
     assert result["hits"] is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source",
+    [
+        None,
+        42,
+        True,
+        "malformed",
+        ["malformed"],
+        [["pubmed", {"identifiers": ["doi:10.1242/jcs.03153"]}]],
+    ],
+    ids=["null", "number", "boolean", "string", "array", "dict-coercible-array"],
+)
+async def test_publication_bulk_lookup_falls_back_for_non_object_search_hit_sources(source):
+    from biothings_annotator.annotator.document_metadata import DocumentMetadataService
+
+    identifier = "doi:10.1242/jcs.03153"
+    metadata = {"identifiers": [identifier], "title": "Fallback publication"}
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        hit = {"_id": "PMID:1", "_source": {"pubmed": metadata}}
+        if request.url.path == "/annotator-pubmed/_search":
+            return httpx.Response(
+                200,
+                json={
+                    "timed_out": False,
+                    "_shards": {"failed": 0},
+                    "hits": {
+                        "total": {"value": 1, "relation": "eq"},
+                        "hits": [{**hit, "_source": source}],
+                    },
+                },
+            )
+        assert request.url.path == "/annotator-pubmed/_msearch"
+        return httpx.Response(
+            200,
+            json={"responses": [{"timed_out": False, "_shards": {"failed": 0}, "hits": {"hits": [hit]}}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = ElasticsearchAnnotatorClient(
+            "http://localhost:9200",
+            "annotator-pubmed",
+            http_client=http_client,
+        )
+        hits = await DocumentMetadataService._fetch_hits(client, [], [identifier])
+
+    assert requests == ["/annotator-pubmed/_search", "/annotator-pubmed/_msearch"]
+    assert hits == {identifier: {"_id": "PMID:1", "pubmed": metadata, "query": identifier}}
 
 
 @pytest.mark.asyncio
@@ -1085,7 +1069,7 @@ def test_elasticsearch_connection_config_supports_in_cluster():
         "host": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
         "headers": {},
     }
-    assert set(ELASTICSEARCH_CONNECTIONS) == {"local", "in_cluster", "ci_forward", "test_forward"}
+    assert set(ELASTICSEARCH_CONNECTIONS) == {"local", "in_cluster", "ci_forward", "test_forward", "prod_forward"}
     assert get_elasticsearch_connection("in_cluster") == expected_connection
 
 
@@ -1101,6 +1085,13 @@ def test_elasticsearch_connection_config_supports_local_forwarded_test_host():
     assert get_elasticsearch_connection("test_forward") == {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.test.transltr.io"},
+    }
+
+
+def test_elasticsearch_connection_config_supports_direct_forwarded_prod_service():
+    assert get_elasticsearch_connection("prod_forward") == {
+        "host": "http://localhost:9200",
+        "headers": {},
     }
 
 
@@ -1129,6 +1120,41 @@ def test_elasticsearch_client_uses_named_connection_config():
         assert test_forward_client.headers == {"Host": "core-components-es.test.transltr.io"}
     finally:
         elasticsearch_settings["instance"] = original_instance
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_configured_extra_client_queries_annotations_alias_with_atc_fields(monkeypatch):
+    """The restored ES alias differs from the BioThings extra API endpoint."""
+    assert ANNOTATOR_CLIENTS["extra"]["client"]["endpoint"] == "annotator_extra"
+    monkeypatch.setitem(ANNOTATOR_CLIENTS["extra"]["elasticsearch"], "instance", None)
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.method == "POST"
+        assert request.url.path == "/annotator-annotations/_search"
+        assert request.headers["host"] == "core-components-es.ci.transltr.io"
+        body = json.loads(request.content)
+        assert body["query"] == {"exists": {"field": "atc.code"}}
+        assert body["_source"] == ["atc.code", "atc.name"]
+        return httpx.Response(
+            200,
+            json={
+                "hits": {
+                    "total": {"value": 1, "relation": "eq"},
+                    "hits": [{"_id": "ATC:L04AB02", "_source": {"atc": {"code": "L04AB02", "name": "infliximab"}}}],
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = get_query_client("extra", "elasticsearch", "https://biothings.example.org", "ci_forward")
+        monkeypatch.setattr(client, "http_client", http_client)
+        result = await client.query("_exists_:atc.code", fields="atc.code,atc.name")
+
+    assert len(requests) == 1
+    assert result["hits"] == [{"_id": "ATC:L04AB02", "atc": {"code": "L04AB02", "name": "infliximab"}}]
 
 
 @pytest.mark.asyncio

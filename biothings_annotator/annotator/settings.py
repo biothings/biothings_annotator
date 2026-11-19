@@ -2,17 +2,12 @@
 Defines the mapping from the biolink model to the Biothings data model
 """
 
-SERVICE_PROVIDER_API_HOST = "https://biothings.ci.transltr.io"
+SERVICE_PROVIDER_API_HOST = "https://biothings.transltr.io"
 
 QUERY_BACKEND = "biothings"
 QUERY_BACKEND_ENV = "ANNOTATOR_QUERY_BACKEND"
 SUPPORTED_QUERY_BACKENDS = ("biothings", "elasticsearch")
-QUERY_BACKEND_ALIASES = {"es": "elasticsearch"}
-
-BIOTHINGS_SOURCE_LIST_PATH = "api/list"
-BIOTHINGS_SOURCE_DISCOVERY_TIMEOUT = 5
-BIOTHINGS_SOURCE_DISCOVERY_TTL = 60
-BIOTHINGS_SOURCE_DISCOVERY_ERROR_TTL = 5
+QUERY_BACKEND_ALIASES = {"es": "elasticsearch", "biothings-api": "biothings"}
 
 DEFAULT_ELASTICSEARCH_CONNECTION = "in_cluster"
 
@@ -28,10 +23,17 @@ ELASTICSEARCH_CONNECTIONS = {
     "ci_forward": {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.ci.transltr.io"},
+        "forwarded_environment": "ci",
     },
     "test_forward": {
         "host": "http://localhost:9200",
         "headers": {"Host": "core-components-es.test.transltr.io"},
+        "forwarded_environment": "test",
+    },
+    "prod_forward": {
+        "host": "http://localhost:9200",
+        "headers": {},
+        "forwarded_environment": "prod",
     },
 }
 ELASTICSEARCH_REQUEST_TIMEOUT = 30
@@ -71,8 +73,7 @@ BIOLINK_PREFIX_to_BioThings = {
     "MONDO": {"type": "disease", "field": "mondo.mondo", "keep_prefix": True},
     "DOID": {"type": "disease", "field": "disease_ontology.doid", "keep_prefix": True},
     "HP": {"type": "phenotype", "field": "hp", "keep_prefix": True},
-    # PubMed is a standalone source whose documents use the full CURIE as _id.
-    # BioThings availability is discovered dynamically from its API source list.
+    # PubMed is an Elasticsearch-only source whose documents use the full CURIE as _id.
     "PMID": {
         "type": "pubmed",
         "scopes": ["_id"],
@@ -220,14 +221,8 @@ ANNOTATOR_CLIENTS = {
         "scopes": ["hp"],
     },
     "pubmed": {
-        # The endpoint is declared before deployment so API source discovery can
-        # activate it without another annotator release.
-        "client": {
-            "configuration": None,
-            "endpoint": "pubmed",
-            "source": "pubmed",
-            "instance": None,
-        },
+        "query_backends": ["elasticsearch"],
+        # No BioThings API client: publication metadata is served directly from ES.
         "elasticsearch": {"index": "annotator-pubmed", "instance": None},
         "fields": [
             "pubmed.identifiers",
@@ -252,7 +247,7 @@ ANNOTATOR_CLIENTS = {
     # This API captures the extra information that is not available in the main biothings API
     "extra": {
         "client": {"configuration": None, "endpoint": "annotator_extra", "instance": None},
-        "elasticsearch": {"index": "annotator_extra", "instance": None},
+        "elasticsearch": {"index": "annotator-annotations", "instance": None},
         "scopes": ["_id"],
     },
 }

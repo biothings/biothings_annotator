@@ -22,6 +22,10 @@ image:
 containers:
   name: biothingsannotator
   es_host: ES_HOST_VALUE
+  # Required: set the matching BioThings API host in the environment's values file.
+  # CI: https://biothings.ci.transltr.io; test: https://biothings.test.transltr.io;
+  # production: https://biothings.transltr.io.
+  service_provider_api_host: ""
   query_backend: elasticsearch
   elasticsearch_connection: in_cluster
   port: 9000
@@ -49,7 +53,8 @@ ingress:
 
 ncats:
   labels:
-    gov.nih.ncats.appenv: appenv
+    # Set the deployment tier (for example ci, test, or prod) in deployment values.
+    gov.nih.ncats.appenv: unknown
     gov.nih.ncats.appname: bte-biothings-annotator
     gov.nih.ncats.appentry: BTEPA_HOSTNAME_VALUE
     gov.nih.ncats.appentrytype: https

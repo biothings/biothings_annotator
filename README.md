@@ -184,6 +184,211 @@ python3 -m biothings_annotator --host "172.84.29.248" --port 9384 --workers 12 -
 
 ##### Runtime configuration
 
+`SERVICE_PROVIDER_API_HOST` overrides the BioThings host used for HPO, NCIT, and extra
+annotation endpoints and their metadata. When unset, it falls back to
+`https://biothings.transltr.io` in every deployment environment. Set it explicitly in the
+container environment to use a matching CI or test BioThings API, such as
+`https://biothings.ci.transltr.io` or `https://biothings.test.transltr.io`, and restart the service.
+The Helm chart requires `containers.service_provider_api_host` and passes it to the container
+as `SERVICE_PROVIDER_API_HOST`. Set it in the environment's values file (`values-ncats.yaml`
+when using `deploy/deploy.sh`), for example:
+
+```yaml
+containers:
+  service_provider_api_host: https://biothings.ci.transltr.io
+```
+
+Use `https://biothings.test.transltr.io` for test and `https://biothings.transltr.io` for
+production. Helm rendering fails when the value is missing or blank, so each deployment
+must explicitly choose its BioThings API host. The deployment environment label does not
+select this host. With the `biothings` query backend, primary gene, chemical, and disease
+queries continue to use the public MyGene, MyChem, and MyDisease APIs.
+
+##### Service status
+
+`GET /status` verifies that the configured query backend can annotate `NCBIGene:1017` and
+returns the common NodeNorm status fields plus source build versions for **both** backends.
+`query_backend` identifies the deployment's default backend. `available_query_backends` lists
+metadata for `biothings-api` and `elasticsearch`; the `biothings-api` entry corresponds to the
+canonical `biothings` query backend. This abbreviated example uses illustrative versions; each
+backend lists all sources it supports:
+
+```json
+{
+  "status": "running",
+  "deployment_environment": "ci",
+  "version": "1.0",
+  "query_backend": "elasticsearch",
+  "available_query_backends": {
+    "biothings-api": {
+      "checked_at": "2026-10-20T18:00:00+00:00",
+      "sources": {
+        "mygene": {
+          "build_version": "20261019",
+          "sources": [
+            {"name": "ensembl", "source_version": "116"},
+            {"name": "entrez", "source_version": "20261009"},
+            {"name": "uniprot", "source_version": "20260903"}
+          ]
+        },
+        "hpo": {
+          "build_version": "20250120",
+          "sources": [
+            {"name": "hpo", "source_version": "2025-01-19"}
+          ]
+        }
+      }
+    },
+    "elasticsearch": {
+      "connection": "ci_cluster",
+      "checked_at": "2026-10-20T18:00:00+00:00",
+      "sources": {
+        "mygene": {
+          "alias": "gene",
+          "index": {
+            "name": "mygene_allspecies_20260705_bgks2qnv",
+            "build_version": "20260705",
+            "sources": [
+              {"name": "ensembl", "source_version": "116"},
+              {"name": "entrez", "source_version": "20260705"},
+              {"name": "uniprot", "source_version": "20260610"}
+            ]
+          }
+        },
+        "hpo": {
+          "alias": "hpo",
+          "index": {
+            "name": "hpo_20251027_b3jbx7z4",
+            "build_version": "20251027",
+            "sources": [
+              {"name": "hpo", "source_version": "2025-10-26"}
+            ]
+          }
+        },
+        "pubmed": {
+          "alias": "annotator-pubmed",
+          "index": {
+            "name": "pubmed_20260814_ew8jmctk_202608201240",
+            "build_version": "20260814",
+            "sources": [
+              {"name": "pubmed_metadata", "source_version": "2026aug5"}
+            ]
+          }
+        },
+        "annotator_extra": {
+          "alias": "annotator-annotations",
+          "error": {"code": "http_error", "http_status": 404}
+        }
+      }
+    }
+  }
+}
+```
+
+The `version` field is the API version from the served OpenAPI specification. The separate
+`/version` endpoint reports the build's Git commit from `version.txt`, together with the active
+query backend. If runtime backend metadata cannot be constructed, `/version` still returns
+HTTP 200 with `version`, omitting `query_backend` and `elasticsearch_connection`. All
+`/version` responses send `Cache-Control: no-store`.
+
+For local development, set `ANNOTATOR_DEPLOYMENT_ENV=local` (or configure the deployment environment
+as `local`). If `version.txt` is missing, `/version` uses a Git snapshot of the loaded package's
+checkout captured at startup: the full HEAD commit, with `-dirty` appended for tracked, staged,
+or untracked changes. Restart the service to refresh that snapshot. `version.txt` always takes
+precedence. Outside the `local` environment, a missing file returns `Unknown` without querying
+Git; the local fallback also returns `Unknown` if Git or the checkout is unavailable or the
+query fails.
+
+Source availability follows `ANNOTATOR_CLIENTS` and its backend support. Both backends share
+status display names derived from the client configuration. Typed SDK clients use their
+configured `<service>.info` hostname, yielding `mygene`, `mychem`, and `mydisease` without a
+per-source mapping. Endpoint-based clients use their configured endpoint, yielding `hpo`,
+`ncit`, and `annotator_extra`. Sources without an API client retain their configured key;
+`pubmed` appears only under Elasticsearch. Custom client URLs outside the `<service>.info`
+convention, unresolved client configurations, and conflicting names fall back to the configured
+source key. Names do not depend on a successful metadata request. These are status labels only:
+internal source keys, annotation routing, and Elasticsearch aliases remain unchanged.
+Missing optional sources supported by that backend remain visible with an
+`error` instead of disappearing. BioThings versions come from each API's `/metadata`;
+Elasticsearch versions come from index mapping `_meta`, with the configured alias or direct index
+in `alias`. The singular `index` object contains the resolved concrete `name` and `build_version`.
+For Elasticsearch, `index.sources` lists every upstream source recorded in that index's
+mapping `_meta.src`. For BioThings APIs, `sources` sits alongside `build_version` and lists every
+upstream source in that API's `/metadata` `src`. Both lists are sorted by name and use
+`{"name": "...", "source_version": "..."}` entries from each `src` entry's `version` field.
+There is no whitelist or entry limit; the example above abbreviates the gene sources. API versions
+describe the data served by each API, while Elasticsearch versions describe the data used for
+that indexed build; these can differ.
+Scalar versions are normalized to strings. Missing, blank, boolean, or structured versions are
+`null`, and those sources stay in the list. An absent `src` produces an empty list. Versions
+are never inferred from build versions, index names, or timestamps.
+Elasticsearch metadata failures retain `alias` and report `error` in place of `index`. If an alias unexpectedly
+resolves to multiple indices, its source reports `error.code: multiple_indices`; no index is
+selected arbitrarily. `connection` describes the configured
+Elasticsearch target:
+
+| `ELASTICSEARCH_CONNECTION` | Status `connection` |
+| --- | --- |
+| `ci_forward` | `ci_cluster_forwarded` |
+| `test_forward` | `test_cluster_forwarded` |
+| `prod_forward` | `prod_cluster_forwarded` |
+| `in_cluster` | `<deployment_environment>_cluster` for `ci`, `test`, or `prod`; otherwise `unknown_cluster` |
+| `local` | `local` |
+
+Forwarded environments come from the selected preset's `forwarded_environment` metadata,
+independently of annotator's deployment environment. A loopback address alone cannot identify
+which cluster is forwarded. The preset records the intended target; it does not verify the
+tunnel's destination or establish a tunnel. Verifying the actual destination would require a
+trusted mapping from Elasticsearch cluster UUIDs to environments, or metadata supplied by the
+tunnel launcher. A forwarded preset with an unrecognized environment reports
+`unknown_cluster_forwarded`; an unrecognized preset reports `unknown`. Connection URLs,
+credentials, and raw upstream errors are not included in the status response.
+
+The `annotator_extra` status source uses the BioThings `/annotator_extra` API and the
+Elasticsearch `annotator-annotations` alias, which remains visible in its `alias` field.
+
+`build_version` identifies each source's build. Unknown versions are `null`; an index name is
+never used to infer a version. Metadata failures use a static
+`error.code`, optionally with `http_status`, at the affected source. These metadata errors are
+informational and do not change the health check's HTTP status.
+
+Each worker warms its source metadata at startup and refreshes it every **10 minutes** in
+the background, independently of incoming requests. GET reads the current snapshot without
+waiting for a background refresh. `checked_at` is the UTC collection time represented by that
+snapshot. Upstream calls run concurrently with five-second deadlines; each complete collection
+has a 10-second deadline. Concurrent callers share a collection if no snapshot exists yet.
+
+Source-specific failures remain visible alongside healthy sources. Timeouts, connection errors,
+HTTP 429, and HTTP 5xx responses cause another collection after **30 seconds**. Consecutive
+transient failures double that delay (30, 60, 120 seconds, and so on), capped at the normal
+**10-minute** interval. A collection without transient errors resets the retry delay. Expected
+missing optional sources, configuration errors, and other source errors use the normal interval.
+An unexpected collection failure retains the previous snapshot and its `checked_at`, adds a
+backend-level `refresh_error` with code `metadata_unavailable`, and uses the same retry backoff.
+If no snapshot exists, it reports a backend-level `error` with that code instead of `sources`.
+The next completed collection clears `refresh_error`. Worker shutdown cancels pending collections
+and the background timer. Metadata refresh does not change annotation routing.
+
+GET and HEAD share a separate annotation health cache, scoped to the worker and backend
+configuration. Successful checks are cached for **5 seconds**, failures for **1 second**, and
+each check has a 10-second total deadline. Concurrent probes share one check; a disconnected
+caller cannot cancel it for the others. An expired healthy result is never served after a
+failed check. Failures retain `{"success": false, "error": "..."}`: HTTP 500 when the expected
+annotation is missing, or HTTP 400 when the check raises an exception or times out.
+Exception details are logged server-side; the public error uses a fixed message.
+`HEAD /status` uses the same health result without reading source metadata or returning a body.
+All GET and HEAD status responses, including failures, send `Cache-Control: no-store`.
+
+Set `ANNOTATOR_DEPLOYMENT_ENV` to the deployment environment, for example `ci`, `test`, or
+`prod`. It takes precedence over `application.configuration.DEPLOYMENT_ENVIRONMENT` in the
+JSON configuration when nonempty. The value is loaded at startup, trimmed, and defaults to
+`unknown` when unset or blank; request headers and hostnames do not determine it. Restart the
+service after changing the deployment environment or OpenAPI version.
+
+Kubernetes deployments populate `ANNOTATOR_DEPLOYMENT_ENV` from the pod's
+`gov.nih.ncats.appenv` label through the Downward API. Set that label under `ncats.labels` in
+the environment's Helm values; the chart defaults to `unknown`.
+
 ##### OpenTelemetry tracing
 
 The service can export Sanic request spans and downstream HTTPX spans to a
@@ -205,7 +410,9 @@ to override the configured route exclusions. The Helm deployment enables
 tracing and targets `http://jaeger-otel-collector.sri:4318` by default.
 
 The annotator query backend is controlled with `ANNOTATOR_QUERY_BACKEND`. Supported values are
-`biothings` and `elasticsearch`; when unset, the service uses `biothings`.
+`biothings`, `biothings-api`, `elasticsearch`, and `es`. Values are case-insensitive and surrounding
+whitespace is trimmed. `biothings-api` resolves to `biothings`, and `es` resolves to
+`elasticsearch`; when unset, the service uses `biothings`.
 The checked-in Helm defaults set `ANNOTATOR_QUERY_BACKEND=elasticsearch` and
 `ELASTICSEARCH_CONNECTION=in_cluster`; set `ANNOTATOR_QUERY_BACKEND` to `biothings` during deployment
 to switch back.
@@ -214,23 +421,28 @@ Set `ELASTICSEARCH_CONNECTION` to one of the named presets in
 `http://elasticsearch.es-core-components.svc.cluster.local:9200` and is used by both CI and test
 deployments. The `local` preset targets Elasticsearch on `localhost:9200`. The `ci_forward` and
 `test_forward` presets also connect to `localhost:9200`, for an already-established port-forward,
-and send the corresponding environment's ingress host header.
+and send the corresponding environment's ingress host header. `prod_forward` connects to
+`localhost:9200` without an ingress host override, for a direct forward to the production
+Elasticsearch service. Each forwarded preset records its target environment in
+`forwarded_environment`; the status endpoint uses that metadata to format `connection`.
 The `/version` endpoint reports the active `query_backend` and, when Elasticsearch is active,
-the selected `elasticsearch_connection`. For a live check of a directly constructed Python instance,
+the selected `elasticsearch_connection` preset name. For a live check of a directly constructed Python instance,
 see [Direct Python usage](#direct-python-usage).
 
 ##### Per-request query backend override
 
 The `GET /curie/{curie}`, `POST /curie`, and `POST /trapi` endpoints accept an optional
 `query_backend` query parameter. Omit it to use the backend selected for the deployment by
-`ANNOTATOR_QUERY_BACKEND`. Use the canonical values `biothings` or `elasticsearch` to override the
-backend for only that request; `es` is accepted as an alias for `elasticsearch`.
+`ANNOTATOR_QUERY_BACKEND`. Accepted values are `biothings`, `biothings-api`, `elasticsearch`, and
+`es`, case-insensitively with surrounding whitespace trimmed. `biothings-api` is an alias for
+`biothings`, and `es` is an alias for `elasticsearch`; either changes the backend for only that request.
 Unsupported values are ignored and the request uses the deployment default.
 Successful query responses include the canonical backend in the `X-Query-Backend` response header.
-When a recognized CURIE prefix is unavailable through that backend, its result contains a structured
-`skipped` status with the source, selected backend, and `source_unavailable_for_backend` reason.
-`X-Skipped-Curie-Prefixes` also summarizes the affected prefixes as comma-separated values. Unknown
-CURIE prefixes are not included in this header.
+PubMed supports only Elasticsearch. A single PubMed CURIE requested through BioThings returns
+HTTP 422; bulk and TRAPI requests retain their supported results and mark PubMed entries as
+`skipped`, with the source, selected backend, and `source_unavailable_for_backend` reason.
+`X-Skipped-Curie-Prefixes` summarizes skipped prefixes as comma-separated values. Unknown CURIE
+prefixes are not included in this header. See the PubMed section below for examples.
 
 ```shell
 curl 'http://localhost:9000/curie/NCBIGene:1017?query_backend=biothings'
@@ -251,14 +463,32 @@ source is built and indexed there, the default annotation response includes its 
 biomedical sources, PubMed has its own annotator client configuration rather than being merged into
 `annotator_extra`.
 
-For the `biothings` query backend, the annotator discovers available sources from the API's
-`/api/list` endpoint using a short-lived, per-host cache. Discovery requests revalidate intermediary
-caches, concurrent refreshes share one request, and discovery failures use a brief retry backoff.
-While `pubmed` is absent from that authoritative list, PMID requests return a one-item,
-not-found-shaped skipped result without making a downstream PubMed annotation query and set
-`X-Skipped-Curie-Prefixes: PMID`. Skipped responses use `Cache-Control: no-store`. The `notfound`
-field preserves the normal result shape, while `skipped` indicates that the PubMed annotation lookup
-was not made:
+PubMed is supported only by the `elasticsearch` backend. This applies to the `PMID`, `doi`,
+`DOI`, `PMC`, and `pmc` CURIE prefixes. When the selected backend is `biothings`, the annotator
+does not query a PubMed API and does not switch to Elasticsearch automatically.
+URL-encode CURIEs used in the GET path, including the slash in DOI values.
+
+A single request such as `GET /curie/PMID:30690000?query_backend=biothings` returns HTTP 422
+with `Cache-Control: no-store`, `X-Query-Backend: biothings`, and this error:
+
+```json
+{
+  "input": "PMID:30690000",
+  "endpoint": "/curie/",
+  "error": "unsupported_source_backend",
+  "message": "Source 'pubmed' is not supported by the 'biothings' backend. Use query_backend=elasticsearch.",
+  "source": "pubmed",
+  "query_backend": "biothings",
+  "supported_backends": ["elasticsearch"]
+}
+```
+
+Bulk `POST /curie` requests still return HTTP 200 and annotate supported CURIEs. PubMed entries
+receive a one-item skipped result, as shown below. TRAPI requests also return HTTP 200, preserve
+the affected nodes, and add the skipped result in a `biothings_query_status` attribute. Both
+responses set `X-Skipped-Curie-Prefixes` to the affected prefixes and use `Cache-Control: no-store`.
+The `notfound` field preserves the normal result shape; `skipped` means no annotation lookup
+was attempted, rather than that PubMed contained no matching record:
 
 ```json
 {
@@ -275,11 +505,9 @@ was not made:
 }
 ```
 
-The future BioThings endpoint is already configured as `/pubmed`. Once `pubmed` appears in the
-source list and its metadata is available, the annotator automatically constructs that client and
-queries it without another code or configuration change. A source-discovery timeout, invalid
-response, or server error returns HTTP 503 with `Cache-Control: no-store` rather than incorrectly
-reporting a skip.
+Select `query_backend=elasticsearch` to annotate PubMed CURIEs. The dedicated publication
+metadata endpoints below already use Elasticsearch. `/status` lists PubMed only under
+`available_query_backends.elasticsearch.sources`.
 
 ```shell
 curl 'http://localhost:9000/curie/PMID:12345678?query_backend=elasticsearch'
@@ -310,10 +538,16 @@ Both batch forms accept at most 100 identifiers; the path form looks up one iden
 object as shown above.
 
 The response contains legacy-compatible `_meta`, `results`, and `not_found` sections, keyed by the
-identifier as submitted. Missing source values are returned as empty strings. The publication date is
-projected from PubMed's verbatim rendering when the index carries it, so month ranges survive as
-CCWG#15 specifies (`"pub_month": "Sep-Dec"` for `PMID:8000234`); otherwise it falls back to splitting
-the indexed ISO `pub_date` into year, month, and day.
+identifier as submitted. The nine citation fields (`journal_name`, `journal_abbrev`, `article_title`,
+`volume`, `issue`, `pub_year`, `pub_month`, `pub_day`, and `abstract`) remain strings, with missing source
+values returned as empty strings. Each publication also includes `publication_types` when that field is
+present in the indexed `pubmed` object: the full ordered array of `{id, name}` objects is returned without
+changing IDs, names (including blank names), ordering, or duplicates. An explicitly empty upstream array
+is returned as `[]`; an absent field is omitted from the response.
+
+The publication date is projected from PubMed's verbatim rendering when the index carries it, so month
+ranges survive as CCWG#15 specifies (`"pub_month": "Sep-Dec"` for `PMID:8000234`); otherwise it falls
+back to splitting the indexed ISO `pub_date` into year, month, and day.
 
 The index carries the verbatim value in `pubdate_raw` — whatever the upstream exporter emits, the
 in-house ingest transformation normalizes it to that field, which is also the field the capability probe
@@ -321,6 +555,14 @@ checks. `pub_date` is additionally read as a verbatim value purely defensively, 
 landing there is not flattened to empty strings if that transformation ever changes. It cannot misread
 anything: the verbatim and ISO parsers accept disjoint shapes, so `"2019-03-15"` is only ever read as an
 ISO date and `"1994 Sep-Dec"` only as a verbatim one.
+
+If neither raw nor ISO parsing supplies a usable date, the response falls back to the preserved upstream
+`pub_year`, `pub_month`, and `pub_day` strings under `pubmed`. For example, `"2020"` / `"May"` / `""`
+survives without `pubdate_raw` or `pub_date`; numeric months such as `"5"` and `"05"` become `"May"`.
+Seasons and ranges are retained, and unknown components remain empty strings. A usable earlier source
+wins as a whole, so missing parts are not filled from the preserved components. These components are
+stored by annotation-hub commit `f370db9` on `data/pubmed-nov-2026`; existing published data needs a fresh
+Hub upload and index build to gain them. The publication endpoints already retrieve all of `pubmed`.
 
 A bare year range is the one shape that collides with an ISO date, since both open with `YYYY-`. It is
 projected losslessly into `pub_year` — `"1987-1988"` gives `{"pub_year": "1987-1988", "pub_month": "",
@@ -344,17 +586,22 @@ follow from the transport rather than the service:
 
 These routes are deliberately separate from the generic annotation pipeline. They always read the
 `annotator-pubmed` Elasticsearch alias and retrieve only the `pubmed` source object. They do not
-perform BioThings source discovery, CURIE grouping, extra annotation lookup, or per-request backend
-selection. The request has a two-second total backend deadline by default (configurable with
+perform CURIE grouping, extra annotation lookup, or per-request backend selection. The request has a
+two-second total backend deadline by default (configurable with
 `DOCUMENT_METADATA_REQUEST_TIMEOUT`) so a degraded Elasticsearch service fails quickly.
 
 PMIDs are the document `_id`, so they resolve through one exact-ID Elasticsearch `_mget` for the whole
-batch, including a complete batch of 100. PMCID and DOI resolve against `pubmed.identifiers` instead,
-which costs one `_msearch` entry per identifier, so a PMID-only request stays on the single-request fast
-path and only mixed requests pay for the scoped lookup. The canonical PMID is stored only as `_id`;
-`pubmed.identifiers` contains its DOI and PMC aliases. The behavioral performance test verifies that a
-100-PMID request remains one backend request, and the load benchmark measures what that costs against
-the 150 ms p90 service objective — see [Load benchmark](#load-benchmark-and-the-150-ms-objective).
+batch, including a complete batch of 100. PMCID and DOI values resolve together through one exact `terms`
+`_search` against `pubmed.identifiers`. For mixed requests, the `_mget` and `_search` start concurrently;
+the service does not wait for or prune one call using results from the other. Returned documents are mapped
+back to submitted identifiers from their `pubmed.identifiers` values in linear time. Non-ASCII alternative
+identifiers take the exact path directly to avoid relying on different Unicode case-folding rules. If
+Elasticsearch reports a truncated or otherwise unsafe result, an identifier belongs to multiple documents,
+or a hit cannot be mapped unambiguously, the alternative-ID batch falls back to the exact per-identifier `_msearch`.
+A PMID-only request remains on the single-request `_mget` fast path. The canonical PMID is stored only as
+`_id`; `pubmed.identifiers` contains its DOI and PMC aliases. The behavioral performance test verifies that
+a 100-PMID request remains one backend request, and the load benchmark measures what that costs against the
+150 ms p90 service objective — see [Load benchmark](#load-benchmark-and-the-150-ms-objective).
 
 An alias that points to an older index without `pubmed.identifiers` returns `not_found` for every PMCID
 and DOI lookup. That is indistinguishable from a genuinely absent paper, so the index shape is checked
@@ -414,7 +661,7 @@ guard: pubmed2db PR #7 limits a record to its own identifiers, so a record carry
 export regressed and is pulling in cited references' DOIs.
 
 
-###### Identifier lookup: measurements and experiments
+###### Identifier storage and lookup decisions
 
 Both were measured against the CI Elasticsearch cluster (`es-core-components-cluster`, index
 `pubmed_20260824_ybg350zl_202608250007`, 41.0M documents, 21.5 GB per copy, 5 primary shards and 2
@@ -444,52 +691,19 @@ field itself roughly halved, which is 2.3% of the index. The latency gain is nil
 identical `_msearch` timings and a `_mget` response 1% smaller. Worth having as a storage and index-size
 change; it is not a latency optimization and should not be quoted as one.
 
-**Resolving to `_id` first, then one combined `_mget` — rejected.** The idea was to ask the `_msearch`
-only for `_id`, then fetch everything through a single exact-ID `_mget`. Direct Elasticsearch measurements
-showed higher backend bytes at every identifier mix and added a serial round trip:
+**Publication lookup routing — adopted after CI A/B.** The endpoint now runs the PMID `_mget` and one
+alternative-ID `terms` `_search` concurrently. The PubMed-specific search queries the confirmed root
+`pubmed.identifiers` keyword field; a `.keyword` subfield beneath it does not exist in this mapping. The
+exact per-identifier `_msearch` remains as the safety path for non-ASCII identifiers or when the bulk
+response cannot be proven complete and unambiguous.
 
-| identifier mix | current total | two-phase total | delta | current `_msearch` took | two-phase `_msearch` took | ES round trips |
-| --- | --- | --- | --- | --- | --- | --- |
-| 75 PMID / 25 other | 154.0 kB | 158.9 kB | **+3.2%** | 9 ms | 8 ms | 1 parallel → 2 serial |
-| 50 / 50 | 160.5 kB | 167.1 kB | **+4.1%** | 12 ms | 12 ms | 1 parallel → 2 serial |
-| 25 / 75 | 166.0 kB | 173.7 kB | **+4.7%** | 18 ms | 16 ms | 1 parallel → 2 serial |
-| 0 / 100 other | 168.7 kB | 181.9 kB | **+7.8%** | 22 ms | 21 ms | 1 → 2 serial |
-
-These measurements did not establish full-path latency. The timing columns are only the top-level
-`_msearch.took`; the two-phase value omits the `_mget` that follows it. They do show that source
-retrieval is not an expensive part of `_msearch`: 100 identifiers that all resolve take 22 ms of
-Elasticsearch wall-clock, and `"_source": false` removes about 1 ms. It cuts that leg's response by 84%
-(169 kB to 26 kB), but those bytes reappear in the combined `_mget` with its per-document envelope, so
-total backend response bytes rise 3–8%. The endpoint A/B later confirmed that the sequential strategy
-was not worth adopting, so its implementation and selector were removed before the next experiment.
-
-Two corrections to earlier reasoning come out of this. The shard fan-out is not the practical problem it
-looked like: per-identifier cost *falls* with batch size, 0.40 ms at 10 identifiers to 0.22 ms at 100,
-so Elasticsearch is parallelising the sub-searches well across the 5 shards. And the identifier path is
-not where the latency budget goes at all — 22 ms for a fully-resolving 100-identifier batch, against the
-~114 kB of response body that the [load benchmark](#load-benchmark-and-the-150-ms-objective) shows to be
-the actual constraint. Optimisation effort belongs on payload size, not on identifier resolution.
-
-**One bulk alternative-ID search — temporary endpoint A/B.** The current arm still runs the PMID `_mget`
-and the alternative-ID `_msearch` concurrently. Its PubMed-specific `_msearch` now queries only the
-confirmed root `pubmed.identifiers` keyword field; the old generic `pubmed.identifiers.keyword` clause was
-a guaranteed miss for this mapping. Generic annotator searches keep their root-plus-`.keyword` compatibility
-behavior because their mappings are not uniform.
-
-The `bulk-search` arm also starts the PMID `_mget` immediately, but replaces the per-identifier `_msearch`
-entries with one `terms` `_search` over every DOI and PMCID. It does not wait for or prune against `_mget`
-results. Returned documents are mapped back to submitted identifiers from `pubmed.identifiers` in linear
-time. The arm falls back to the cleaned exact `_msearch` for the whole alternative-ID batch if Elasticsearch
-reports a truncated total, an identifier belongs to multiple documents, or a hit cannot be mapped safely.
-The temporary request selector and paired benchmark below compare these two concurrent strategies on one
-deployment.
-
-A measurement note for anyone repeating this. Run through an SSH tunnel, every Elasticsearch round trip
-costs 90-190 ms and drifts during a session, which is two orders of magnitude above in-cluster and more
-than the entire effect being measured. Tunnel wall-clock does establish how the forwarded path behaves,
-but it exaggerates the production cost of a second round trip. Per-sub-request `took` values must not be
-summed either — Elasticsearch runs `_msearch` entries concurrently, so their sum is total work, not
-latency. Compare the complete endpoint paths through CI's own `processing_time_ms` instead.
+The final paired benchmark covered 31 workload cells and 6,200 valid request pairs. One bulk alternative-ID
+search consistently won the mixed-identifier workloads, a 100%-PMID workload was effectively tied, and an
+all-alternative workload exercises the same path as the proposed combined search. There was therefore no
+measured case for either one combined PMID/alternative `_search` or ratio-based adaptive routing. The
+temporary selector, comparison implementations, and A/B settings were removed after the decision. The full
+report, corpora, raw results, and reproducible commands are preserved at the durable Git tag
+`benchmark-publications-routing-20260831`.
 
 ##### Load benchmark and the 150 ms objective
 
@@ -509,69 +723,12 @@ python -m benchmarks.publications --ramp 1,4,8,16 --requests 200
 python -m benchmarks.publications --method POST
 python -m benchmarks.publications --unique-ratio 0.0 --hot-pool 200
 
-# Mixed identifiers, which take the per-identifier _msearch path instead of the batched _mget.
+# Mixed identifiers, which add one bulk alternative-ID _search alongside the batched _mget.
 python -m benchmarks.publications --pmid-ratio 0.5
-
-# Temporary one-deployment A/B selector. Every identifier batch goes to both implementations.
-python -m benchmarks.publications --method POST --compare-lookup-strategies \
-  --identifier-file real-publication-ids.txt --concurrency 1 \
-  --requests 200 --warmup 20 --seed 2026
-
-# Explicit ordered comparison: deltas are experiment minus control.
-python -m benchmarks.publications --method POST \
-  --compare-strategies bulk-search combined-search \
-  --identifier-file real-publication-ids.txt --concurrency 1 \
-  --requests 200 --warmup 20 --seed 2026
-
-# A single arm remains available for an absolute load-bearing sweep.
-python -m benchmarks.publications --lookup-strategy combined-search --ramp 1,4,8,16 --requests 200
 
 # Machine-readable output; exit status is 0 only if every stage met the objective.
 python -m benchmarks.publications --json --slo-basis server
 ```
-
-`--lookup-strategy` sends the undocumented `X-Publications-Lookup-Strategy` benchmark header. The
-endpoint defaults to `current`, holds independent `current`, `bulk-search`, and `combined-search` service
-instances, and echoes the selection as `_meta.lookup_strategy`. The harness rejects a missing or mismatched
-attribution rather than admitting that latency into the result. The endpoint also reports
-`_meta.lookup_fallback`; comparison mode requires it to be the boolean `false` for both arms. A true marker
-means the requested strategy fell back after rejecting its speculative Elasticsearch response, while a
-missing marker usually means the deployment is stale or mixed. Either case invalidates the pair, so the
-reported deltas measure only the requested normal paths. `--compare-strategies CONTROL EXPERIMENT` selects
-any two distinct implementations in an explicit order. Every reported delta is experiment minus control,
-so a negative value favors the experiment. The existing bare `--compare-lookup-strategies` flag remains
-shorthand for `--compare-strategies current bulk-search`.
-
-One comparison invocation precomputes each batch, sends that exact batch to both implementations, and
-balances which strategy runs first after the batches are known. In comparison mode, `--requests` and
-`--warmup` count pairs, so 200 measured pairs produce 400 HTTP requests. The measured pair count must be
-even and at least two, ensuring both request orders are represented. `--concurrency` remains the maximum
-number of HTTP requests in flight; the two members of a pair are sequential rather than doubling the
-offered load.
-
-The paired report labels both arms dynamically and keeps control-first and experiment-first deltas separate
-as well as combined. That is necessary because the second request can benefit from Elasticsearch state
-warmed by the first. Ordering is also balanced within the batches that exercise code differing between the
-selected pair: DOI/PMCID batches for `current` versus `bulk-search`, PMID-containing batches for
-`bulk-search` versus `combined-search`, and every nonempty batch for `current` versus `combined-search`.
-Any batch containing a non-ASCII alternative identifier is a no-change control because all strategies use
-the exact-search fallback. Alternative-identifier counts remain visible as workload information, while the
-pair-specific changed-path count says whether the selected implementations actually differed. A stage with
-zero changed-path pairs may retain an integrity pass, but its report explicitly says that it cannot select a
-winner. This controls first-order bias, but one shared deployment cannot give both treatments a cold first
-lookup. If the order strata disagree in direction, treat the run as cache/order-sensitive rather than
-declaring a winner. The mixed A/B wall time is not a standalone capacity measurement; use the existing
-single-strategy mode with `--ramp` for that. Comparison mode is intentionally closed-loop and cannot be
-combined with `--users`. The selector is temporary measurement scaffolding and should be removed with the
-losing implementation after the A/B.
-
-Comparison mode requires `--identifier-file` with one real, resolving identifier per line and at least one
-batch's worth of identifiers; blank lines and lines beginning with `#` are ignored. Prefer one identifier
-per distinct document and a mix representing the traffic being decided. A 100%-PMID corpus is valid and is
-the direct changed-path case for `bulk-search` versus `combined-search`; for `current` versus `bulk-search`
-it is a useful no-change control. Synthesized DOI values mostly miss, so use real alternatives when the
-alternative path matters. Any identifier reported as `not_found` by either arm invalidates its pair and
-makes the comparison exit nonzero.
 
 ###### Reading the numbers
 

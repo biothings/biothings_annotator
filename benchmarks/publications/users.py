@@ -162,7 +162,6 @@ async def _virtual_user(
     deadline: float,
     collected: List[Sample],
     request_id_mismatches: List[int],
-    lookup_strategy_mismatches: List[int],
 ) -> None:
     """One reader: request, think, repeat, until the run's deadline."""
     # Stagger arrivals across the first think-time window. Without this every
@@ -172,12 +171,10 @@ async def _virtual_user(
 
     while time.monotonic() < deadline:
         identifiers = corpus.catalog_batch(plan.workload.batch_size)
-        sample, request_id_matched, lookup_strategy_matched = await _issue_request(client, plan.workload, identifiers)
+        sample, request_id_matched = await _issue_request(client, plan.workload, identifiers)
         collected.append(sample)
         if not request_id_matched:
             request_id_mismatches.append(1)
-        if not lookup_strategy_matched:
-            lookup_strategy_mismatches.append(1)
 
         # Exponential rather than fixed: the memoryless gap is what keeps
         # independent users from drifting into lockstep.
@@ -211,7 +208,6 @@ async def run_user_plan(plan: RunPlan, model: UserModel) -> RunResult:
 
     collected: List[Sample] = []
     request_id_mismatches: List[int] = []
-    lookup_strategy_mismatches: List[int] = []
     # Connections are pooled per user, since a user population really does hold
     # that many sockets open against the service.
     limits = httpx.Limits(max_connections=model.users, max_keepalive_connections=model.users)
@@ -235,7 +231,6 @@ async def run_user_plan(plan: RunPlan, model: UserModel) -> RunResult:
                     deadline,
                     collected,
                     request_id_mismatches,
-                    lookup_strategy_mismatches,
                 )
                 for _ in range(model.users)
             )
@@ -244,7 +239,6 @@ async def run_user_plan(plan: RunPlan, model: UserModel) -> RunResult:
 
     result = RunResult(plan=plan, user_model=model)
     result.request_id_mismatches = len(request_id_mismatches)
-    result.lookup_strategy_mismatches = len(lookup_strategy_mismatches)
     result.stages.append(
         StageReport(
             label=f"{model.users}u",
